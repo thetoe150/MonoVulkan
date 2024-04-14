@@ -44,6 +44,8 @@ using TracyVkCtx = void*;
 #include "../client/TracyProfiler.hpp"
 #include "../client/TracyCallstack.hpp"
 
+#define SYNC_STAGE VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+
 #include <atomic>
 
 namespace tracy
@@ -145,7 +147,7 @@ public:
         if( m_timeDomain == VK_TIME_DOMAIN_DEVICE_EXT )
         {
             VK_FUNCTION_WRAPPER( vkBeginCommandBuffer( cmdbuf, &beginInfo ) );
-            VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_query, 0 ) );
+            VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, SYNC_STAGE, m_query, 0 ) );
             VK_FUNCTION_WRAPPER( vkEndCommandBuffer( cmdbuf ) );
             VK_FUNCTION_WRAPPER( vkQueueSubmit( queue, 1, &submitInfo, VK_NULL_HANDLE ) );
             VK_FUNCTION_WRAPPER( vkQueueWaitIdle( queue ) );
@@ -502,7 +504,7 @@ public:
         m_ctx = ctx;
 
         const auto queryId = ctx->NextQueryId();
-        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, ctx->m_query, queryId ) );
+        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, SYNC_STAGE, ctx->m_query, queryId ) );
 
         auto item = Profiler::QueueSerial();
         MemWrite( &item->hdr.type, QueueType::GpuZoneBeginSerial );
@@ -526,7 +528,7 @@ public:
         m_ctx = ctx;
 
         const auto queryId = ctx->NextQueryId();
-        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, ctx->m_query, queryId ) );
+        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, SYNC_STAGE, ctx->m_query, queryId ) );
 
         auto item = Profiler::QueueSerialCallstack( Callstack( depth ) );
         MemWrite( &item->hdr.type, QueueType::GpuZoneBeginCallstackSerial );
@@ -550,7 +552,7 @@ public:
         m_ctx = ctx;
 
         const auto queryId = ctx->NextQueryId();
-        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, ctx->m_query, queryId ) );
+        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, SYNC_STAGE, ctx->m_query, queryId ) );
 
         const auto srcloc = Profiler::AllocSourceLocation( line, source, sourceSz, function, functionSz, name, nameSz );
         auto item = Profiler::QueueSerial();
@@ -575,7 +577,7 @@ public:
         m_ctx = ctx;
 
         const auto queryId = ctx->NextQueryId();
-        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, ctx->m_query, queryId ) );
+        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( cmdbuf, SYNC_STAGE, ctx->m_query, queryId ) );
 
         const auto srcloc = Profiler::AllocSourceLocation( line, source, sourceSz, function, functionSz, name, nameSz );
         auto item = Profiler::QueueSerialCallstack( Callstack( depth ) );
@@ -593,7 +595,7 @@ public:
         if( !m_active ) return;
 
         const auto queryId = m_ctx->NextQueryId();
-        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( m_cmdbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_ctx->m_query, queryId ) );
+        CONTEXT_VK_FUNCTION_WRAPPER( vkCmdWriteTimestamp( m_cmdbuf, SYNC_STAGE, m_ctx->m_query, queryId ) );
 
         auto item = Profiler::QueueSerial();
         MemWrite( &item->hdr.type, QueueType::GpuZoneEndSerial );
