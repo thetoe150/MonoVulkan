@@ -9,7 +9,7 @@ IMGUI_SRC_FILES=$(wildcard src/imgui/*.cpp)
 IMGUI_OBJ_FILES=$(patsubst src/imgui/%, obj/imgui/%, $(patsubst %.cpp, %.o, $(IMGUI_SRC_FILES)))
 TRACY_OBJ=obj/tracy/TracyClient.o
 TRACY_SRC=tracy/public/TracyClient.cpp
-# HEADER_ONLY_FILES
+HEADER_ONLY_FILES=inc/vk_mem_alloc.h
 #
 EXE=bin/main
 
@@ -25,7 +25,7 @@ release: $(EXE)
 $(EXE): $(OBJ_FILES) $(IMGUI_OBJ_FILES) $(TRACY_OBJ)
 	$(CC) $^ -o $@ $(LFLAGS)
 
-obj/%.o: src/%.cpp inc/%.hpp
+obj/%.o: src/%.cpp inc/%.hpp $(HEADER_ONLY_FILES)
 	$(CC) -c $< -o $@ $(CFLAGS)
 
 obj/imgui/%.o: src/imgui/%.cpp
