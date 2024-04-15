@@ -1,5 +1,4 @@
 #include "Particle.hpp"
-#include "vulkan/vulkan_core.h"
 
 const std::string MODEL_PATH = "res/models/wooden_watch_tower2.obj";
 const std::string TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
@@ -245,6 +244,8 @@ private:
         createDescriptorSets();
         createCommandBuffers();
         createSyncObjects();
+
+		printMemoryStatistics();
     }
 
     void mainLoop() {
@@ -362,10 +363,10 @@ private:
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pApplicationName = "Hello Triangle";
-        appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 1, 3, 0);
         appInfo.pEngineName = "No Engine";
-        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.engineVersion = VK_MAKE_API_VERSION(0, 1, 3, 0);
+        appInfo.apiVersion = VK_API_VERSION_1_3;
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -551,7 +552,10 @@ private:
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
         swapChainImages.resize(imageCount);
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
-		std::cout << "swap chain image count:" << imageCount << "\n";
+		std::cout << "swapchain extent width: " << extent.width << "\n";
+		std::cout << "swapchain extent height: " << extent.height << "\n";
+		std::cout << "frames in flight count:" << MAX_FRAMES_IN_FLIGHT << "\n";
+		std::cout << "swapchain images count:" << imageCount << "\n";
 
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
@@ -1074,7 +1078,7 @@ private:
 
 		VmaAllocationCreateInfo	imageAllocInfo{};
 		imageAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-		imageAllocInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+		// imageAllocInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 		imageAllocInfo.priority = 1.0f;
 
 		vmaCreateImage(m_allocator, &imageInfo, &imageAllocInfo, &image, &imageAlloc, nullptr);
@@ -1330,6 +1334,7 @@ private:
     }
 
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VmaAllocation& allocation) {
+		// printMemoryBudget();
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
@@ -1339,12 +1344,12 @@ private:
 		VmaAllocationCreateInfo	allocInfo{};
 		if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
 		{
-			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 			allocInfo.priority = 0.0f;
 		}
 		else
 		{
-			allocInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			// allocInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT | VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
 			allocInfo.priority = 1.0f;
 		}
 
@@ -1840,6 +1845,62 @@ private:
 
         return true;
     }
+
+	void printMemoryBudget(){
+		VmaBudget budgets{};
+		vmaGetHeapBudgets(m_allocator, &budgets);
+		VmaBudget* budget = &budgets;
+		
+		std::cout << "Number of Heaps is: " << m_allocator->GetMemoryHeapCount() << "\n" <<
+					"Number of Heap types is: " <<m_allocator->GetMemoryTypeCount() << "\n";
+
+		for(unsigned int i = 0; i < m_allocator->GetMemoryHeapCount(); i++, budget++)
+		{
+			std::cout <<
+			"Number of `VkDeviceMemory` objects						: " << budget->statistics.blockCount << "\n" <<
+			"Number of #VmaAllocation objects allocated				: " << budget->statistics.allocationCount << "\n" <<
+			"Number of bytes allocated in `VkDeviceMemory` blocks	: " << budget->statistics.blockBytes << "\n" <<
+			"Number of bytes occupied by all #VmaAllocation objects	: " << budget->statistics.allocationBytes << "\n" <<
+			"Estimated current memory usage of the program, in bytes: " << budget->budget << "\n" <<
+			"Estimated amount of memory available to the program, in bytes: " << budget->usage << "\n"
+			"\n";
+		}
+	}
+
+	void printMemoryStatistics(){
+
+		auto l_printStat = [](VmaDetailedStatistics* stats, unsigned int size) -> void{
+			for(unsigned int i = 0; i < size; i++)
+			{
+				VmaStatistics basicStat = stats[i].statistics;
+				std::cout <<
+				"Index number						: " << i << "\n" <<
+				"Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: " << basicStat.blockCount << "\n" <<
+				"Number of #VmaAllocation objects allocated: " << basicStat.allocationCount << "\n" <<
+				"Number of bytes allocated in `VkDeviceMemory` blocks: " << basicStat.blockBytes << "\n" <<
+				"Total number of bytes occupied by all #VmaAllocation objects: " << basicStat.allocationBytes << "\n" <<
+				"Number of free ranges of memory between allocations: " << stats[i].unusedRangeCount << "\n" <<
+				"Smallest allocation size: " << stats[i].allocationSizeMin << "\n" <<
+				"Largest allocation size: " << stats[i].allocationSizeMax << "\n" <<
+				// "Smallest allocation size: " << stats->allocationSizeMin << "\n" <<
+				// "Smallest allocation size: " << stats->allocationSizeMin << "\n" <<
+				"\n";
+			}
+		};
+
+		VmaTotalStatistics stats{};
+		vmaCalculateStatistics(m_allocator, &stats);
+
+		std::cout << "Heap statistics: \n";
+		unsigned int heapCount = m_allocator->GetMemoryHeapCount();
+		l_printStat(stats.memoryHeap, heapCount);
+
+		std::cout << "Heap type statistics: \n";
+		unsigned int typeCount = m_allocator->GetMemoryTypeCount();
+		l_printStat(stats.memoryType, typeCount);
+
+		// l_printStat(stats.total, typeCount);
+	}
 
     static std::vector<char> readFile(const std::string& filename) {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
