@@ -1868,13 +1868,23 @@ private:
 	}
 
 	void printMemoryStatistics(){
+		VkPhysicalDeviceMemoryProperties memProperties{};
+		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
-		auto l_printStat = [](VmaDetailedStatistics* stats, unsigned int size) -> void{
+		auto l_printStat = [&memProperties](VmaDetailedStatistics* stats, unsigned int size, bool isHeapStats) -> void{
 			for(unsigned int i = 0; i < size; i++)
 			{
+				if(isHeapStats){
+					std::cout << "Heap index "<< i << ": " << vk::to_string((vk::MemoryHeapFlags)memProperties.memoryHeaps[i].flags) 
+					<< ", with size: " << memProperties.memoryHeaps[i].size << "\n";
+				}
+				else{
+					std::cout << "Type index "<< i << ": " << vk::to_string((vk::MemoryPropertyFlags)memProperties.memoryTypes[i].propertyFlags)
+					<< ", belong to heap index: " << memProperties.memoryTypes[i].heapIndex  << "\n";
+				}
+
 				VmaStatistics basicStat = stats[i].statistics;
-				std::cout <<
-				"Index number						: " << i << "\n" <<
+				std::cout << "Current usage: \n" <<
 				"Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: " << basicStat.blockCount << "\n" <<
 				"Number of #VmaAllocation objects allocated: " << basicStat.allocationCount << "\n" <<
 				"Number of bytes allocated in `VkDeviceMemory` blocks: " << basicStat.blockBytes << "\n" <<
@@ -1888,16 +1898,26 @@ private:
 			}
 		};
 
+		for(unsigned int i = 0; i < memProperties.memoryHeapCount; i++){
+			std::cout << "Heap index "<< i << ": " << vk::to_string((vk::MemoryHeapFlags)memProperties.memoryHeaps[i].flags) 
+			<< ", with size: " << memProperties.memoryHeaps[i].size << "\n";
+		}
+
+		for(unsigned int i = 0; i < memProperties.memoryTypeCount; i++){
+			std::cout << "Type index "<< i << ": " << vk::to_string((vk::MemoryPropertyFlags)memProperties.memoryTypes[i].propertyFlags)
+			<< ", belong to heap index: " << memProperties.memoryTypes[i].heapIndex  << "\n";
+		}
+
 		VmaTotalStatistics stats{};
 		vmaCalculateStatistics(m_allocator, &stats);
 
-		std::cout << "Heap statistics: \n";
+		std::cout << "\n ######## Heap statistics: ########\n";
 		unsigned int heapCount = m_allocator->GetMemoryHeapCount();
-		l_printStat(stats.memoryHeap, heapCount);
+		l_printStat(stats.memoryHeap, heapCount, true);
 
-		std::cout << "Heap type statistics: \n";
+		std::cout << "\n ######## Heap type statistics: ########\n";
 		unsigned int typeCount = m_allocator->GetMemoryTypeCount();
-		l_printStat(stats.memoryType, typeCount);
+		l_printStat(stats.memoryType, typeCount, false);
 
 		// l_printStat(stats.total, typeCount);
 	}
