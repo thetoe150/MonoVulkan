@@ -2,7 +2,9 @@
 #include <GLFW/glfw3.h>
 
 #define VMA_IMPLEMENTATION
-#include "vk_mem_alloc.h"
+#include "vma/vk_mem_alloc.h"
+
+#include "vulkan/vulkan.hpp"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE

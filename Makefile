@@ -1,6 +1,6 @@
 CC=g++
  
-CFLAGS=-Wall -std=c++17 -IC:\VulkanSDK\1.3.268.0\Include -Iinc -Iinc/imgui -Itracy/public/tracy
+CFLAGS=-Wall -std=c++17 -Iinc -Iinc/imgui -Iinc/vma -Itracy/public/tracy
 LFLAGS=-Wall -std=c++17 -Llib -lglfw3dll -LC:/VulkanSDK/1.3.268.0/Lib -lvulkan-1
 
 SRC_FILES=$(wildcard src/*.cpp)
@@ -9,7 +9,7 @@ IMGUI_SRC_FILES=$(wildcard src/imgui/*.cpp)
 IMGUI_OBJ_FILES=$(patsubst src/imgui/%, obj/imgui/%, $(patsubst %.cpp, %.o, $(IMGUI_SRC_FILES)))
 TRACY_OBJ=obj/tracy/TracyClient.o
 TRACY_SRC=tracy/public/TracyClient.cpp
-HEADER_ONLY_FILES=inc/vk_mem_alloc.h
+HEADER_ONLY_FILES=inc/vma/vk_mem_alloc.h
 #
 EXE=bin/main
 
@@ -25,7 +25,7 @@ release: $(EXE)
 $(EXE): $(OBJ_FILES) $(IMGUI_OBJ_FILES) $(TRACY_OBJ)
 	$(CC) $^ -o $@ $(LFLAGS)
 
-obj/%.o: src/%.cpp inc/%.hpp $(HEADER_ONLY_FILES)
+obj/%.o: src/%.cpp inc/%.hpp
 	$(CC) -c $< -o $@ $(CFLAGS)
 
 obj/imgui/%.o: src/imgui/%.cpp
