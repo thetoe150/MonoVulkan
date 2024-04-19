@@ -1,0 +1,242 @@
+-- integrate GPU: --
+
+Heap index 0: { DeviceLocal }, with size: 4219627520
+Type index 0: { DeviceLocal }, belong to heap index: 0
+Type index 1: { DeviceLocal | HostVisible | HostCoherent }, belong to heap index: 0
+Type index 2: { DeviceLocal | HostVisible | HostCoherent | HostCached }, belong to heap index: 0
+
+ ######## Heap statistics: ########
+Heap index 0: { DeviceLocal }, with size: 4219627520
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 2
+Number of #VmaAllocation objects allocated: 7
+Number of bytes allocated in `VkDeviceMemory` blocks: 167772160
+Total number of bytes occupied by all #VmaAllocation objects: 91207488
+Number of free ranges of memory between allocations: 2
+Smallest allocation size: 192
+Largest allocation size: 34615296
+
+
+ ######## Heap type statistics: ########
+Type index 0: { DeviceLocal }, belong to heap index: 0
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 1
+Number of #VmaAllocation objects allocated: 5
+Number of bytes allocated in `VkDeviceMemory` blocks: 134217728
+Total number of bytes occupied by all #VmaAllocation objects: 91207104
+Number of free ranges of memory between allocations: 1
+Smallest allocation size: 24448
+Largest allocation size: 34615296
+
+Type index 1: { DeviceLocal | HostVisible | HostCoherent }, belong to heap index: 0
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 1
+Number of #VmaAllocation objects allocated: 2
+Number of bytes allocated in `VkDeviceMemory` blocks: 33554432
+Total number of bytes occupied by all #VmaAllocation objects: 384
+Number of free ranges of memory between allocations: 1
+Smallest allocation size: 192
+Largest allocation size: 192
+
+Type index 2: { DeviceLocal | HostVisible | HostCoherent | HostCached }, belong to heap index: 0
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Number of Heaps is: 1
+Number of Heap types is: 3
+Heap index: 0Number of `VkDeviceMemory` objects                                         : 2
+Number of #VmaAllocation objects allocated                              : 7
+Number of bytes allocated in `VkDeviceMemory` blocks    : 167772160
+Number of bytes occupied by all #VmaAllocation objects  : 91207488
+Estimated current memory usage of the program, in bytes: 176332800
+Estimated amount of memory available to the program, in bytes: 3797664768
+
+
+-- discrete GPU:
+
+Heap index 0: { DeviceLocal }, with size: 4212129792
+Heap index 1: {}, with size: 4219625472
+Heap index 2: { DeviceLocal }, with size: 224395264
+Type index 0: {}, belong to heap index: 1
+Type index 1: {}, belong to heap index: 1
+Type index 2: {}, belong to heap index: 1
+Type index 3: {}, belong to heap index: 1
+Type index 4: {}, belong to heap index: 1
+Type index 5: {}, belong to heap index: 1
+Type index 6: {}, belong to heap index: 1
+Type index 7: { DeviceLocal }, belong to heap index: 0
+Type index 8: { HostVisible | HostCoherent }, belong to heap index: 1
+Type index 9: { HostVisible | HostCoherent | HostCached }, belong to heap index: 1
+Type index 10: { DeviceLocal | HostVisible | HostCoherent }, belong to heap index: 2
+
+ ######## Heap statistics: ########
+Heap index 0: { DeviceLocal }, with size: 4212129792
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 3
+Number of #VmaAllocation objects allocated: 5
+Number of bytes allocated in `VkDeviceMemory` blocks: 99876864
+Total number of bytes occupied by all #VmaAllocation objects: 55292336
+Number of free ranges of memory between allocations: 1
+Smallest allocation size: 24432
+Largest allocation size: 22371328
+
+Heap index 1: {}, with size: 4219625472
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 1
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 33554432
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 1
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Heap index 2: { DeviceLocal }, with size: 224395264
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 1
+Number of #VmaAllocation objects allocated: 2
+Number of bytes allocated in `VkDeviceMemory` blocks: 3506176
+Total number of bytes occupied by all #VmaAllocation objects: 512
+Number of free ranges of memory between allocations: 1
+Smallest allocation size: 256
+Largest allocation size: 256
+
+
+ ######## Heap type statistics: ########
+Type index 0: {}, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 1: {}, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 2: {}, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 3: {}, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 4: {}, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 5: {}, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 6: {}, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 7: { DeviceLocal }, belong to heap index: 0
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 3
+Number of #VmaAllocation objects allocated: 5
+Number of bytes allocated in `VkDeviceMemory` blocks: 99876864
+Total number of bytes occupied by all #VmaAllocation objects: 55292336
+Number of free ranges of memory between allocations: 1
+Smallest allocation size: 24432
+Largest allocation size: 22371328
+
+Type index 8: { HostVisible | HostCoherent }, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 1
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 33554432
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 1
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 9: { HostVisible | HostCoherent | HostCached }, belong to heap index: 1
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 0
+Number of #VmaAllocation objects allocated: 0
+Number of bytes allocated in `VkDeviceMemory` blocks: 0
+Total number of bytes occupied by all #VmaAllocation objects: 0
+Number of free ranges of memory between allocations: 0
+Smallest allocation size: 18446744073709551615
+Largest allocation size: 0
+
+Type index 10: { DeviceLocal | HostVisible | HostCoherent }, belong to heap index: 2
+Current usage:
+Number of `VkDeviceMemory` objects - Vulkan memory blocks allocated: 1
+Number of #VmaAllocation objects allocated: 2
+Number of bytes allocated in `VkDeviceMemory` blocks: 3506176
+Total number of bytes occupied by all #VmaAllocation objects: 512
+Number of free ranges of memory between allocations: 1
+Smallest allocation size: 256
+Largest allocation size: 256
+
+Number of Heaps is: 3
+Number of Heap types is: 11
+Heap index: 0Number of `VkDeviceMemory` objects                                         : 3
+Number of #VmaAllocation objects allocated                              : 5
+Number of bytes allocated in `VkDeviceMemory` blocks    : 99876864
+Number of bytes occupied by all #VmaAllocation objects  : 55292336
+Estimated current memory usage of the program, in bytes: 102277120
+Estimated amount of memory available to the program, in bytes: 3580310324
+
+Heap index: 1Number of `VkDeviceMemory` objects                                         : 1
+Number of #VmaAllocation objects allocated                              : 0
+Number of bytes allocated in `VkDeviceMemory` blocks    : 33554432
+Number of bytes occupied by all #VmaAllocation objects  : 0
+Estimated current memory usage of the program, in bytes: 45166592
+Estimated amount of memory available to the program, in bytes: 3797664768
+
+Heap index: 2Number of `VkDeviceMemory` objects                                         : 1
+Number of #VmaAllocation objects allocated                              : 2
+Number of bytes allocated in `VkDeviceMemory` blocks    : 3506176
+Number of bytes occupied by all #VmaAllocation objects  : 512
+Estimated current memory usage of the program, in bytes: 3571712
+Estimated amount of memory available to the program, in bytes: 224329728

@@ -246,6 +246,7 @@ private:
         createSyncObjects();
 
 		printMemoryStatistics();
+		printMemoryBudget();
     }
 
     void mainLoop() {
@@ -1334,7 +1335,6 @@ private:
     }
 
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VmaAllocation& allocation) {
-		// printMemoryBudget();
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
@@ -1847,24 +1847,26 @@ private:
     }
 
 	void printMemoryBudget(){
-		VmaBudget budgets{};
-		vmaGetHeapBudgets(m_allocator, &budgets);
-		VmaBudget* budget = &budgets;
+		VmaBudget* budgets = new VmaBudget[m_allocator->GetMemoryHeapCount()];
+		vmaGetHeapBudgets(m_allocator, budgets);
 		
 		std::cout << "Number of Heaps is: " << m_allocator->GetMemoryHeapCount() << "\n" <<
 					"Number of Heap types is: " <<m_allocator->GetMemoryTypeCount() << "\n";
 
-		for(unsigned int i = 0; i < m_allocator->GetMemoryHeapCount(); i++, budget++)
+		for(unsigned int i = 0; i < m_allocator->GetMemoryHeapCount(); i++)
 		{
 			std::cout <<
-			"Number of `VkDeviceMemory` objects						: " << budget->statistics.blockCount << "\n" <<
-			"Number of #VmaAllocation objects allocated				: " << budget->statistics.allocationCount << "\n" <<
-			"Number of bytes allocated in `VkDeviceMemory` blocks	: " << budget->statistics.blockBytes << "\n" <<
-			"Number of bytes occupied by all #VmaAllocation objects	: " << budget->statistics.allocationBytes << "\n" <<
-			"Estimated current memory usage of the program, in bytes: " << budget->budget << "\n" <<
-			"Estimated amount of memory available to the program, in bytes: " << budget->usage << "\n"
+			"Heap index: " << i << "\n" <<
+			"Number of `VkDeviceMemory` objects						: " << budgets[i].statistics.blockCount << "\n" <<
+			"Number of #VmaAllocation objects allocated				: " << budgets[i].statistics.allocationCount << "\n" <<
+			"Number of bytes allocated in `VkDeviceMemory` blocks	: " << budgets[i].statistics.blockBytes << "\n" <<
+			"Number of bytes occupied by all #VmaAllocation objects	: " << budgets[i].statistics.allocationBytes << "\n" <<
+			"Estimated current memory usage of the program, in bytes: " << budgets[i].usage << "\n" <<
+			"Estimated amount of memory available to the program, in bytes: " << budgets[i].budget << "\n"
 			"\n";
 		}
+
+		delete[] budgets;
 	}
 
 	void printMemoryStatistics(){
