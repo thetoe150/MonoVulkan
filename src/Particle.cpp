@@ -33,6 +33,15 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
+void CheckImGuiResult(VkResult res){
+	if(res == VK_SUCCESS){
+		std::cout << "ImGui: success.\n";
+	}
+	else{
+		std::cout << "ImGui: fail.\n";
+	}
+}
+
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
@@ -102,14 +111,25 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 proj;
 };
 
-class HelloTriangleApplication {
+class MonoVulkan {
 public:
-    void run() {
-        initWindow();
+	void init(){
+        initGLFW();
         initVulkan();
 		initTracyVk();
+		// initImGui();
+	}
+
+	void clean(){
+		cleanUpImGui();
+        cleanUpVulkan();
+		cleanUpGLFW();
+	}
+
+    void run() {
+		init();
         mainLoop();
-        cleanup();
+		clean();
     }
 
 private:
@@ -185,9 +205,11 @@ private:
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
 
+	VkDescriptorPool imguiDescriptorPool;
+
     bool framebufferResized = false;
 
-    void initWindow() {
+    void initGLFW() {
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -198,7 +220,7 @@ private:
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-        auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        auto app = reinterpret_cast<MonoVulkan*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
     }
 
@@ -215,6 +237,46 @@ private:
 		// {
         //     throw std::runtime_error("failed to create query pool!");
 		// }
+	}
+
+	void initImGui(){
+		// Setup Dear ImGui context
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+		ImGuiIO& io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+		
+		ImGui_ImplGlfw_InitForVulkan(window, true);
+
+		std::array<VkDescriptorPoolSize, 1> poolSize;
+		poolSize[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSize[0].descriptorCount = 1;
+
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+		poolInfo.maxSets = 100;
+		poolInfo.pPoolSizes = poolSize.data();
+		poolInfo.poolSizeCount = poolSize.size();
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &imguiDescriptorPool) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor pool!");
+        }
+
+		ImGui_ImplVulkan_InitInfo info{};
+		info.Instance = instance;
+		info.PhysicalDevice = physicalDevice;
+		info.Device = device;
+		info.QueueFamily = findQueueFamilies(physicalDevice).graphicsFamily.value();
+		info.Queue = graphicsQueue;
+		info.DescriptorPool = imguiDescriptorPool;
+		info.RenderPass = renderPass;
+		info.MinImageCount = swapChainImages.size();
+		info.ImageCount = swapChainImages.size();
+		info.MSAASamples = getMaxUsableSampleCount();
+		info.CheckVkResultFn = CheckImGuiResult;
+		ImGui_ImplVulkan_Init(&info);
 	}
 
     void initVulkan() {
@@ -245,8 +307,8 @@ private:
         createCommandBuffers();
         createSyncObjects();
 
-		printMemoryStatistics();
-		printMemoryBudget();
+		// printMemoryStatistics();
+		// printMemoryBudget();
     }
 
     void mainLoop() {
@@ -259,30 +321,23 @@ private:
         vkDeviceWaitIdle(device);
     }
 
-    void cleanupSwapChain() {
-        vkDestroyImageView(device, depthImageView, nullptr);
-        vkDestroyImage(device, depthImage, nullptr);
-        vmaFreeMemory(m_allocator, depthImageAlloc);
+	void cleanUpImGui(){
+		ImGui_ImplVulkan_DestroyFontsTexture();
+		ImGui_ImplVulkan_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+	}
 
-        vkDestroyImageView(device, colorImageView, nullptr);
-        vkDestroyImage(device, colorImage, nullptr);
-        vmaFreeMemory(m_allocator, colorImageAlloc);
-
-        for (auto framebuffer : swapChainFramebuffers) {
-            vkDestroyFramebuffer(device, framebuffer, nullptr);
-        }
-
-        for (auto imageView : swapChainImageViews) {
-            vkDestroyImageView(device, imageView, nullptr);
-        }
-
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
-    }
-
-    void cleanup() {
-        cleanupSwapChain();
-
+	void cleanUpGLFW(){
+        glfwDestroyWindow(window);
+        glfwTerminate();
+	}
+	
+	void cleanUpTracy(){
 		TracyVkDestroy(tracyContext);
+	}
+
+    void cleanUpVulkan() {
+        cleanupSwapChain();
 
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
@@ -328,13 +383,26 @@ private:
 
         vkDestroySurfaceKHR(instance, surface, nullptr);
         vkDestroyInstance(instance, nullptr);
+    }
 
-        glfwDestroyWindow(window);
+    void cleanupSwapChain() {
+        vkDestroyImageView(device, depthImageView, nullptr);
+        vkDestroyImage(device, depthImage, nullptr);
+        vmaFreeMemory(m_allocator, depthImageAlloc);
 
-		// ImGui_ImplOpenGL3_Shutdown();
-		// ImGui_ImplGlfw_Shutdown();
+        vkDestroyImageView(device, colorImageView, nullptr);
+        vkDestroyImage(device, colorImage, nullptr);
+        vmaFreeMemory(m_allocator, colorImageAlloc);
 
-        glfwTerminate();
+        for (auto framebuffer : swapChainFramebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
     }
 
     void recreateSwapChain() {
@@ -1279,6 +1347,7 @@ private:
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -1515,7 +1584,7 @@ private:
             VkBuffer vertexBuffers[] = {vertexBuffer};
             VkDeviceSize offsets[] = {0};
 		{
-			ZoneScopedN("Bind stuffs");
+			ZoneScopedN("Bind buffers");
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
             vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
@@ -1529,6 +1598,13 @@ private:
 		{
 			ZoneScopedN("Draw call");
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+		}
+
+		{
+			// ZoneScopedN("ImGui");
+			// ImGui_ImplVulkan_CreateFontsTexture();
+			// ImGui::Render();
+			// ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, graphicsPipeline);
 		}
 
         vkCmdEndRenderPass(commandBuffer);
@@ -1580,7 +1656,7 @@ private:
     void drawFrame() {
 		ZoneScopedN("Update&Draw&Present");
 
-		// ImGui_ImplOpenGL3_NewFrame();
+		// ImGui_ImplVulkan_NewFrame();
 		// ImGui_ImplGlfw_NewFrame();
 		// ImGui::NewFrame();
 		// ImGui::ShowDemoWindow();
@@ -1787,6 +1863,9 @@ private:
         int i = 0;
         for (const auto& queueFamily : queueFamilies) {
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				if(queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)
+					std::cout << "This is also a transfer queue!! \n"; 
+
                 indices.graphicsFamily = i;
             }
 
@@ -1869,7 +1948,18 @@ private:
 		delete[] budgets;
 	}
 
+	// TODO: adapt to these enum
+	void printQueueFamilyProperties(){
+	}
+
 	void printMemoryStatistics(){
+		// TODO: adapt to these enum
+		enum class StatType{
+			TYPE,
+			HEAP,
+			ALL,
+		};
+
 		VkPhysicalDeviceMemoryProperties memProperties{};
 		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
@@ -1951,7 +2041,7 @@ private:
 };
 
 int main() {
-    HelloTriangleApplication app;
+    MonoVulkan app;
 
     try {
         app.run();
