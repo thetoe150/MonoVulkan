@@ -116,12 +116,13 @@ public:
 	void init(){
         initGLFW();
         initVulkan();
-		initTracyVk();
-		// initImGui();
+		initTracy();
+		initImGui();
 	}
 
 	void clean(){
 		cleanUpImGui();
+		cleanUpTracy();
         cleanUpVulkan();
 		cleanUpGLFW();
 	}
@@ -205,6 +206,7 @@ private:
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
 
+	// NOTE: additional handle use in tools
 	VkDescriptorPool imguiDescriptorPool;
 
     bool framebufferResized = false;
@@ -224,7 +226,7 @@ private:
         app->framebufferResized = true;
     }
 
-	void initTracyVk(){
+	void initTracy(){
 		// tracyContext = TracyVkContextCalibrated(instance, physicalDevice, device, graphicsQueue, tracyCommandBuffer, vkGetInstanceProcAddr, vkGetDeviceProcAddr);
 		tracyContext = TracyVkContextCalibrated(instance, physicalDevice, device, graphicsQueue, tracyCommandBuffer, vkGetInstanceProcAddr, vkGetDeviceProcAddr);
 		
@@ -251,12 +253,12 @@ private:
 
 		std::array<VkDescriptorPoolSize, 1> poolSize;
 		poolSize[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolSize[0].descriptorCount = 1;
+		poolSize[0].descriptorCount = 10;
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		poolInfo.maxSets = 100;
+		poolInfo.maxSets = 10;
 		poolInfo.pPoolSizes = poolSize.data();
 		poolInfo.poolSizeCount = poolSize.size();
 
@@ -325,6 +327,7 @@ private:
 		ImGui_ImplVulkan_DestroyFontsTexture();
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
 	}
 
 	void cleanUpGLFW(){
@@ -350,6 +353,7 @@ private:
         }
 
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
 
         vkDestroySampler(device, textureSampler, nullptr);
         vkDestroyImageView(device, textureImageView, nullptr);
@@ -1601,10 +1605,9 @@ private:
 		}
 
 		{
-			// ZoneScopedN("ImGui");
-			// ImGui_ImplVulkan_CreateFontsTexture();
-			// ImGui::Render();
-			// ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, graphicsPipeline);
+			ZoneScopedN("ImGui");
+			ImGui::Render();
+			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, VK_NULL_HANDLE);
 		}
 
         vkCmdEndRenderPass(commandBuffer);
@@ -1656,10 +1659,10 @@ private:
     void drawFrame() {
 		ZoneScopedN("Update&Draw&Present");
 
-		// ImGui_ImplVulkan_NewFrame();
-		// ImGui_ImplGlfw_NewFrame();
-		// ImGui::NewFrame();
-		// ImGui::ShowDemoWindow();
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+		ImGui::ShowDemoWindow();
 
 		uint32_t imageIndex;
 		VkResult result{};
