@@ -1,4 +1,5 @@
 #include "Particle.hpp"
+#include "vulkan/vulkan_to_string.hpp"
 
 const std::string MODEL_PATH = "res/models/wooden_watch_tower2.obj";
 const std::string TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
@@ -277,7 +278,7 @@ private:
 		info.MinImageCount = swapChainImages.size();
 		info.ImageCount = swapChainImages.size();
 		info.MSAASamples = getMaxUsableSampleCount();
-		info.CheckVkResultFn = CheckImGuiResult;
+		// info.CheckVkResultFn = CheckImGuiResult;
 		ImGui_ImplVulkan_Init(&info);
 	}
 
@@ -309,7 +310,8 @@ private:
         createCommandBuffers();
         createSyncObjects();
 
-		// printMemoryStatistics();
+		printMemoryStatistics();
+		printQueueFamilyProperties();
 		// printMemoryBudget();
     }
 
@@ -1866,9 +1868,6 @@ private:
         int i = 0;
         for (const auto& queueFamily : queueFamilies) {
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-				if(queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)
-					std::cout << "This is also a transfer queue!! \n"; 
-
                 indices.graphicsFamily = i;
             }
 
@@ -1928,12 +1927,24 @@ private:
         return true;
     }
 
+	void printQueueFamilyProperties(){
+		uint32_t count{};
+		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &count, nullptr);
+		std::vector<VkQueueFamilyProperties> queueProperties(count);
+		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &count, queueProperties.data());
+
+		for(unsigned int i = 0; i < count; i++){
+			std::cout << "Queue Family index " << i << ": " << vk::to_string((vk::QueueFlags)queueProperties[i].queueFlags) << "\n";
+		}
+
+	}
+
 	void printMemoryBudget(){
 		VmaBudget* budgets = new VmaBudget[m_allocator->GetMemoryHeapCount()];
 		vmaGetHeapBudgets(m_allocator, budgets);
 		
 		std::cout << "Number of Heaps is: " << m_allocator->GetMemoryHeapCount() << "\n" <<
-					"Number of Heap types is: " <<m_allocator->GetMemoryTypeCount() << "\n";
+					"Number of Types is: " <<m_allocator->GetMemoryTypeCount() << "\n";
 
 		for(unsigned int i = 0; i < m_allocator->GetMemoryHeapCount(); i++)
 		{
@@ -1951,29 +1962,26 @@ private:
 		delete[] budgets;
 	}
 
-	// TODO: adapt to these enum
-	void printQueueFamilyProperties(){
-	}
-
 	void printMemoryStatistics(){
-		// TODO: adapt to these enum
 		enum class StatType{
 			TYPE,
 			HEAP,
-			ALL,
+			TOTAL,
 		};
 
 		VkPhysicalDeviceMemoryProperties memProperties{};
 		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
-		auto l_printStat = [&memProperties](VmaDetailedStatistics* stats, unsigned int size, bool isHeapStats) -> void{
+		auto l_printStat = [&memProperties](VmaDetailedStatistics* stats, unsigned int size, StatType type) -> void{
 			for(unsigned int i = 0; i < size; i++)
 			{
-				if(isHeapStats){
+				if(type == StatType::TOTAL){
+				}
+				else if(type == StatType::HEAP){
 					std::cout << "Heap index "<< i << ": " << vk::to_string((vk::MemoryHeapFlags)memProperties.memoryHeaps[i].flags) 
 					<< ", with size: " << memProperties.memoryHeaps[i].size << "\n";
 				}
-				else{
+				else if (type == StatType::TYPE){
 					std::cout << "Type index "<< i << ": " << vk::to_string((vk::MemoryPropertyFlags)memProperties.memoryTypes[i].propertyFlags)
 					<< ", belong to heap index: " << memProperties.memoryTypes[i].heapIndex  << "\n";
 				}
@@ -1987,32 +1995,25 @@ private:
 				"Number of free ranges of memory between allocations: " << stats[i].unusedRangeCount << "\n" <<
 				"Smallest allocation size: " << stats[i].allocationSizeMin << "\n" <<
 				"Largest allocation size: " << stats[i].allocationSizeMax << "\n" <<
-				// "Smallest allocation size: " << stats->allocationSizeMin << "\n" <<
-				// "Smallest allocation size: " << stats->allocationSizeMin << "\n" <<
+				"Smallest empty range size: " << stats[i].unusedRangeSizeMin << "\n" <<
+				"Largest empty range size: " << stats[i].unusedRangeSizeMax << "\n" <<
 				"\n";
 			}
 		};
 
-		for(unsigned int i = 0; i < memProperties.memoryHeapCount; i++){
-			std::cout << "Heap index "<< i << ": " << vk::to_string((vk::MemoryHeapFlags)memProperties.memoryHeaps[i].flags) 
-			<< ", with size: " << memProperties.memoryHeaps[i].size << "\n";
-		}
-
-		for(unsigned int i = 0; i < memProperties.memoryTypeCount; i++){
-			std::cout << "Type index "<< i << ": " << vk::to_string((vk::MemoryPropertyFlags)memProperties.memoryTypes[i].propertyFlags)
-			<< ", belong to heap index: " << memProperties.memoryTypes[i].heapIndex  << "\n";
-		}
-
 		VmaTotalStatistics stats{};
 		vmaCalculateStatistics(m_allocator, &stats);
 
+		std::cout << "\n ######## Total statistics: ########\n";
+		l_printStat(&stats.total, 1, StatType::TOTAL);
+
 		std::cout << "\n ######## Heap statistics: ########\n";
 		unsigned int heapCount = m_allocator->GetMemoryHeapCount();
-		l_printStat(stats.memoryHeap, heapCount, true);
+		l_printStat(stats.memoryHeap, heapCount, StatType::HEAP);
 
-		std::cout << "\n ######## Heap type statistics: ########\n";
+		std::cout << "\n ######## Type statistics: ########\n";
 		unsigned int typeCount = m_allocator->GetMemoryTypeCount();
-		l_printStat(stats.memoryType, typeCount, false);
+		l_printStat(stats.memoryType, typeCount, StatType::TYPE);
 
 		// l_printStat(stats.total, typeCount);
 	}
