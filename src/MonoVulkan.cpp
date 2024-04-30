@@ -220,12 +220,25 @@ private:
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
         glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+		glfwSetKeyCallback(window, keyCallback);
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<MonoVulkan*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
     }
+
+	static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods){
+		if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+			glfwSetWindowShouldClose(window, true);
+		if(key == GLFW_KEY_Z && action == GLFW_PRESS)
+			std::cout << "Callback key Z is pressed.\n";
+	}
+
+	void processInput(){
+		if(glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS)
+			std::cout << "Cache State of key X.\n";
+	}
 
 	void initTracy(){
 		// tracyContext = TracyVkContextCalibrated(instance, physicalDevice, device, graphicsQueue, tracyCommandBuffer, vkGetInstanceProcAddr, vkGetDeviceProcAddr);
@@ -318,6 +331,7 @@ private:
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
+			processInput();
             drawFrame();
 			FrameMark;
         }
