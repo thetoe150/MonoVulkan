@@ -1669,7 +1669,7 @@ private:
 			ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(s_rotate[0], s_rotate[1], s_rotate[2]));
         ubo.model = glm::scale(ubo.model, glm::vec3(s_scale[0], s_scale[1], s_scale[2]));
 
-        ubo.view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
         ubo.proj[1][1] *= -1;
 
@@ -1678,11 +1678,11 @@ private:
 
 	static void processImGui(){
         ImGui::SeparatorText("Model");
-		ImGui::SliderFloat3("Translate", s_translate, -10.f, 10.f, "%.5f");
-		ImGui::SliderFloat3("Rotate", s_rotate, -10.f, 10.f, "%.5f");
-		ImGui::SliderFloat3("Scale", s_scale, -10.f, 10.f, "%.5f");
+		ImGui::SliderFloat3("Translate", s_translate, -10.f, 10.f, "%.2f");
+		ImGui::SliderFloat3("Rotate", s_rotate, -10.f, 10.f, "%.2f");
+		ImGui::SliderFloat3("Scale", s_scale, -10.f, 10.f, "%.2f");
         ImGui::SeparatorText("View");
-		ImGui::SliderFloat3("View", s_viewPos, -20.f, 20.f, "%.5f");
+		ImGui::SliderFloat3("View", s_viewPos, -20.f, 20.f, "%.2f");
         ImGui::SeparatorText("Projection");
 		ImGui::SliderFloat("Near Plane", &s_nearPlane, -10.f, 10.f, "%.5f");
 		ImGui::SliderFloat("Far Plane", &s_farPlane, -10.f, 100.f, "%.5f");
