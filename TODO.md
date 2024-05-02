@@ -14,3 +14,4 @@
         - Atomic operations
         - Subgroups
     - Multiple target rendering?
+4. Vulkan extensions, layers

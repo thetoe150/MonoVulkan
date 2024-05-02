@@ -1,4 +1,5 @@
 #include "MonoVulkan.hpp"
+#include "vulkan/vulkan_core.h"
 
 const std::string MODEL_PATH = "res/models/wooden_watch_tower2.obj";
 const std::string TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
@@ -8,7 +9,8 @@ const std::vector<const char*> validationLayers = {
 };
 
 const std::vector<const char*> deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+	VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME
 };
 
 #ifdef NDEBUG
@@ -58,9 +60,9 @@ struct SwapChainSupportDetails {
 };
 
 struct Vertex {
-    glm::vec3 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
+	alignas(16) glm::vec3 pos;
+    alignas(16) glm::vec3 color;
+    alignas(8)  glm::vec2 texCoord;
 
     static VkVertexInputBindingDescription getBindingDescription() {
         VkVertexInputBindingDescription bindingDescription{};
@@ -95,6 +97,33 @@ struct Vertex {
     bool operator==(const Vertex& other) const {
         return pos == other.pos && color == other.color && texCoord == other.texCoord;
     }
+};
+
+struct VertexInstance {
+	alignas(16) glm::vec3 pos;
+
+	static VkVertexInputBindingDescription getBindingDescription(){
+		VkVertexInputBindingDescription bindingDescription{};
+		bindingDescription.binding = 1;
+		bindingDescription.stride = sizeof(VertexInstance);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+
+		return bindingDescription;
+	}
+
+	static std::array<VkVertexInputAttributeDescription, 1> getAttributeDescriptions(){
+		std::array<VkVertexInputAttributeDescription, 1> attributeDescriptions{};
+		attributeDescriptions[0].binding = 1;
+		attributeDescriptions[0].location = 3;
+		attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[0].offset = offsetof(VertexInstance, pos);
+
+		return attributeDescriptions;
+	}
+
+	bool operator==(const VertexInstance& other) const{
+		return pos == other.pos;
+	}
 };
 
 namespace std {
@@ -183,12 +212,15 @@ private:
 
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
+    std::vector<VertexInstance> instanceData;
     VkBuffer vertexBuffer;
 	VmaAllocation vertexBufferAlloc;
     // VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
 	VmaAllocation indexBufferAlloc;
     // VkDeviceMemory indexBufferMemory;
+	VkBuffer instanceBuffer;
+	VmaAllocation instanceBufferAlloc;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VmaAllocation> uniformBuffersAlloc;
@@ -309,8 +341,10 @@ private:
         createTextureImageView();
         createTextureSampler();
         loadModel();
+		loadInstanceData();
         createVertexBuffer();
         createIndexBuffer();
+		createInstanceBuffer();
         createUniformBuffers();
         createDescriptorPool();
         createDescriptorSets();
@@ -383,6 +417,9 @@ private:
 
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vmaFreeMemory(m_allocator, vertexBufferAlloc);
+
+        vkDestroyBuffer(device, instanceBuffer, nullptr);
+        vmaFreeMemory(m_allocator, instanceBufferAlloc);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -567,6 +604,13 @@ private:
         } else {
             createInfo.enabledLayerCount = 0;
         }
+
+		VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT divisorFeature{};
+		divisorFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT;
+		divisorFeature.vertexAttributeInstanceRateDivisor = true;
+		divisorFeature.vertexAttributeInstanceRateZeroDivisor = true;
+
+		createInfo.pNext = &divisorFeature;
 
         if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
             throw std::runtime_error("failed to create logical device!");
@@ -783,10 +827,29 @@ private:
         auto bindingDescription = Vertex::getBindingDescription();
         auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+		// instance attribute
+		auto instanceBindingDescription = VertexInstance::getBindingDescription();
+		auto instanceAttributeDescription = VertexInstance::getAttributeDescriptions();
+
+		auto totalAttributeDescriptions = concat(attributeDescriptions, instanceAttributeDescription);
+		std::array<VkVertexInputBindingDescription, 2> totalBindingDescription = {bindingDescription, instanceBindingDescription};
+
+        vertexInputInfo.vertexBindingDescriptionCount = 2;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(totalAttributeDescriptions.size());
+        vertexInputInfo.pVertexBindingDescriptions = totalBindingDescription.data();
+        vertexInputInfo.pVertexAttributeDescriptions = totalAttributeDescriptions.data();
+
+		VkPipelineVertexInputDivisorStateCreateInfoEXT divisor{};
+		divisor.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
+
+		VkVertexInputBindingDivisorDescriptionEXT divisorDescription{};
+		divisorDescription.binding = 1;
+		divisorDescription.divisor = 1;
+
+		divisor.vertexBindingDivisorCount = 1;
+		divisor.pVertexBindingDivisors = &divisorDescription;
+
+		vertexInputInfo.pNext = &divisor;
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1303,6 +1366,27 @@ private:
         }
     }
 
+	void loadInstanceData() {
+		std::ifstream file("res/instance_position.csv");
+		if(file.is_open()) {
+			std::string line;
+			while(std::getline(file, line)){
+				VertexInstance vInstance{};
+				unsigned int offset = 0;
+				unsigned int space = line.find(" ");
+				float x = stof(line.substr(offset, space - offset));
+				offset = space + 1;
+				space = line.find(" ", offset);
+				float y = stof(line.substr(offset, space - offset));
+				offset = space + 1;
+				space = line.find(" ", offset);
+				float z = stof(line.substr(offset, space - offset));
+				vInstance.pos = {x, y, z};
+				instanceData.push_back(vInstance);
+			}
+		}
+	}
+
     void createVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
@@ -1356,6 +1440,26 @@ private:
             vmaMapMemory(m_allocator, uniformBuffersAlloc[i], &uniformBuffersMapped[i]);
         }
     }
+
+	void createInstanceBuffer() {
+		VkDeviceSize bufferSize = sizeof(instanceData[0]) * instanceData.size();
+		VkBuffer stagingBuffer{};
+		VmaAllocation stagingBufferAlloc{};
+
+		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, stagingBuffer, stagingBufferAlloc);
+
+		void* data;
+		vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+		memcpy(data, instanceData.data(), bufferSize);
+		vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+
+		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instanceBuffer, instanceBufferAlloc);
+
+		copyBuffer(stagingBuffer, instanceBuffer, bufferSize);
+
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		vmaFreeMemory(m_allocator, stagingBufferAlloc);
+	}
 
     void createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> poolSizes{};
@@ -1600,23 +1704,22 @@ private:
             scissor.extent = swapChainExtent;
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            VkBuffer vertexBuffers[] = {vertexBuffer};
-            VkDeviceSize offsets[] = {0};
+            VkBuffer Buffers[2] = {vertexBuffer, instanceBuffer};
+            VkDeviceSize offsets[2] = {0, 0};
 		{
 			ZoneScopedN("Bind buffers");
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+            vkCmdBindVertexBuffers(commandBuffer, 0, 2, Buffers, offsets);
 
             vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 		}
 
-
 			// vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, tracyContext->NextQueryId());
 
 		{
 			ZoneScopedN("Draw call");
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), static_cast<uint32_t>(instanceData.size()), 0, 0, 0);
 		}
 
 		{
@@ -1803,7 +1906,7 @@ private:
 
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
         for (const auto& availablePresentMode : availablePresentModes) {
-            if (availablePresentMode == VK_PRESENT_MODE_FIFO_KHR) {
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
                 return availablePresentMode;
             }
         }
@@ -1881,6 +1984,7 @@ private:
         std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
 
         for (const auto& extension : availableExtensions) {
+			// std::cout << extension.extensionName << "\n";
             requiredExtensions.erase(extension.extensionName);
         }
 
@@ -2069,7 +2173,7 @@ private:
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-        std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+        std::cerr << "\n##### " << pCallbackData->pMessage << std::endl;
 
         return VK_FALSE;
     }

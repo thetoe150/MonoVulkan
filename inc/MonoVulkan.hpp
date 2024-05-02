@@ -43,9 +43,33 @@ constexpr uint32_t WIDTH = 1500;
 constexpr uint32_t HEIGHT = 1000;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
-static float s_scale[3] = {1.f, 1.f, 1.f};
+static float s_scale[3] = {0.7f, 0.7f, 0.7f};
 static float s_rotate[3] = {0.f, 0.f, 0.f};
 static float s_translate[3] = {0.f, -5.f, 0.f};
 static float s_viewPos[3] = {15.f, 0.f, 0.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
+
+template <std::size_t Last = 0, typename TF, typename TArray, typename... TRest>
+constexpr auto with_acc_sizes(TF&& f, const TArray& array, const TRest&... rest)
+{
+    f(array, std::integral_constant<std::size_t, Last>{});
+
+    if constexpr(sizeof...(TRest) != 0)
+    {
+        with_acc_sizes<Last + std::tuple_size_v<TArray>>(f, rest...); 
+    }
+}
+
+template<typename T, std::size_t... Sizes>
+constexpr auto concat(const std::array<T, Sizes>&... arrays)
+{
+    std::array<T, (Sizes + ...)> result{};
+
+    with_acc_sizes([&](const auto& arr, auto offset)
+    {
+        std::copy(arr.begin(), arr.end(), result.begin() + offset);
+    }, arrays...);
+
+    return result;
+}
