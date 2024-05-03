@@ -188,6 +188,9 @@ private:
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
     VkPipelineLayout pipelineLayout;
+
+	VkPipelineCache pipelineCache;
+	std::vector<char> pipelineCacheBlob;
     VkPipeline graphicsPipeline;
 
     VkCommandPool commandPool;
@@ -332,6 +335,7 @@ private:
         createImageViews();
         createRenderPass();
         createDescriptorSetLayout();
+		createPipelineCache();
         createGraphicsPipeline();
         createCommandPool();
         createColorResources();
@@ -392,6 +396,7 @@ private:
         cleanupSwapChain();
 
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
+        vkDestroyPipelineCache(device, pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
 
@@ -800,6 +805,16 @@ private:
         }
     }
 
+    void createPipelineCache() {
+		VkPipelineCacheCreateInfo pipelineCacheInfo{};
+		pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		pipelineCacheInfo.pInitialData = static_cast<void*>(pipelineCacheBlob.data());
+		pipelineCacheInfo.initialDataSize = pipelineCacheBlob.size() * sizeof(char);
+
+
+		vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr, &pipelineCache);
+	}
+
     void createGraphicsPipeline() {
         auto vertShaderCode = readFile("src/shaders/final_vs.spv");
         auto fragShaderCode = readFile("src/shaders/final_fs.spv");
@@ -934,7 +949,7 @@ private:
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
