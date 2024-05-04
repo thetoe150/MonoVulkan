@@ -376,6 +376,16 @@ private:
         vkDeviceWaitIdle(device);
     }
 
+	void savePipelineCache() {
+		size_t dataSize{};
+		vkGetPipelineCacheData(device, pipelineCache, &dataSize, nullptr);
+		if(dataSize){
+			char* data = new char[dataSize]();
+			vkGetPipelineCacheData(device, pipelineCache, &dataSize, data);
+			writeFile("res/cache/pipeline_cache.blob", data, dataSize);
+		}
+	}
+
 	void cleanUpImGui(){
 		ImGui_ImplVulkan_DestroyFontsTexture();
 		ImGui_ImplVulkan_Shutdown();
@@ -395,6 +405,7 @@ private:
     void cleanUpVulkan() {
         cleanupSwapChain();
 
+		savePipelineCache();
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
         vkDestroyPipelineCache(device, pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
@@ -806,6 +817,11 @@ private:
     }
 
     void createPipelineCache() {
+		if(!isFileExist("res/cache/pipeline_cache.blob"))
+			makeFile("res/cache/pipeline_cache.blob");
+
+		pipelineCacheBlob = readFile("res/cache/pipeline_cache.blob");
+
 		VkPipelineCacheCreateInfo pipelineCacheInfo{};
 		pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 		pipelineCacheInfo.pInitialData = static_cast<void*>(pipelineCacheBlob.data());
@@ -2168,17 +2184,55 @@ private:
 		// l_printStat(stats.total, typeCount);
 	}
 
+	static bool isFileExist(const std::string& filename){
+		std::ifstream file(filename);
+
+		if(file.good()){
+			file.close();
+			return true;
+		}
+		file.close();
+		return false;
+	}
+
+	static bool makeFile(const std::string& filename) {
+		std::ofstream file(filename, std::ios::ate | std::ios::binary);
+
+		if(file.good()){
+			file.flush();
+			file.close();
+			std::cout << "@@@@@ create file at path: " << filename << "\n";
+			return true;
+		}
+		file.close();
+		std::cout << "@@@@@ FAIL to create file at path: " << filename << "\n";
+		return false;
+	}
+
+	static void writeFile(const std::string& filename, char* data, size_t size){
+		std::ofstream file(filename, std::ios::binary | std::ofstream::trunc);
+
+        if (!file.is_open()) {
+            throw std::runtime_error("failed to open file!");
+        }
+
+		std::cout << "@@@@@ write file at path: " << filename << ", with size: " << size << "\n";
+
+		file.write(data, size);
+		file.close();
+	}
+
     static std::vector<char> readFile(const std::string& filename) {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
         if (!file.is_open()) {
-			std::cout << filename << "\n";
             throw std::runtime_error("failed to open file!");
         }
 
         size_t fileSize = (size_t) file.tellg();
         std::vector<char> buffer(fileSize);
 
+		std::cout << "@@@@@ read file at path: " << filename << ", with size: " << fileSize << "\n";
         file.seekg(0);
         file.read(buffer.data(), fileSize);
 
