@@ -39,8 +39,8 @@
 #include <set>
 #include <unordered_map>
 
-constexpr uint32_t WIDTH = 1500;
-constexpr uint32_t HEIGHT = 1000;
+constexpr uint32_t WIDTH = 1600;
+constexpr uint32_t HEIGHT = 900;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 static float s_scale[3] = {0.7f, 0.7f, 0.7f};
