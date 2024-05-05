@@ -361,6 +361,7 @@ private:
     }
 
 	void processInput(){
+		ZoneScopedN("Process Input");
 		glfwPollEvents();
 		if(glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS)
 			std::cout << "Cache State of key X.\n";
@@ -1700,66 +1701,63 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = swapChainExtent;
-
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-        clearValues[1].depthStencil = {1.0f, 0};
-
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
 		{
-			TracyVkZone(tracyContext, commandBuffer, "BindPipeline");
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+			TracyVkZone(tracyContext, commandBuffer, "Command Buffer");
+			VkRenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = renderPass;
+			renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+			renderPassInfo.renderArea.offset = {0, 0};
+			renderPassInfo.renderArea.extent = swapChainExtent;
+
+			std::array<VkClearValue, 2> clearValues{};
+			clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+			clearValues[1].depthStencil = {1.0f, 0};
+
+			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+			renderPassInfo.pClearValues = clearValues.data();
+
+			vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+				VkViewport viewport{};
+				viewport.x = 0.0f;
+				viewport.y = 0.0f;
+				viewport.width = (float) swapChainExtent.width;
+				viewport.height = (float) swapChainExtent.height;
+				viewport.minDepth = 0.0f;
+				viewport.maxDepth = 1.0f;
+				vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+				VkRect2D scissor{};
+				scissor.offset = {0, 0};
+				scissor.extent = swapChainExtent;
+				vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+				VkBuffer Buffers[2] = {vertexBuffer, instanceBuffer};
+				VkDeviceSize offsets[2] = {0, 0};
+
+				vkCmdBindVertexBuffers(commandBuffer, 0, 2, Buffers, offsets);
+
+				vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+
+			{
+				TracyVkZone(tracyContext, commandBuffer, "Draw Scene");
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), static_cast<uint32_t>(instanceData.size()), 0, 0, 0);
+			}
+
+			{
+				TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
+				ImGui::Render();
+				ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, VK_NULL_HANDLE);
+			}
+
+			vkCmdEndRenderPass(commandBuffer);
 		}
 
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = (float) swapChainExtent.width;
-            viewport.height = (float) swapChainExtent.height;
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-            VkRect2D scissor{};
-            scissor.offset = {0, 0};
-            scissor.extent = swapChainExtent;
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-            VkBuffer Buffers[2] = {vertexBuffer, instanceBuffer};
-            VkDeviceSize offsets[2] = {0, 0};
-		{
-			ZoneScopedN("Bind buffers");
-            vkCmdBindVertexBuffers(commandBuffer, 0, 2, Buffers, offsets);
-
-            vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
-		}
-
-			// vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, tracyContext->NextQueryId());
-
-		{
-			ZoneScopedN("Draw call");
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), static_cast<uint32_t>(instanceData.size()), 0, 0, 0);
-		}
-
-		{
-			ZoneScopedN("ImGui");
-			ImGui::Render();
-			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, VK_NULL_HANDLE);
-		}
-
-        vkCmdEndRenderPass(commandBuffer);
 
 		TracyVkCollect(tracyContext, commandBuffers[currentFrame]);
 
@@ -1823,7 +1821,7 @@ private:
 	}
 
     void drawFrame() {
-		ZoneScopedN("Update&Draw&Present");
+		ZoneScopedN("Update&Render&Present");
 
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -1834,10 +1832,10 @@ private:
 		uint32_t imageIndex;
 		VkResult result{};
 		{
-			ZoneScopedN("Update");
+			ZoneScopedN("Record Commandbuffer");
 
 			{
-				ZoneScopedN("Wait for next image");
+				ZoneScopedN("Accquire Next Image");
 				result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
 				if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -1849,7 +1847,7 @@ private:
 			}
 
 			{
-				ZoneScopedN("Wait for buffer fence");
+				ZoneScopedN("Wait for Commandbuffer Fence");
 				vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 			}
 
@@ -1863,7 +1861,7 @@ private:
 
 		VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
 		{
-			ZoneScopedN("Render");
+			ZoneScopedN("Submit Commandbuffer");
 			VkSubmitInfo submitInfo{};
 			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -1885,7 +1883,7 @@ private:
 		}	
 
 		{
-			ZoneScopedN("Present");
+			ZoneScopedN("Submit present image");
 			VkPresentInfoKHR presentInfo{};
 			presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
@@ -1937,7 +1935,7 @@ private:
 
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
         for (const auto& availablePresentMode : availablePresentModes) {
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
                 return availablePresentMode;
             }
         }
