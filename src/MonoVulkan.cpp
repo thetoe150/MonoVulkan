@@ -833,8 +833,8 @@ private:
 	}
 
     void createGraphicsPipeline() {
-        auto vertShaderCode = readFile("src/shaders/final_vs.spv");
-        auto fragShaderCode = readFile("src/shaders/final_fs.spv");
+        auto vertShaderCode = readFile("src/shaders/model.vert.spv");
+        auto fragShaderCode = readFile("src/shaders/model.frag.spv");
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -1693,7 +1693,7 @@ private:
         
     }
 
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    void recordGraphicCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -1765,6 +1765,10 @@ private:
             throw std::runtime_error("failed to record command buffer!");
         }
     }
+
+	void recordComputeCommandBuffer(){
+		
+	}
 
     void createSyncObjects() {
         imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1856,7 +1860,7 @@ private:
 			vkResetFences(device, 1, &inFlightFences[currentFrame]);
 		
 			vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
-			recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+			recordGraphicCommandBuffer(commandBuffers[currentFrame], imageIndex);
 		}
 
 		VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
