@@ -2,6 +2,7 @@
 2. toying with imgui functionalities
 3. Other feature:
     - Push constants
+    - Specialization constants
     - Instanced rendering - done
     - Dynamic uniforms
     - Separate images and sampler descriptors

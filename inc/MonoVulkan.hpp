@@ -50,6 +50,28 @@ static float s_viewPos[3] = {15.f, 0.f, 0.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 
+const std::string MODEL_PATH = "res/models/wooden_watch_tower2.obj";
+// const std::string MODEL_PATH = "res/models/Snowflake.obj";
+const std::string TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
+
+constexpr int SNOWFLAKE_COUNT = 100;
+constexpr int VORTEX_COUNT = 10;
+
+const std::vector<const char*> validationLayers = {
+    "VK_LAYER_KHRONOS_validation"
+};
+
+const std::vector<const char*> deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+	VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME
+};
+
+#ifdef NDEBUG
+const bool enableValidationLayers = false;
+#else
+const bool enableValidationLayers = true;
+#endif
+
 template <std::size_t Last = 0, typename TF, typename TArray, typename... TRest>
 constexpr auto with_acc_sizes(TF&& f, const TArray& array, const TRest&... rest)
 {
