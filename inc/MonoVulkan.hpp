@@ -57,6 +57,23 @@ const std::string TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 constexpr int SNOWFLAKE_COUNT = 100;
 constexpr int VORTEX_COUNT = 10;
 
+struct Vortex {
+	alignas(16) glm::vec3 origin;
+	alignas(4) float velocity;
+	alignas(4) float radius;
+	alignas(4) float length;
+};
+
+struct Snowflake {
+	glm::vec3 position;
+	float weight;
+};
+
+struct PushConstantData{
+	float snowflakeCount = SNOWFLAKE_COUNT;
+	float vortexCount = VORTEX_COUNT;
+};
+
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
 };

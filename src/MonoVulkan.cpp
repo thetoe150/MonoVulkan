@@ -83,14 +83,6 @@ struct Vertex {
     }
 };
 
-struct Vortex {
-	alignas(16) glm::vec3 origin;
-	alignas(4) float velocity;
-	alignas(4) float radius;
-	alignas(4) float length;
-};
-
-
 struct VertexInstance {
 	alignas(16) glm::vec3 pos;
 
@@ -167,9 +159,9 @@ private:
     VkDevice device;
 	VmaAllocator m_allocator;
 
-    VkQueue graphicsQueue;
-    VkQueue computeQueue;
-    VkQueue presentQueue;
+    VkQueue m_graphicQueue;
+    VkQueue m_computeQueue;
+    VkQueue m_presentQueue;
 
     VkSwapchainKHR swapChain;
     std::vector<VkImage> swapChainImages;
@@ -184,7 +176,7 @@ private:
     VkPipelineLayout m_graphicPipelineLayout;
     VkPipelineLayout m_computePipelineLayout;
 
-	VkPipelineCache pipelineCache;
+	VkPipelineCache m_pipelineCache;
 	std::vector<char> pipelineCacheBlob;
 
 	// Graphic handles
@@ -234,6 +226,8 @@ private:
 	VkBuffer m_storageBuffer;
 	VmaAllocation m_storageBufferAlloc;
 
+	PushConstantData m_pushConstantData;
+
 	VkBuffer m_vortexUniformBuffer;
 	VmaAllocation m_vortexUniformBufferAlloc;
 	void* m_vortexUniformBufferMapped;
@@ -243,7 +237,7 @@ private:
     VkDescriptorSet m_computeDescriptorSets;
 
     std::vector<VkCommandBuffer> m_graphicCommandBuffers;
-    std::vector<VkCommandBuffer> m_computeCommandBuffers;
+    VkCommandBuffer m_computeCommandBuffer;
     VkCommandBuffer tracyCommandBuffer;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;
@@ -283,7 +277,7 @@ private:
 
 	void initTracy(){
 		// tracyContext = TracyVkContextCalibrated(instance, physicalDevice, device, graphicsQueue, tracyCommandBuffer, vkGetInstanceProcAddr, vkGetDeviceProcAddr);
-		tracyContext = TracyVkContextCalibrated(instance, physicalDevice, device, graphicsQueue, tracyCommandBuffer, vkGetInstanceProcAddr, vkGetDeviceProcAddr);
+		tracyContext = TracyVkContextCalibrated(instance, physicalDevice, device, m_graphicQueue, tracyCommandBuffer, vkGetInstanceProcAddr, vkGetDeviceProcAddr);
 		
 		// VkQueryPoolCreateInfo poolInfo;
 		// poolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO; 
@@ -326,7 +320,7 @@ private:
 		info.PhysicalDevice = physicalDevice;
 		info.Device = device;
 		info.QueueFamily = findQueueFamilies(physicalDevice).graphicFamily.value();
-		info.Queue = graphicsQueue;
+		info.Queue = m_graphicQueue;
 		info.DescriptorPool = imguiDescriptorPool;
 		info.RenderPass = renderPass;
 		info.MinImageCount = swapChainImages.size();
@@ -349,6 +343,7 @@ private:
         createDescriptorSetLayouts();
 		createPipelineCache();
         createGraphicsPipeline();
+		createComputePipeline();
         createCommandPools();
         createColorResources();
         createDepthResources();
@@ -361,7 +356,8 @@ private:
         createVertexBuffers();
         createIndexBuffer();
 		createInstanceBuffer();
-        createUniformBuffers();
+        createGraphicUniformBuffers();
+		createComputeUniformBuffers();
 		createStorageBuffer();
         createDescriptorPool();
         createDescriptorSets();
@@ -392,10 +388,10 @@ private:
 
 	void savePipelineCache() {
 		size_t dataSize{};
-		vkGetPipelineCacheData(device, pipelineCache, &dataSize, nullptr);
+		vkGetPipelineCacheData(device, m_pipelineCache, &dataSize, nullptr);
 		if(dataSize){
 			char* data = new char[dataSize]();
-			vkGetPipelineCacheData(device, pipelineCache, &dataSize, data);
+			vkGetPipelineCacheData(device, m_pipelineCache, &dataSize, data);
 			writeFile("res/cache/pipeline_cache.blob", data, dataSize);
 		}
 	}
@@ -421,7 +417,8 @@ private:
 
 		savePipelineCache();
         vkDestroyPipeline(device, m_graphicPipeline, nullptr);
-        vkDestroyPipelineCache(device, pipelineCache, nullptr);
+        vkDestroyPipeline(device, m_computePipeline, nullptr);
+        vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
 
@@ -611,7 +608,7 @@ private:
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<uint32_t> uniqueQueueFamilies = {indices.graphicFamily.value(), indices.presentFamily.value()};
+        std::set<uint32_t> uniqueQueueFamilies = {indices.graphicFamily.value(), indices.computeFamily.value(), indices.presentFamily.value()};
 
         float queuePriority = 1.0f;
         for (uint32_t queueFamily : uniqueQueueFamilies) {
@@ -655,9 +652,13 @@ private:
             throw std::runtime_error("failed to create logical device!");
         }
 
-        vkGetDeviceQueue(device, indices.graphicFamily.value(), 0, &graphicsQueue);
-        vkGetDeviceQueue(device, indices.computeFamily.value(), 0, &computeQueue);
-        vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
+        vkGetDeviceQueue(device, indices.graphicFamily.value(), 0, &m_graphicQueue);
+        vkGetDeviceQueue(device, indices.computeFamily.value(), 0, &m_computeQueue);
+        vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &m_presentQueue);
+
+		std::cout << "\nQueue graphic family Index: " << indices.graphicFamily.value()
+				<< "\nQueue compute family Index: " << indices.computeFamily.value()
+				<< "\nQueue present family Index: " << indices.presentFamily.value() << std::endl;
     }
 
 	void createAllocator(){
@@ -855,8 +856,8 @@ private:
 			uboBinding.binding = 1;
 			uboBinding.descriptorCount = 1;
 			uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			storageBinding.pImmutableSamplers = nullptr;
-			storageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+			uboBinding.pImmutableSamplers = nullptr;
+			uboBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
 			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {storageBinding, uboBinding};
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
@@ -882,7 +883,7 @@ private:
 		pipelineCacheInfo.initialDataSize = pipelineCacheBlob.size() * sizeof(char);
 
 
-		vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr, &pipelineCache);
+		vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr, &m_pipelineCache);
 	}
 
     void createGraphicsPipeline() {
@@ -999,7 +1000,7 @@ private:
         pipelineLayoutInfo.pSetLayouts = &m_graphicDescriptorSetLayout;
 
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create pipeline layout!");
+            throw std::runtime_error("failed to create graphic pipeline layout!");
         }
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -1019,13 +1020,48 @@ private:
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipeline) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipeline) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
+
+	void createComputePipeline() {
+		VkPushConstantRange pushConstant{};
+		pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		pushConstant.size = sizeof(PushConstantData);
+		pushConstant.offset = 0;
+
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.setLayoutCount = 1;
+		pipelineLayoutInfo.pSetLayouts = &m_computeDescriptorSetLayout;
+		pipelineLayoutInfo.pushConstantRangeCount = 1;
+		pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
+
+		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_computePipelineLayout) != VK_SUCCESS)
+            throw std::runtime_error("failed to create compute pipeline layout!");
+
+        auto snowflakeCompShaderCode = readFile("src/shaders/snowflake.comp.spv");
+		VkShaderModule computeShaderModule = createShaderModule(snowflakeCompShaderCode);
+
+		VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
+        computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        computeShaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        computeShaderStageInfo.module = computeShaderModule;
+        computeShaderStageInfo.pName = "main";
+
+		VkComputePipelineCreateInfo pipelineInfo{};
+		pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		pipelineInfo.flags = 0;
+		pipelineInfo.stage = computeShaderStageInfo;
+		pipelineInfo.layout = m_computePipelineLayout;
+
+		if (vkCreateComputePipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_computePipeline) != VK_SUCCESS)
+            throw std::runtime_error("failed to create compute pipeline!");
+	}
 
     void createFramebuffers() {
         swapChainFramebuffers.resize(swapChainImageViews.size());
@@ -1523,34 +1559,29 @@ private:
         vmaFreeMemory(m_allocator, stagingBufferAloc);
     }
 
-    void createUniformBuffers() {
-		// Graphic UBO
-		{
-			VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+    void createGraphicUniformBuffers() {
+		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-			uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-			uniformBuffersAlloc.resize(MAX_FRAMES_IN_FLIGHT);
-			uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+		uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+		uniformBuffersAlloc.resize(MAX_FRAMES_IN_FLIGHT);
+		uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-					, uniformBuffers[i], uniformBuffersAlloc[i]);
-
-				vmaMapMemory(m_allocator, uniformBuffersAlloc[i], &uniformBuffersMapped[i]);
-			}
-		}
-
-		// Compute UBO
-		{
-			// FIXME: set this pointer right
-			Vortex arr[VORTEX_COUNT] = {};
-			m_vortexUniformBufferMapped = static_cast<void*>(arr);
-			VkDeviceSize bufferSize = sizeof(Vortex) * VORTEX_COUNT;
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-					, m_vortexUniformBuffer, m_vortexUniformBufferAlloc);
-			vmaMapMemory(m_allocator, m_vortexUniformBufferAlloc, &m_vortexUniformBufferMapped);
+				, uniformBuffers[i], uniformBuffersAlloc[i]);
+
+			vmaMapMemory(m_allocator, uniformBuffersAlloc[i], &uniformBuffersMapped[i]);
 		}
     }
+
+    void createComputeUniformBuffers() {
+		m_vortexUniformBufferMapped = static_cast<void*>(new Vortex[VORTEX_COUNT]);
+
+		VkDeviceSize bufferSize = sizeof(Vortex) * VORTEX_COUNT;
+		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+				, m_vortexUniformBuffer, m_vortexUniformBufferAlloc);
+		vmaMapMemory(m_allocator, m_vortexUniformBufferAlloc, &m_vortexUniformBufferMapped);
+	}
 
 	void createInstanceBuffer() {
 		VkDeviceSize bufferSize = sizeof(instanceData[0]) * instanceData.size();
@@ -1573,14 +1604,13 @@ private:
 	}
 
 	void createStorageBuffer() {
-		// FIXME: this is not right, choose the right size for stograge buffer
-		VkDeviceSize bufferSize = sizeof(glm::vec4) * SNOWFLAKE_COUNT;
+		VkDeviceSize bufferSize = sizeof(Snowflake) * SNOWFLAKE_COUNT;
 		VkBuffer stagingBuffer{};
 		VmaAllocation stagingBufferAlloc{};
 
 		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, stagingBuffer, stagingBufferAlloc);
 
-		void* data;
+		void* data = static_cast<void*>(new Snowflake[SNOWFLAKE_COUNT]);
 		vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
 		// FIXME: this is not right, should initial real value for snow position
 		memcpy(data, instanceData.data(), bufferSize);
@@ -1680,14 +1710,13 @@ private:
 			VkDescriptorBufferInfo storageBufferInfo{};
 			storageBufferInfo.buffer = m_storageBuffer;
 			storageBufferInfo.offset = 0;
-			// FIXME: dont hard code the number of snow particles
+			// FIXME: range is sus
 			storageBufferInfo.range = VK_WHOLE_SIZE;
 
 			VkDescriptorBufferInfo uboBufferInfo{};
-			// uboBufferInfo.buffer = m_vortexUniformBuffer;
 			uboBufferInfo.buffer = m_vortexUniformBuffer;
 			uboBufferInfo.offset = 0;
-			// FIXME: dont hard code the number of vortex
+			// FIXME: range is sus
 			uboBufferInfo.range = VK_WHOLE_SIZE;
 
 			std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
@@ -1790,8 +1819,8 @@ private:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(graphicsQueue);
+        vkQueueSubmit(m_graphicQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(m_graphicQueue);
 
         vkFreeCommandBuffers(device, m_graphicCommandPool, 1, &commandBuffer);
     }
@@ -1825,23 +1854,33 @@ private:
     void createCommandBuffers() {
         m_graphicCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = m_graphicCommandPool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = (uint32_t) m_graphicCommandBuffers.size();
+        VkCommandBufferAllocateInfo graphicAllocInfo{};
+        graphicAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        graphicAllocInfo.commandPool = m_graphicCommandPool;
+        graphicAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        graphicAllocInfo.commandBufferCount = (uint32_t) m_graphicCommandBuffers.size();
 
-        if (vkAllocateCommandBuffers(device, &allocInfo, m_graphicCommandBuffers.data()) != VK_SUCCESS) {
+        if (vkAllocateCommandBuffers(device, &graphicAllocInfo, m_graphicCommandBuffers.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate command buffers!");
         }
 
-        VkCommandBufferAllocateInfo allocInfoTracy{};
-        allocInfoTracy.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfoTracy.commandPool = m_graphicCommandPool;
-        allocInfoTracy.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfoTracy.commandBufferCount = 1;
+		VkCommandBufferAllocateInfo	computeAllocInfo{};
+        computeAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        computeAllocInfo.commandPool = m_computeCommandPool;
+        computeAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        computeAllocInfo.commandBufferCount = 1;
 
-        if (vkAllocateCommandBuffers(device, &allocInfoTracy, &tracyCommandBuffer) != VK_SUCCESS) {
+        if (vkAllocateCommandBuffers(device, &computeAllocInfo, &m_computeCommandBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate command buffers!");
+        }
+
+        VkCommandBufferAllocateInfo tracyAllocInfo{};
+        tracyAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        tracyAllocInfo.commandPool = m_graphicCommandPool;
+        tracyAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        tracyAllocInfo.commandBufferCount = 1;
+
+        if (vkAllocateCommandBuffers(device, &tracyAllocInfo, &tracyCommandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate command buffers!");
         }
         
@@ -1911,8 +1950,6 @@ private:
 
 			vkCmdEndRenderPass(commandBuffer);
 		}
-
-
 		TracyVkCollect(tracyContext, m_graphicCommandBuffers[currentFrame]);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -1920,17 +1957,19 @@ private:
         }
     }
 
-	void recordComputeCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex){
+	void recordComputeCommandBuffer(VkCommandBuffer commandBuffer){
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
 		if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS){
             throw std::runtime_error("failed to begin recording command buffer!");
 		}
+
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets, 0, nullptr);
-		// FIXME: choose real number of workgroups
-		vkCmdDispatch(commandBuffer, 1, 1, 1);
+		vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstantData), (void*)&m_pushConstantData);
+		// FIXME: choose right number of workgroups
+		vkCmdDispatch(commandBuffer, 256, 1, 1);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record compute command buffer!");
@@ -1958,7 +1997,7 @@ private:
         }
     }
 
-    void updateUniformBuffer(uint32_t currentImage) {
+    void updateGraphicUniformBuffer(uint32_t currentImage) {
 		ZoneScopedN("UpdateUniformBuffer");
         static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -2003,7 +2042,26 @@ private:
 		uint32_t imageIndex;
 		VkResult result{};
 		{
-			ZoneScopedN("Record Commandbuffer");
+			{
+				ZoneScopedN("Execute Compute Command Buffer");
+				vkResetCommandBuffer(m_computeCommandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
+				recordComputeCommandBuffer(m_computeCommandBuffer);
+				VkSubmitInfo computeSubmitInfo{};
+				computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+				computeSubmitInfo.waitSemaphoreCount = 0;
+				computeSubmitInfo.pWaitSemaphores = nullptr;
+				computeSubmitInfo.pWaitDstStageMask = 0;
+
+				computeSubmitInfo.commandBufferCount = 1;
+				computeSubmitInfo.pCommandBuffers = &m_computeCommandBuffer;
+
+				computeSubmitInfo.signalSemaphoreCount = 0;
+				computeSubmitInfo.pSignalSemaphores = nullptr;
+
+				vkQueueSubmit(m_computeQueue, 1, &computeSubmitInfo, 0);
+				vkQueueWaitIdle(m_computeQueue);
+			}
 
 			{
 				ZoneScopedN("Accquire Next Image");
@@ -2022,7 +2080,7 @@ private:
 				vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 			}
 
-			updateUniformBuffer(currentFrame);
+			updateGraphicUniformBuffer(currentFrame);
 		
 			vkResetFences(device, 1, &inFlightFences[currentFrame]);
 		
@@ -2048,8 +2106,9 @@ private:
 			submitInfo.signalSemaphoreCount = 1;
 			submitInfo.pSignalSemaphores = signalSemaphores;
 
-			if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-				throw std::runtime_error("failed to submit draw command buffer!");
+			if (VkResult res = vkQueueSubmit(m_graphicQueue, 1, &submitInfo, inFlightFences[currentFrame])) {
+				std::string msg = "failed to submit graphic command buffer with CODE: " + vk::to_string((vk::Result)res);
+				throw std::runtime_error(msg);
 			}
 		}	
 
@@ -2067,7 +2126,7 @@ private:
 
 			presentInfo.pImageIndices = &imageIndex;
 
-			result = vkQueuePresentKHR(presentQueue, &presentInfo);
+			result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
 
 			if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
 				framebufferResized = false;

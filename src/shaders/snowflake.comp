@@ -1,0 +1,43 @@
+#version 450
+
+struct Snowflake{
+	vec3 pos;
+	float weight;
+};
+
+struct Vortex{
+	vec3 origin;
+	float velocity;
+	float radius;
+	float length;
+};
+
+layout (constant_id = 0) const int vortexCount = 10;
+layout (local_size_x = 256) in;
+
+layout (push_constant) uniform DataPushConstant{
+	int snowflakeCount;
+} p_const;
+
+layout (std140, binding = 0) buffer SnowflakeStorageBuffer{
+	Snowflake s_snowflake[ ];
+};
+
+layout (std140, binding = 1) uniform VortexUniformBuffer{
+	Vortex u_vortex[vortexCount];
+};
+
+void main(){
+    uint index = gl_GlobalInvocationID.x;
+	if (index > p_const.snowflakeCount)
+		return;
+
+	float distance = 0;
+	int vC = vortexCount;
+	for (int i = 0; i < vC; i++)
+	{
+		distance += u_vortex[i].velocity;
+	}
+	distance /= vC;
+	s_snowflake[index].pos.y += distance;
+}
