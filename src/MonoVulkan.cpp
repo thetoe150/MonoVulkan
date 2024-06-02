@@ -420,6 +420,7 @@ private:
         vkDestroyPipeline(device, m_computePipeline, nullptr);
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayout, nullptr);
+        vkDestroyPipelineLayout(device, m_computePipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -1061,6 +1062,8 @@ private:
 
 		if (vkCreateComputePipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_computePipeline) != VK_SUCCESS)
             throw std::runtime_error("failed to create compute pipeline!");
+
+        vkDestroyShaderModule(device, computeShaderModule, nullptr);
 	}
 
     void createFramebuffers() {
@@ -1577,16 +1580,16 @@ private:
     void createComputeUniformBuffers() {
 		m_vortexUniformBufferMapped = static_cast<void*>(new Vortex[VORTEX_COUNT]);
 
-		for(unsigned int i = 0; i < VORTEX_COUNT; i++){
-			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
-			vortex.velocity = generateRandomFloat(0, 5.f);
-			std::cout << " velocity: " << vortex.velocity;
-		}
-
 		VkDeviceSize bufferSize = sizeof(Vortex) * VORTEX_COUNT;
 		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
 				, m_vortexUniformBuffer, m_vortexUniformBufferAlloc);
 		vmaMapMemory(m_allocator, m_vortexUniformBufferAlloc, &m_vortexUniformBufferMapped);
+
+		for(unsigned int i = 0; i < VORTEX_COUNT; i++){
+			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
+			vortex.velocity = generateRandomFloat(0, 0.01f);
+			std::cout << " velocity: " << vortex.velocity;
+		}
 	}
 
 	void createInstanceBuffer() {
@@ -1979,6 +1982,7 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
 		}
 
+		updateComputeUniformBuffer();
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets, 0, nullptr);
 		vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstantData), (void*)&m_pushConstantData);
@@ -2031,6 +2035,10 @@ private:
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
+	
+	void updateComputeUniformBuffer() {
+		m_pushConstantData.snowflakeCount = 100;
+	}
 
 	static void processImGui(){
         ImGui::SeparatorText("Model");

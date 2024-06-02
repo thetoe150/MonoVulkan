@@ -72,7 +72,6 @@ struct Snowflake {
 
 struct PushConstantData{
 	float snowflakeCount = SNOWFLAKE_COUNT;
-	float vortexCount = VORTEX_COUNT;
 };
 
 const std::vector<const char*> validationLayers = {

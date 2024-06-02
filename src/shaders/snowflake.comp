@@ -23,7 +23,7 @@ layout (std140, binding = 0) buffer SnowflakeStorageBuffer{
 	Snowflake s_snowflake[ ];
 };
 
-layout (std140, binding = 1) uniform VortexUniformBuffer{
+layout (binding = 1) uniform VortexUniformBuffer{
 	Vortex u_vortex[vortexCount];
 };
 
@@ -39,5 +39,5 @@ void main(){
 		distance += u_vortex[i].velocity;
 	}
 	distance /= vC;
-	s_snowflake[index].pos.y += distance;
+	s_snowflake[index].pos.y -= distance;
 }
