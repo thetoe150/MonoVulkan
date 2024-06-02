@@ -205,16 +205,16 @@ private:
     VkSampler textureSampler;
 
 	// Graphic buffers
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-    std::vector<VertexInstance> instanceData;
-    VkBuffer vertexBuffer;
-	VmaAllocation vertexBufferAlloc;
+    std::vector<Vertex> m_towerVertexRaw;
+    std::vector<uint32_t> m_towerIndexRaw;
+    std::vector<VertexInstance> m_towerInstanceRaw;
+    VkBuffer m_towerVertexBuffer;
+	VmaAllocation m_towerVertexBufferAlloc;
     // VkDeviceMemory vertexBufferMemory;
-    VkBuffer indexBuffer;
+    VkBuffer m_towerIndexBuffer;
 	VmaAllocation indexBufferAlloc;
     // VkDeviceMemory indexBufferMemory;
-	VkBuffer instanceBuffer;
+	VkBuffer m_towerInstanceBuffer;
 	VmaAllocation instanceBufferAlloc;
 
     std::vector<VkBuffer> uniformBuffers;
@@ -342,7 +342,7 @@ private:
         createRenderPass();
         createDescriptorSetLayouts();
 		createPipelineCache();
-        createGraphicsPipeline();
+        createGraphicPipeline();
 		createComputePipeline();
         createCommandPools();
         createColorResources();
@@ -447,13 +447,13 @@ private:
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayout, nullptr);
 
-        vkDestroyBuffer(device, indexBuffer, nullptr);
+        vkDestroyBuffer(device, m_towerIndexBuffer, nullptr);
         vmaFreeMemory(m_allocator, indexBufferAlloc);
 
-        vkDestroyBuffer(device, vertexBuffer, nullptr);
-        vmaFreeMemory(m_allocator, vertexBufferAlloc);
+        vkDestroyBuffer(device, m_towerVertexBuffer, nullptr);
+        vmaFreeMemory(m_allocator, m_towerVertexBufferAlloc);
 
-        vkDestroyBuffer(device, instanceBuffer, nullptr);
+        vkDestroyBuffer(device, m_towerInstanceBuffer, nullptr);
         vmaFreeMemory(m_allocator, instanceBufferAlloc);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -886,7 +886,7 @@ private:
 		vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr, &m_pipelineCache);
 	}
 
-    void createGraphicsPipeline() {
+    void createGraphicPipeline() {
         auto vertShaderCode = readFile("src/shaders/model.vert.spv");
         auto fragShaderCode = readFile("src/shaders/model.frag.spv");
 
@@ -921,8 +921,8 @@ private:
 		std::array<VkVertexInputBindingDescription, 2> totalBindingDescription = {bindingDescription, instanceBindingDescription};
 
         vertexInputInfo.vertexBindingDescriptionCount = 2;
-        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(totalAttributeDescriptions.size());
         vertexInputInfo.pVertexBindingDescriptions = totalBindingDescription.data();
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(totalAttributeDescriptions.size());
         vertexInputInfo.pVertexAttributeDescriptions = totalAttributeDescriptions.data();
 
 		VkPipelineVertexInputDivisorStateCreateInfoEXT divisor{};
@@ -1489,11 +1489,11 @@ private:
                 vertex.color = {1.0f, 1.0f, 1.0f};
 
                 if (uniqueVertices.count(vertex) == 0) {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
-                    vertices.push_back(vertex);
+                    uniqueVertices[vertex] = static_cast<uint32_t>(m_towerVertexRaw.size());
+                    m_towerVertexRaw.push_back(vertex);
                 }
 
-                indices.push_back(uniqueVertices[vertex]);
+                m_towerIndexRaw.push_back(uniqueVertices[vertex]);
             }
         }
     }
@@ -1514,13 +1514,13 @@ private:
 				space = line.find(" ", offset);
 				float z = stof(line.substr(offset, space - offset));
 				vInstance.pos = {x, y, z};
-				instanceData.push_back(vInstance);
+				m_towerInstanceRaw.push_back(vInstance);
 			}
 		}
 	}
 
     void createVertexBuffers() {
-        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+        VkDeviceSize bufferSize = sizeof(m_towerVertexRaw[0]) * m_towerVertexRaw.size();
 
         VkBuffer stagingBuffer;
 		VmaAllocation stagingBufferAlloc{};
@@ -1528,19 +1528,19 @@ private:
 
         void* data;
         vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-            memcpy(data, vertices.data(), (size_t) bufferSize);
+            memcpy(data, m_towerVertexRaw.data(), (size_t) bufferSize);
         vmaUnmapMemory(m_allocator, stagingBufferAlloc);
 
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerVertexBuffer, m_towerVertexBufferAlloc);
 
-        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+        copyBuffer(stagingBuffer, m_towerVertexBuffer, bufferSize);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vmaFreeMemory(m_allocator, stagingBufferAlloc);
     }
 
     void createIndexBuffer() {
-        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+        VkDeviceSize bufferSize = sizeof(m_towerIndexRaw[0]) * m_towerIndexRaw.size();
 
         VkBuffer stagingBuffer;
 		VmaAllocation stagingBufferAloc{};
@@ -1548,12 +1548,12 @@ private:
 
         void* data;
         vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-            memcpy(data, indices.data(), (size_t) bufferSize);
+            memcpy(data, m_towerIndexRaw.data(), (size_t) bufferSize);
         vmaUnmapMemory(m_allocator, stagingBufferAloc);
 
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAlloc);
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerIndexBuffer, indexBufferAlloc);
 
-        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+        copyBuffer(stagingBuffer, m_towerIndexBuffer, bufferSize);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vmaFreeMemory(m_allocator, stagingBufferAloc);
@@ -1577,6 +1577,12 @@ private:
     void createComputeUniformBuffers() {
 		m_vortexUniformBufferMapped = static_cast<void*>(new Vortex[VORTEX_COUNT]);
 
+		for(unsigned int i = 0; i < VORTEX_COUNT; i++){
+			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
+			vortex.velocity = generateRandomFloat(0, 5.f);
+			std::cout << " velocity: " << vortex.velocity;
+		}
+
 		VkDeviceSize bufferSize = sizeof(Vortex) * VORTEX_COUNT;
 		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
 				, m_vortexUniformBuffer, m_vortexUniformBufferAlloc);
@@ -1584,7 +1590,7 @@ private:
 	}
 
 	void createInstanceBuffer() {
-		VkDeviceSize bufferSize = sizeof(instanceData[0]) * instanceData.size();
+		VkDeviceSize bufferSize = sizeof(m_towerInstanceRaw[0]) * m_towerInstanceRaw.size();
 		VkBuffer stagingBuffer{};
 		VmaAllocation stagingBufferAlloc{};
 
@@ -1592,28 +1598,34 @@ private:
 
 		void* data;
 		vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-		memcpy(data, instanceData.data(), bufferSize);
+		memcpy(data, m_towerInstanceRaw.data(), bufferSize);
 		vmaUnmapMemory(m_allocator, stagingBufferAlloc);
 
-		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instanceBuffer, instanceBufferAlloc);
+		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerInstanceBuffer, instanceBufferAlloc);
 
-		copyBuffer(stagingBuffer, instanceBuffer, bufferSize);
+		copyBuffer(stagingBuffer, m_towerInstanceBuffer, bufferSize);
 
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vmaFreeMemory(m_allocator, stagingBufferAlloc);
 	}
 
 	void createStorageBuffer() {
+		void* data = static_cast<void*>(new Snowflake[SNOWFLAKE_COUNT]);
 		VkDeviceSize bufferSize = sizeof(Snowflake) * SNOWFLAKE_COUNT;
 		VkBuffer stagingBuffer{};
 		VmaAllocation stagingBufferAlloc{};
 
 		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, stagingBuffer, stagingBufferAlloc);
 
-		void* data = static_cast<void*>(new Snowflake[SNOWFLAKE_COUNT]);
 		vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-		// FIXME: this is not right, should initial real value for snow position
-		memcpy(data, instanceData.data(), bufferSize);
+		// only work when set data when mapped like this
+		for(unsigned int i = 0; i < SNOWFLAKE_COUNT; i++) {
+			Snowflake& snow = ((Snowflake*)data)[i];
+			snow.position.x = generateRandomFloat(-5.f, 5.f);
+			snow.position.y = generateRandomFloat(-5.f, 5.f);
+			snow.position.z = generateRandomFloat(-15.f, 15.f);
+			snow.weight = generateRandomFloat(0.5f, 1.5f);
+		}
 		vmaUnmapMemory(m_allocator, stagingBufferAlloc);
 
 		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
@@ -1894,8 +1906,6 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-		{
-			TracyVkZone(tracyContext, commandBuffer, "Command Buffer");
 			VkRenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			renderPassInfo.renderPass = renderPass;
@@ -1928,20 +1938,24 @@ private:
 				scissor.extent = swapChainExtent;
 				vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-				VkBuffer Buffers[2] = {vertexBuffer, instanceBuffer};
+				// wood tower
+				VkBuffer Buffers[2] = {m_towerVertexBuffer, m_towerInstanceBuffer};
 				VkDeviceSize offsets[2] = {0, 0};
-
 				vkCmdBindVertexBuffers(commandBuffer, 0, 2, Buffers, offsets);
-
-				vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
+				vkCmdBindIndexBuffer(commandBuffer, m_towerIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 0, nullptr);
-
-			{
-				TracyVkZone(tracyContext, commandBuffer, "Draw Scene");
-				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), static_cast<uint32_t>(instanceData.size()), 0, 0, 0);
-			}
-
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_towerIndexRaw.size()), static_cast<uint32_t>(m_towerInstanceRaw.size()), 0, 0, 0);
+		
+				// snowflake
+				// VkBuffer snowBuffers[2] = {m_snowVertexBuffer, m_storageBuffer};
+				VkBuffer snowBuffers[2] = {m_towerVertexBuffer, m_storageBuffer};
+				VkDeviceSize snowOffsets[2] = {0,0};
+				vkCmdBindVertexBuffers(commandBuffer, 0, 2, snowBuffers, snowOffsets);
+				// vkCmdBindIndexBuffer(commandBuffer, m_snowIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindIndexBuffer(commandBuffer, m_towerIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 0, nullptr);
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_towerIndexRaw.size()), SNOWFLAKE_COUNT, 0, 0, 0);
+				
 			{
 				TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
 				ImGui::Render();
@@ -1949,7 +1963,7 @@ private:
 			}
 
 			vkCmdEndRenderPass(commandBuffer);
-		}
+		
 		TracyVkCollect(tracyContext, m_graphicCommandBuffers[currentFrame]);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -2480,6 +2494,8 @@ private:
 };
 
 int main() {
+	srand(static_cast<unsigned>(time(0)));
+	// testAlignment();
     MonoVulkan app;
 
     try {

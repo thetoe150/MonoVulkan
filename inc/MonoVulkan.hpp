@@ -32,6 +32,7 @@
 #include <vector>
 #include <cstring>
 #include <cstdlib>
+#include <ctime>
 #include <cstdint>
 #include <limits>
 #include <array>
@@ -111,4 +112,51 @@ constexpr auto concat(const std::array<T, Sizes>&... arrays)
     }, arrays...);
 
     return result;
+}
+
+float generateRandomFloat(float low, float high){
+	return low + (static_cast<float>(rand()) / (RAND_MAX / (high - low)));
+}
+ 
+void testAlignment()
+{
+	struct Struct1{
+		glm::vec3 pos;
+	};
+
+	struct Struct2{
+		alignas(16) glm::vec3 pos;
+	};
+
+	struct Struct3{
+		alignas(16) glm::vec3 pos;
+		float weight;
+	};
+
+	struct Struct4{
+		glm::vec3 pos;
+		float weight;
+	};
+
+	struct Struct5{
+		float weight;
+		alignas(16) glm::vec3 pos;
+	};
+
+	struct Struct6{
+		alignas(16) glm::vec3 pos;
+		alignas(16) glm::vec3 weight;
+	};
+
+		std::cout << "\nsize of Struct1 is: " << sizeof(Struct1)
+				<< "\nsize of Struct2 is:" << sizeof(Struct2)
+				<< "\nsize of Struct3 is:" << sizeof(Struct3)
+				<< "\noffset of weight is:" << offsetof(Struct3, weight)
+				<< "\nsize of Struct4 is:" << sizeof(Struct4)
+				<< "\noffset of weight is:" << offsetof(Struct4, weight)
+				<< "\nnsize of Struct5 is:" << sizeof(Struct5)
+				<< "\noffset of weight is:" << offsetof(Struct5, weight)
+				<< "\nsize of Struct6 is:" << sizeof(Struct6)
+				<< "\noffset of weight is:" << offsetof(Struct6, weight) << std::endl;
+
 }
