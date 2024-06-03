@@ -1,6 +1,4 @@
-1. rotate direction
-2. toying with imgui functionalities
-3. Other feature:
+1. Other feature:
     - Push constants
     - Specialization constants
     - Instanced rendering - done
@@ -15,4 +13,4 @@
         - Atomic operations
         - Subgroups
     - Multiple target rendering?
-4. Vulkan extensions, layers
+2. Vulkan extensions, layers

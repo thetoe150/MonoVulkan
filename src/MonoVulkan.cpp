@@ -122,6 +122,7 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 model;
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
+    alignas(16) glm::mat4 dummy;
 };
 
 class MonoVulkan {
@@ -202,9 +203,10 @@ private:
 	VmaAllocation textureImageAlloc;
     // VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
-    VkSampler textureSampler;
+    VkSampler m_textureSampler;
 
 	// Graphic buffers
+	// watch tower
     std::vector<Vertex> m_towerVertexRaw;
     std::vector<uint32_t> m_towerIndexRaw;
     std::vector<VertexInstance> m_towerInstanceRaw;
@@ -212,21 +214,30 @@ private:
 	VmaAllocation m_towerVertexBufferAlloc;
     // VkDeviceMemory vertexBufferMemory;
     VkBuffer m_towerIndexBuffer;
-	VmaAllocation indexBufferAlloc;
+	VmaAllocation m_towerIndexBufferAlloc;
     // VkDeviceMemory indexBufferMemory;
 	VkBuffer m_towerInstanceBuffer;
 	VmaAllocation instanceBufferAlloc;
 
-    std::vector<VkBuffer> uniformBuffers;
+	// snowflake
+    std::vector<Vertex> m_snowVertexRaw;
+    std::vector<uint32_t> m_snowIndexRaw;
+    VkBuffer m_snowVertexBuffer;
+	VmaAllocation m_snowVertexBufferAlloc;
+    VkBuffer m_snowIndexBuffer;
+	VmaAllocation m_snowIndexBufferAlloc;
+
+    std::vector<VkBuffer> m_graphicUniformBuffers;
     std::vector<VmaAllocation> uniformBuffersAlloc;
     // std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> uniformBuffersMapped;
+    std::vector<void*> m_graphicUniformBuffersMapped;
 
 	// Compute buffers
 	VkBuffer m_storageBuffer;
 	VmaAllocation m_storageBufferAlloc;
 
-	PushConstantData m_pushConstantData;
+	GraphicPushConstant m_graphicPushConstant;
+	ComputePushConstant m_computePushConstant;
 
 	VkBuffer m_vortexUniformBuffer;
 	VmaAllocation m_vortexUniformBufferAlloc;
@@ -351,13 +362,13 @@ private:
         createColorResources();
         createDepthResources();
         createFramebuffers();
-        createTextureImage();
+        createTextureImages();
         createTextureImageView();
         createTextureSampler();
-        loadModel();
+        loadModels();
 		loadInstanceData();
         createVertexBuffers();
-        createIndexBuffer();
+        createIndexBuffers();
 		createInstanceBuffer();
         createGraphicUniformBuffers();
 		createComputeUniformBuffers();
@@ -427,7 +438,7 @@ private:
         vkDestroyRenderPass(device, renderPass, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+            vkDestroyBuffer(device, m_graphicUniformBuffers[i], nullptr);
             vmaUnmapMemory(m_allocator, uniformBuffersAlloc[i]);
             vmaFreeMemory(m_allocator, uniformBuffersAlloc[i]);
         }
@@ -442,7 +453,7 @@ private:
         vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
 
-        vkDestroySampler(device, textureSampler, nullptr);
+        vkDestroySampler(device, m_textureSampler, nullptr);
         vkDestroyImageView(device, textureImageView, nullptr);
 
         vkDestroyImage(device, textureImage, nullptr);
@@ -452,13 +463,16 @@ private:
         vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayout, nullptr);
 
         vkDestroyBuffer(device, m_towerIndexBuffer, nullptr);
-        vmaFreeMemory(m_allocator, indexBufferAlloc);
-
+        vmaFreeMemory(m_allocator, m_towerIndexBufferAlloc);
         vkDestroyBuffer(device, m_towerVertexBuffer, nullptr);
         vmaFreeMemory(m_allocator, m_towerVertexBufferAlloc);
-
         vkDestroyBuffer(device, m_towerInstanceBuffer, nullptr);
         vmaFreeMemory(m_allocator, instanceBufferAlloc);
+
+        vkDestroyBuffer(device, m_snowIndexBuffer, nullptr);
+        vmaFreeMemory(m_allocator, m_snowIndexBufferAlloc);
+        vkDestroyBuffer(device, m_snowVertexBuffer, nullptr);
+        vmaFreeMemory(m_allocator, m_snowVertexBufferAlloc);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, m_renderFinishedSemaphores[i], nullptr);
@@ -827,7 +841,7 @@ private:
 			VkDescriptorSetLayoutBinding uboLayoutBinding{};
 			uboLayoutBinding.binding = 0;
 			uboLayoutBinding.descriptorCount = 1;
-			uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 			uboLayoutBinding.pImmutableSamplers = nullptr;
 			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
@@ -1000,10 +1014,17 @@ private:
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicState.pDynamicStates = dynamicStates.data();
 
+		VkPushConstantRange pushConstant{};
+		pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		pushConstant.size = sizeof(GraphicPushConstant);
+		pushConstant.offset = 0;
+
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &m_graphicDescriptorSetLayout;
+		pipelineLayoutInfo.pushConstantRangeCount = 1;
+		pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphic pipeline layout!");
@@ -1037,7 +1058,7 @@ private:
 	void createComputePipeline() {
 		VkPushConstantRange pushConstant{};
 		pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-		pushConstant.size = sizeof(PushConstantData);
+		pushConstant.size = sizeof(ComputePushConstant);
 		pushConstant.offset = 0;
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
@@ -1161,9 +1182,15 @@ private:
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    void createTextureImage() {
+    void createTextureImage(ObjectType type) {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		std::string texturePath;
+		if (type == ObjectType::TOWER)
+			texturePath = TOWER_TEXTURE_PATH;
+		else
+			texturePath = TOWER_TEXTURE_PATH;
+
+        stbi_uc* pixels = stbi_load(texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
         mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
@@ -1197,6 +1224,10 @@ private:
 
         generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
     }
+
+	void createTextureImages(){
+		createTextureImage(ObjectType::SNOWFLAKE);
+	}
 
     void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
         // Check if image format supports linear blitting
@@ -1326,7 +1357,7 @@ private:
         samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
         samplerInfo.mipLodBias = 0.0f;
 
-        if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &m_textureSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture sampler!");
         }
     }
@@ -1467,13 +1498,26 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
-    void loadModel() {
+    void loadModels() {
+		loadModel(ObjectType::TOWER);
+		loadModel(ObjectType::SNOWFLAKE);
+	}
+
+    void loadModel(ObjectType type) {
+		std::string modelPath;
+		if (type == ObjectType::TOWER){
+			modelPath = TOWER_MODEL_PATH;
+		}
+		else {
+			modelPath = SNOWFLAKE_MODEL_PATH;
+		}
+
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
         std::vector<tinyobj::material_t> materials;
         std::string warn, err;
 
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str())) {
             throw std::runtime_error(warn + err);
         }
 
@@ -1494,17 +1538,29 @@ private:
                     1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
                 };
 
-                vertex.color = {1.0f, 1.0f, 1.0f};
+                vertex.color = {0.5f, 0.5f, 1.0f};
 
                 if (uniqueVertices.count(vertex) == 0) {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(m_towerVertexRaw.size());
-                    m_towerVertexRaw.push_back(vertex);
+					if (type == ObjectType::TOWER){
+						uniqueVertices[vertex] = static_cast<uint32_t>(m_towerVertexRaw.size());
+						m_towerVertexRaw.push_back(vertex);
+					}
+					else {
+						uniqueVertices[vertex] = static_cast<uint32_t>(m_snowVertexRaw.size());
+						m_snowVertexRaw.push_back(vertex);
+					}
                 }
 
-                m_towerIndexRaw.push_back(uniqueVertices[vertex]);
+				if (type == ObjectType::TOWER)
+					m_towerIndexRaw.push_back(uniqueVertices[vertex]);
+				else
+					m_snowIndexRaw.push_back(uniqueVertices[vertex]);
             }
         }
-    }
+
+		std::cout << "Size of tower index buffer: " << m_towerIndexRaw.size() << std::endl;
+		std::cout << "Size of snowflake index buffer: " << m_snowIndexRaw.size() << std::endl;
+	}
 
 	void loadInstanceData() {
 		std::ifstream file("res/instance_position.csv");
@@ -1527,58 +1583,89 @@ private:
 		}
 	}
 
-    void createVertexBuffers() {
-        VkDeviceSize bufferSize = sizeof(m_towerVertexRaw[0]) * m_towerVertexRaw.size();
+	void createVertexBuffers() {
+		createVertexBuffer(ObjectType::TOWER);
+		createVertexBuffer(ObjectType::SNOWFLAKE);
+	}
 
+	void createIndexBuffers() {
+		createIndexBuffer(ObjectType::TOWER);
+		createIndexBuffer(ObjectType::SNOWFLAKE);
+	}
+
+    void createVertexBuffer(ObjectType type) {
         VkBuffer stagingBuffer;
 		VmaAllocation stagingBufferAlloc{};
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
 
-        void* data;
-        vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-            memcpy(data, m_towerVertexRaw.data(), (size_t) bufferSize);
-        vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerVertexBuffer, m_towerVertexBufferAlloc);
-
-        copyBuffer(stagingBuffer, m_towerVertexBuffer, bufferSize);
+		if (type == ObjectType::TOWER) {
+			VkDeviceSize bufferSize = sizeof(m_towerVertexRaw[0]) * m_towerVertexRaw.size();
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+				memcpy(data, m_towerVertexRaw.data(), (size_t) bufferSize);
+			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerVertexBuffer, m_towerVertexBufferAlloc);
+			copyBuffer(stagingBuffer, m_towerVertexBuffer, bufferSize);
+		}
+		else if (type == ObjectType::SNOWFLAKE) {
+			VkDeviceSize bufferSize = sizeof(m_snowVertexRaw[0]) * m_snowVertexRaw.size();
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+				memcpy(data, m_snowVertexRaw.data(), (size_t) bufferSize);
+			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_snowVertexBuffer, m_snowVertexBufferAlloc);
+			copyBuffer(stagingBuffer, m_snowVertexBuffer, bufferSize);
+		}
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vmaFreeMemory(m_allocator, stagingBufferAlloc);
     }
 
-    void createIndexBuffer() {
-        VkDeviceSize bufferSize = sizeof(m_towerIndexRaw[0]) * m_towerIndexRaw.size();
-
+    void createIndexBuffer(ObjectType type) {
         VkBuffer stagingBuffer;
 		VmaAllocation stagingBufferAloc{};
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 
-        void* data;
-        vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-            memcpy(data, m_towerIndexRaw.data(), (size_t) bufferSize);
-        vmaUnmapMemory(m_allocator, stagingBufferAloc);
+		if (type == ObjectType::TOWER) {
+			VkDeviceSize bufferSize = sizeof(m_towerIndexRaw[0]) * m_towerIndexRaw.size();
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
+				memcpy(data, m_towerIndexRaw.data(), (size_t) bufferSize);
+			vmaUnmapMemory(m_allocator, stagingBufferAloc);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerIndexBuffer, m_towerIndexBufferAlloc);
+			copyBuffer(stagingBuffer, m_towerIndexBuffer, bufferSize);
 
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerIndexBuffer, indexBufferAlloc);
+		}
+		else if (type == ObjectType::SNOWFLAKE) {
+			VkDeviceSize bufferSize = sizeof(m_snowIndexRaw[0]) * m_snowIndexRaw.size();
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
+				memcpy(data, m_snowIndexRaw.data(), (size_t) bufferSize);
+			vmaUnmapMemory(m_allocator, stagingBufferAloc);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_snowIndexBuffer, m_snowIndexBufferAlloc);
+			copyBuffer(stagingBuffer, m_snowIndexBuffer, bufferSize);
 
-        copyBuffer(stagingBuffer, m_towerIndexBuffer, bufferSize);
+		}
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vmaFreeMemory(m_allocator, stagingBufferAloc);
     }
 
     void createGraphicUniformBuffers() {
-		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+		// one uniform buffer for both tower and snowflake
+		VkDeviceSize bufferSize = sizeof(UniformBufferObject) * 2;
 
-		uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+		m_graphicUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 		uniformBuffersAlloc.resize(MAX_FRAMES_IN_FLIGHT);
-		uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+		m_graphicUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-				, uniformBuffers[i], uniformBuffersAlloc[i]);
+				, m_graphicUniformBuffers[i], uniformBuffersAlloc[i]);
 
-			vmaMapMemory(m_allocator, uniformBuffersAlloc[i], &uniformBuffersMapped[i]);
+			vmaMapMemory(m_allocator, uniformBuffersAlloc[i], &m_graphicUniformBuffersMapped[i]);
 		}
     }
 
@@ -1592,7 +1679,7 @@ private:
 
 		for(unsigned int i = 0; i < VORTEX_COUNT; i++){
 			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
-			vortex.velocity = generateRandomFloat(0, 0.01f);
+			vortex.velocity = generateRandomFloat(0, 0.05f);
 			std::cout << " velocity: " << vortex.velocity;
 		}
 	}
@@ -1629,8 +1716,8 @@ private:
 		// only work when set data when mapped like this
 		for(unsigned int i = 0; i < SNOWFLAKE_COUNT; i++) {
 			Snowflake& snow = ((Snowflake*)data)[i];
-			snow.position.x = generateRandomFloat(-5.f, 5.f);
-			snow.position.y = generateRandomFloat(-5.f, 5.f);
+			snow.position.x = generateRandomFloat(-15.f, 15.f);
+			snow.position.y = generateRandomFloat(-15.f, 15.f);
 			snow.position.z = generateRandomFloat(-15.f, 15.f);
 			snow.weight = generateRandomFloat(0.5f, 1.5f);
 		}
@@ -1683,14 +1770,14 @@ private:
 
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				VkDescriptorBufferInfo bufferInfo{};
-				bufferInfo.buffer = uniformBuffers[i];
+				bufferInfo.buffer = m_graphicUniformBuffers[i];
 				bufferInfo.offset = 0;
 				bufferInfo.range = sizeof(UniformBufferObject);
 
 				VkDescriptorImageInfo imageInfo{};
 				imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				imageInfo.imageView = textureImageView;
-				imageInfo.sampler = textureSampler;
+				imageInfo.sampler = m_textureSampler;
 
 				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
@@ -1698,7 +1785,7 @@ private:
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets[i];
 				descriptorWrites[0].dstBinding = 0;
 				descriptorWrites[0].dstArrayElement = 0;
-				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 				descriptorWrites[0].descriptorCount = 1;
 				descriptorWrites[0].pBufferInfo = &bufferInfo;
 
@@ -1947,22 +2034,29 @@ private:
 				vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 				// wood tower
-				VkBuffer Buffers[2] = {m_towerVertexBuffer, m_towerInstanceBuffer};
+				VkBuffer towerBuffers[2] = {m_towerVertexBuffer, m_towerInstanceBuffer};
 				VkDeviceSize offsets[2] = {0, 0};
-				vkCmdBindVertexBuffers(commandBuffer, 0, 2, Buffers, offsets);
+				vkCmdBindVertexBuffers(commandBuffer, 0, 2, towerBuffers, offsets);
 				vkCmdBindIndexBuffer(commandBuffer, m_towerIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 0, nullptr);
+				uint32_t towerDynamicOffset[1] = {0};
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 1, towerDynamicOffset);
+				m_graphicPushConstant.useTexture = true;
+				vkCmdPushConstants(commandBuffer, m_graphicPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), 
+					   (void*)&m_graphicPushConstant);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_towerIndexRaw.size()), static_cast<uint32_t>(m_towerInstanceRaw.size()), 0, 0, 0);
 		
 				// snowflake
-				// VkBuffer snowBuffers[2] = {m_snowVertexBuffer, m_storageBuffer};
-				VkBuffer snowBuffers[2] = {m_towerVertexBuffer, m_storageBuffer};
+				VkBuffer snowBuffers[2] = {m_snowVertexBuffer, m_storageBuffer};
 				VkDeviceSize snowOffsets[2] = {0,0};
 				vkCmdBindVertexBuffers(commandBuffer, 0, 2, snowBuffers, snowOffsets);
-				// vkCmdBindIndexBuffer(commandBuffer, m_snowIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-				vkCmdBindIndexBuffer(commandBuffer, m_towerIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 0, nullptr);
-				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_towerIndexRaw.size()), SNOWFLAKE_COUNT, 0, 0, 0);
+				vkCmdBindIndexBuffer(commandBuffer, m_snowIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+				// this offset have to be 256 byte align
+				uint32_t snowDynamicOffset[1] = {sizeof(UniformBufferObject)};
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 1, snowDynamicOffset);
+				m_graphicPushConstant.useTexture = false;
+				vkCmdPushConstants(commandBuffer, m_graphicPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), 
+					   (void*)&m_graphicPushConstant);
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_snowIndexRaw.size()), SNOWFLAKE_COUNT, 0, 0, 0);
 				
 			{
 				TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
@@ -1990,7 +2084,7 @@ private:
 		updateComputeUniformBuffer();
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets, 0, nullptr);
-		vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstantData), (void*)&m_pushConstantData);
+		vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), (void*)&m_computePushConstant);
 		// FIXME: choose right number of workgroups
 		vkCmdDispatch(commandBuffer, 256, 1, 1);
 
@@ -2027,7 +2121,7 @@ private:
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
         }
-		// signal render finished semaphore
+		// signal the last index compute starting semaphore because if we don't manually, noone do :(
 		VkSubmitInfo submitInfo{};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.signalSemaphoreCount = 1;
@@ -2050,29 +2144,45 @@ private:
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        UniformBufferObject ubo{};
-        ubo.model = glm::mat4(1.0f);
-        ubo.model = glm::translate(ubo.model, glm::vec3(s_translate[0], s_translate[1], s_translate[2]));
-		if(s_rotate[0] != 0.f || s_rotate[1] != 0.f || s_rotate[2] != 0.f)
-			ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(s_rotate[0], s_rotate[1], s_rotate[2]));
-        ubo.model = glm::scale(ubo.model, glm::vec3(s_scale[0], s_scale[1], s_scale[2]));
+        UniformBufferObject ubo[2]{};
+		// watch tower
+		ubo[0].model = glm::mat4(1.0f);
+		ubo[0].model = glm::translate(ubo[0].model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
+		ubo[0].model = glm::scale(ubo[0].model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
+		
+		// snowflake
+        ubo[1].model = glm::mat4(1.0f);
+        ubo[1].model = glm::translate(ubo[1].model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
+		if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
+			ubo[1].model = glm::rotate(ubo[1].model, time * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
+        ubo[1].model = glm::scale(ubo[1].model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
 
-        ubo.view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
-        ubo.proj[1][1] *= -1;
+		glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+		proj[1][1] *= -1;
 
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+        ubo[0].view = view;
+        ubo[0].proj = proj;
+        ubo[1].view = view;
+        ubo[1].proj = proj;
+
+        memcpy(m_graphicUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 	
 	void updateComputeUniformBuffer() {
-		m_pushConstantData.snowflakeCount = 100;
+		m_computePushConstant.snowflakeCount = SNOWFLAKE_COUNT;
 	}
 
 	static void processImGui(){
-        ImGui::SeparatorText("Model");
-		ImGui::SliderFloat3("Translate", s_translate, -10.f, 10.f, "%.2f");
-		ImGui::SliderFloat3("Rotate", s_rotate, -10.f, 10.f, "%.2f");
-		ImGui::SliderFloat3("Scale", s_scale, -10.f, 10.f, "%.2f");
+        // ImGui::SeparatorText("Watch Tower Model");
+		// ImGui::SliderFloat3("Translate", s_translate, -10.f, 10.f, "%.2f");
+		// ImGui::SliderFloat3("Rotate", s_rotate, -10.f, 10.f, "%.2f");
+		// ImGui::SliderFloat3("Scale", s_scale, -10.f, 10.f, "%.2f");
+        ImGui::SeparatorText("Snowflake Model");
+		ImGui::SliderFloat3("Translate", s_snowTranslate, -10.f, 10.f, "%.2f");
+		ImGui::SliderFloat3("Rotate", s_snowRotate, -10.f, 10.f, "%.2f");
+		ImGui::SliderFloat3("Scale", s_snowScale, -10.f, 10.f, "%.2f");
+
         ImGui::SeparatorText("View");
 		ImGui::SliderFloat3("View", s_viewPos, -20.f, 20.f, "%.2f");
         ImGui::SeparatorText("Projection");

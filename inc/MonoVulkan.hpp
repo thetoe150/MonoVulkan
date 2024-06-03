@@ -51,18 +51,29 @@ constexpr uint32_t WIDTH = 1600;
 constexpr uint32_t HEIGHT = 900;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
-static float s_scale[3] = {0.7f, 0.7f, 0.7f};
-static float s_rotate[3] = {0.f, 0.f, 0.f};
-static float s_translate[3] = {0.f, -5.f, 0.f};
-static float s_viewPos[3] = {15.f, 0.f, 0.f};
+constexpr float c_towerScale[3] = {0.7f, 0.7f, 0.7f};
+constexpr float c_towerRotate[3] = {0.f, 0.f, 0.f};
+constexpr float c_towerTranslate[3] = {0.f, -5.f, 0.f};
+
+static float s_snowScale[3] = {0.001f, 0.001f, 0.001f};
+static float s_snowRotate[3] = {0.f, 0.f, 0.f};
+static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
+
+static float s_viewPos[3] = {20.f, 15.f, 0.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 
-const std::string MODEL_PATH = "res/models/wooden_watch_tower2.obj";
-// const std::string MODEL_PATH = "res/models/Snowflake.obj";
-const std::string TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
+const std::string TOWER_MODEL_PATH = "res/models/wooden_watch_tower2.obj";
+const std::string SNOWFLAKE_MODEL_PATH = "res/models/Snowflake.obj";
+const std::string TOWER_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
+// const std::string SNOWFLAKE_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 
-constexpr int SNOWFLAKE_COUNT = 100;
+enum class ObjectType{
+	TOWER,
+	SNOWFLAKE
+};
+
+constexpr int SNOWFLAKE_COUNT = 5000;
 constexpr int VORTEX_COUNT = 10;
 
 struct Vortex {
@@ -77,10 +88,13 @@ struct Snowflake {
 	float weight;
 };
 
-struct PushConstantData{
+struct ComputePushConstant{
 	float snowflakeCount = SNOWFLAKE_COUNT;
 };
 
+struct GraphicPushConstant{
+	alignas(4) bool useTexture;
+};
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
 };
