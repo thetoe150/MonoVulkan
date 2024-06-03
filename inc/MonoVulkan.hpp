@@ -40,6 +40,13 @@
 #include <set>
 #include <unordered_map>
 
+#define CHECK_VK_RESULT(f, msg)																	\
+{																								\
+	if(VkResult res = f){																		\
+		throw std::runtime_error(msg + vk::to_string((vk::Result)res));							\
+	}																							\
+}																								\
+
 constexpr uint32_t WIDTH = 1600;
 constexpr uint32_t HEIGHT = 900;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
