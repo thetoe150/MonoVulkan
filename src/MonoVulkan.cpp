@@ -181,7 +181,11 @@ private:
 	std::vector<char> pipelineCacheBlob;
 
 	// Graphic handles
-    VkPipeline m_graphicPipeline;
+	struct {
+		VkPipeline tower;
+		VkPipeline snow;
+	} m_graphicPipelines;
+
     VkPipeline m_computePipeline;
 
     VkCommandPool m_graphicCommandPool;
@@ -236,7 +240,7 @@ private:
 	VkBuffer m_storageBuffer;
 	VmaAllocation m_storageBufferAlloc;
 
-	GraphicPushConstant m_graphicPushConstant;
+	SpecializationConstant m_graphicSpecConstant;
 	ComputePushConstant m_computePushConstant;
 
 	VkBuffer m_vortexUniformBuffer;
@@ -430,7 +434,8 @@ private:
         cleanupSwapChain();
 
 		savePipelineCache();
-        vkDestroyPipeline(device, m_graphicPipeline, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.tower, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.snow, nullptr);
         vkDestroyPipeline(device, m_computePipeline, nullptr);
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayout, nullptr);
@@ -907,26 +912,6 @@ private:
 	}
 
     void createGraphicPipeline() {
-        auto vertShaderCode = readFile("src/shaders/model.vert.spv");
-        auto fragShaderCode = readFile("src/shaders/model.frag.spv");
-
-        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
-        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertShaderStageInfo.module = vertShaderModule;
-        vertShaderStageInfo.pName = "main";
-
-        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragShaderStageInfo.module = fragShaderModule;
-        fragShaderStageInfo.pName = "main";
-
-        VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -1030,6 +1015,42 @@ private:
             throw std::runtime_error("failed to create graphic pipeline layout!");
         }
 
+        auto vertShaderCode = readFile("src/shaders/model.vert.spv");
+        auto fragShaderCode = readFile("src/shaders/model.frag.spv");
+
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+		struct SpecializationConstant{
+			alignas(4) bool useTexture{true};
+		}specConstant;
+
+		std::array<VkSpecializationMapEntry, 1> specEntries;
+		specEntries[0].constantID = 0;
+		specEntries[0].offset = 0;
+		specEntries[0].size = sizeof(SpecializationConstant);
+
+		VkSpecializationInfo specInfo{};
+		specInfo.dataSize = sizeof(SpecializationConstant);
+		specInfo.mapEntryCount = static_cast<uint32_t>(specEntries.size());
+		specInfo.pMapEntries = specEntries.data();
+		specInfo.pData = &specConstant;
+
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+        fragShaderStageInfo.pSpecializationInfo = &specInfo;
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
@@ -1047,7 +1068,13 @@ private:
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipeline) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.tower) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create graphics pipeline!");
+        }
+
+		specConstant.useTexture = false;
+
+        if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.snow) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
@@ -2017,7 +2044,7 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipeline);
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.tower);
 
 				VkViewport viewport{};
 				viewport.x = 0.0f;
@@ -2040,11 +2067,9 @@ private:
 				vkCmdBindIndexBuffer(commandBuffer, m_towerIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 				uint32_t towerDynamicOffset[1] = {0};
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 1, towerDynamicOffset);
-				m_graphicPushConstant.useTexture = true;
-				vkCmdPushConstants(commandBuffer, m_graphicPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), 
-					   (void*)&m_graphicPushConstant);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_towerIndexRaw.size()), static_cast<uint32_t>(m_towerInstanceRaw.size()), 0, 0, 0);
 		
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.snow);
 				// snowflake
 				VkBuffer snowBuffers[2] = {m_snowVertexBuffer, m_storageBuffer};
 				VkDeviceSize snowOffsets[2] = {0,0};
@@ -2053,9 +2078,6 @@ private:
 				// this offset have to be 256 byte align
 				uint32_t snowDynamicOffset[1] = {sizeof(UniformBufferObject)};
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 1, snowDynamicOffset);
-				m_graphicPushConstant.useTexture = false;
-				vkCmdPushConstants(commandBuffer, m_graphicPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), 
-					   (void*)&m_graphicPushConstant);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_snowIndexRaw.size()), SNOWFLAKE_COUNT, 0, 0, 0);
 				
 			{

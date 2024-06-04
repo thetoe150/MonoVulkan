@@ -1,14 +1,14 @@
 1. Other feature:
-    - Push constants
-    - Specialization constants
+    - Push constants - done
+    - Specialization constants - done
     - Instanced rendering - done
-    - Dynamic uniforms
-    - Separate images and sampler descriptors
+    - Dynamic uniforms - done
     - Pipeline cache - done
+    - Separate images and sampler descriptors
     - Multi-threaded command buffer generation
     - Multiple subpasses
     - Compute shaders
-        - Shared memory
+        - Shared memory - done
         - Asynchronous compute
         - Atomic operations
         - Subgroups

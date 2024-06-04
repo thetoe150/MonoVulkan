@@ -95,6 +95,11 @@ struct ComputePushConstant{
 struct GraphicPushConstant{
 	alignas(4) bool useTexture;
 };
+
+struct SpecializationConstant{
+	alignas(4) bool useTexture{true};
+}s_specConstant;
+
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
 };
