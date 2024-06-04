@@ -209,27 +209,40 @@ private:
     VkImageView textureImageView;
     VkSampler m_textureSampler;
 
-	// Graphic buffers
-	// watch tower
-    std::vector<Vertex> m_towerVertexRaw;
-    std::vector<uint32_t> m_towerIndexRaw;
+	struct {
+		std::vector<Vertex> tower;
+		std::vector<Vertex> snow;
+	} m_vertexRaw;
+
+	struct {
+		std::vector<uint32_t> tower;
+		std::vector<uint32_t> snow;
+	} m_indexRaw;
+
+	struct {
+		VkBuffer tower;
+		VkBuffer snow;
+	} m_vertexBuffer;
+
+	struct {
+		VkBuffer tower;
+		VkBuffer snow;
+	} m_indexBuffer;
+
+	struct {
+		VmaAllocation tower;
+		VmaAllocation snow;
+	} m_vertexBufferAlloc;
+
+	struct {
+		VmaAllocation tower;
+		VmaAllocation snow;
+	} m_indexBufferAlloc;
+
     std::vector<VertexInstance> m_towerInstanceRaw;
-    VkBuffer m_towerVertexBuffer;
-	VmaAllocation m_towerVertexBufferAlloc;
-    // VkDeviceMemory vertexBufferMemory;
-    VkBuffer m_towerIndexBuffer;
-	VmaAllocation m_towerIndexBufferAlloc;
-    // VkDeviceMemory indexBufferMemory;
 	VkBuffer m_towerInstanceBuffer;
 	VmaAllocation instanceBufferAlloc;
 
-	// snowflake
-    std::vector<Vertex> m_snowVertexRaw;
-    std::vector<uint32_t> m_snowIndexRaw;
-    VkBuffer m_snowVertexBuffer;
-	VmaAllocation m_snowVertexBufferAlloc;
-    VkBuffer m_snowIndexBuffer;
-	VmaAllocation m_snowIndexBufferAlloc;
 
     std::vector<VkBuffer> m_graphicUniformBuffers;
     std::vector<VmaAllocation> uniformBuffersAlloc;
@@ -263,9 +276,6 @@ private:
 	VkSemaphore m_computeFinishedSemaphore;
     uint32_t currentFrame = 0;
 
-	// Compute handles
-
-	// Tools handles
 	VkDescriptorPool imguiDescriptorPool;
 
     bool framebufferResized = false;
@@ -360,8 +370,7 @@ private:
         createRenderPass();
         createDescriptorSetLayouts();
 		createPipelineCache();
-        createGraphicPipeline();
-		createComputePipeline();
+		createPipelines();
         createCommandPools();
         createColorResources();
         createDepthResources();
@@ -374,8 +383,7 @@ private:
         createVertexBuffers();
         createIndexBuffers();
 		createInstanceBuffer();
-        createGraphicUniformBuffers();
-		createComputeUniformBuffers();
+		createUniformBuffers();
 		createStorageBuffer();
         createDescriptorPool();
         createDescriptorSets();
@@ -467,17 +475,17 @@ private:
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayout, nullptr);
 
-        vkDestroyBuffer(device, m_towerIndexBuffer, nullptr);
-        vmaFreeMemory(m_allocator, m_towerIndexBufferAlloc);
-        vkDestroyBuffer(device, m_towerVertexBuffer, nullptr);
-        vmaFreeMemory(m_allocator, m_towerVertexBufferAlloc);
+        vkDestroyBuffer(device, m_indexBuffer.tower, nullptr);
+        vmaFreeMemory(m_allocator, m_indexBufferAlloc.tower);
+        vkDestroyBuffer(device, m_vertexBuffer.tower, nullptr);
+        vmaFreeMemory(m_allocator, m_vertexBufferAlloc.tower);
         vkDestroyBuffer(device, m_towerInstanceBuffer, nullptr);
         vmaFreeMemory(m_allocator, instanceBufferAlloc);
 
-        vkDestroyBuffer(device, m_snowIndexBuffer, nullptr);
-        vmaFreeMemory(m_allocator, m_snowIndexBufferAlloc);
-        vkDestroyBuffer(device, m_snowVertexBuffer, nullptr);
-        vmaFreeMemory(m_allocator, m_snowVertexBufferAlloc);
+        vkDestroyBuffer(device, m_indexBuffer.snow, nullptr);
+        vmaFreeMemory(m_allocator, m_indexBufferAlloc.snow);
+        vkDestroyBuffer(device, m_vertexBuffer.snow, nullptr);
+        vmaFreeMemory(m_allocator, m_vertexBufferAlloc.snow);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, m_renderFinishedSemaphores[i], nullptr);
@@ -841,60 +849,61 @@ private:
     }
 
     void createDescriptorSetLayouts() {
-		// Graphic part
-		{
-			VkDescriptorSetLayoutBinding uboLayoutBinding{};
-			uboLayoutBinding.binding = 0;
-			uboLayoutBinding.descriptorCount = 1;
-			uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-			uboLayoutBinding.pImmutableSamplers = nullptr;
-			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-			VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-			samplerLayoutBinding.binding = 1;
-			samplerLayoutBinding.descriptorCount = 1;
-			samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			samplerLayoutBinding.pImmutableSamplers = nullptr;
-			samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
-			VkDescriptorSetLayoutCreateInfo layoutInfo{};
-			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-			layoutInfo.pBindings = bindings.data();
-
-			if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayout) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create descriptor set layout!");
-			}
-		}
-
-		// Compute Part
-		{
-			VkDescriptorSetLayoutBinding storageBinding{};
-			storageBinding.binding = 0;
-			storageBinding.descriptorCount = 1;
-			storageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-			storageBinding.pImmutableSamplers = nullptr;
-			storageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-			VkDescriptorSetLayoutBinding uboBinding{};
-			uboBinding.binding = 1;
-			uboBinding.descriptorCount = 1;
-			uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			uboBinding.pImmutableSamplers = nullptr;
-			uboBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {storageBinding, uboBinding};
-			VkDescriptorSetLayoutCreateInfo layoutInfo{};
-			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-			layoutInfo.pBindings = bindings.data();
-
-			if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_computeDescriptorSetLayout) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create descriptor set layout!");
-			}
-		}
+		createGraphicDescriptorSetLayouts();	
+		createComputeDescriptorSetLayouts();
     }
+
+	void createGraphicDescriptorSetLayouts() {
+		VkDescriptorSetLayoutBinding uboLayoutBinding{};
+		uboLayoutBinding.binding = 0;
+		uboLayoutBinding.descriptorCount = 1;
+		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+		uboLayoutBinding.pImmutableSamplers = nullptr;
+		uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+		samplerLayoutBinding.binding = 1;
+		samplerLayoutBinding.descriptorCount = 1;
+		samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerLayoutBinding.pImmutableSamplers = nullptr;
+		samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayout) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create descriptor set layout!");
+		}
+	}
+
+	void createComputeDescriptorSetLayouts() {
+		VkDescriptorSetLayoutBinding storageBinding{};
+		storageBinding.binding = 0;
+		storageBinding.descriptorCount = 1;
+		storageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		storageBinding.pImmutableSamplers = nullptr;
+		storageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		VkDescriptorSetLayoutBinding uboBinding{};
+		uboBinding.binding = 1;
+		uboBinding.descriptorCount = 1;
+		uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		uboBinding.pImmutableSamplers = nullptr;
+		uboBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = {storageBinding, uboBinding};
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_computeDescriptorSetLayout) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create descriptor set layout!");
+		}
+	}
 
     void createPipelineCache() {
 		if(!isFileExist("res/cache/pipeline_cache.blob"))
@@ -909,6 +918,11 @@ private:
 
 
 		vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr, &m_pipelineCache);
+	}
+
+	void createPipelines() {
+        createGraphicPipeline();
+		createComputePipeline();
 	}
 
     void createGraphicPipeline() {
@@ -1253,7 +1267,7 @@ private:
     }
 
 	void createTextureImages(){
-		createTextureImage(ObjectType::SNOWFLAKE);
+		createTextureImage(ObjectType::TOWER);
 	}
 
     void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
@@ -1569,24 +1583,24 @@ private:
 
                 if (uniqueVertices.count(vertex) == 0) {
 					if (type == ObjectType::TOWER){
-						uniqueVertices[vertex] = static_cast<uint32_t>(m_towerVertexRaw.size());
-						m_towerVertexRaw.push_back(vertex);
+						uniqueVertices[vertex] = static_cast<uint32_t>(m_vertexRaw.tower.size());
+						m_vertexRaw.tower.push_back(vertex);
 					}
 					else {
-						uniqueVertices[vertex] = static_cast<uint32_t>(m_snowVertexRaw.size());
-						m_snowVertexRaw.push_back(vertex);
+						uniqueVertices[vertex] = static_cast<uint32_t>(m_vertexRaw.snow.size());
+						m_vertexRaw.snow.push_back(vertex);
 					}
                 }
 
 				if (type == ObjectType::TOWER)
-					m_towerIndexRaw.push_back(uniqueVertices[vertex]);
+					m_indexRaw.tower.push_back(uniqueVertices[vertex]);
 				else
-					m_snowIndexRaw.push_back(uniqueVertices[vertex]);
+					m_indexRaw.snow.push_back(uniqueVertices[vertex]);
             }
         }
 
-		std::cout << "Size of tower index buffer: " << m_towerIndexRaw.size() << std::endl;
-		std::cout << "Size of snowflake index buffer: " << m_snowIndexRaw.size() << std::endl;
+		std::cout << "Size of tower index buffer: " << m_indexRaw.tower.size() << std::endl;
+		std::cout << "Size of snowflake index buffer: " << m_indexRaw.snow.size() << std::endl;
 	}
 
 	void loadInstanceData() {
@@ -1625,24 +1639,24 @@ private:
 		VmaAllocation stagingBufferAlloc{};
 
 		if (type == ObjectType::TOWER) {
-			VkDeviceSize bufferSize = sizeof(m_towerVertexRaw[0]) * m_towerVertexRaw.size();
+			VkDeviceSize bufferSize = sizeof(m_vertexRaw.tower[0]) * m_vertexRaw.tower.size();
 			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
 			void* data;
 			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-				memcpy(data, m_towerVertexRaw.data(), (size_t) bufferSize);
+				memcpy(data, m_vertexRaw.tower.data(), (size_t) bufferSize);
 			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerVertexBuffer, m_towerVertexBufferAlloc);
-			copyBuffer(stagingBuffer, m_towerVertexBuffer, bufferSize);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vertexBuffer.tower, m_vertexBufferAlloc.tower);
+			copyBuffer(stagingBuffer, m_vertexBuffer.tower, bufferSize);
 		}
 		else if (type == ObjectType::SNOWFLAKE) {
-			VkDeviceSize bufferSize = sizeof(m_snowVertexRaw[0]) * m_snowVertexRaw.size();
+			VkDeviceSize bufferSize = sizeof(m_vertexRaw.snow[0]) * m_vertexRaw.snow.size();
 			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
 			void* data;
 			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-				memcpy(data, m_snowVertexRaw.data(), (size_t) bufferSize);
+				memcpy(data, m_vertexRaw.snow.data(), (size_t) bufferSize);
 			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_snowVertexBuffer, m_snowVertexBufferAlloc);
-			copyBuffer(stagingBuffer, m_snowVertexBuffer, bufferSize);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vertexBuffer.snow, m_vertexBufferAlloc.snow);
+			copyBuffer(stagingBuffer, m_vertexBuffer.snow, bufferSize);
 		}
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -1654,31 +1668,36 @@ private:
 		VmaAllocation stagingBufferAloc{};
 
 		if (type == ObjectType::TOWER) {
-			VkDeviceSize bufferSize = sizeof(m_towerIndexRaw[0]) * m_towerIndexRaw.size();
+			VkDeviceSize bufferSize = sizeof(m_indexRaw.tower[0]) * m_indexRaw.tower.size();
 			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 			void* data;
 			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-				memcpy(data, m_towerIndexRaw.data(), (size_t) bufferSize);
+				memcpy(data, m_indexRaw.tower.data(), (size_t) bufferSize);
 			vmaUnmapMemory(m_allocator, stagingBufferAloc);
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_towerIndexBuffer, m_towerIndexBufferAlloc);
-			copyBuffer(stagingBuffer, m_towerIndexBuffer, bufferSize);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_indexBuffer.tower, m_indexBufferAlloc.tower);
+			copyBuffer(stagingBuffer, m_indexBuffer.tower, bufferSize);
 
 		}
 		else if (type == ObjectType::SNOWFLAKE) {
-			VkDeviceSize bufferSize = sizeof(m_snowIndexRaw[0]) * m_snowIndexRaw.size();
+			VkDeviceSize bufferSize = sizeof(m_indexRaw.snow[0]) * m_indexRaw.snow.size();
 			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 			void* data;
 			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-				memcpy(data, m_snowIndexRaw.data(), (size_t) bufferSize);
+				memcpy(data, m_indexRaw.snow.data(), (size_t) bufferSize);
 			vmaUnmapMemory(m_allocator, stagingBufferAloc);
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_snowIndexBuffer, m_snowIndexBufferAlloc);
-			copyBuffer(stagingBuffer, m_snowIndexBuffer, bufferSize);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_indexBuffer.snow, m_indexBufferAlloc.snow);
+			copyBuffer(stagingBuffer, m_indexBuffer.snow, bufferSize);
 
 		}
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vmaFreeMemory(m_allocator, stagingBufferAloc);
     }
+
+	void createUniformBuffers(){
+        createGraphicUniformBuffers();
+		createComputeUniformBuffers();
+	}
 
     void createGraphicUniformBuffers() {
 		// one uniform buffer for both tower and snowflake
@@ -1781,99 +1800,101 @@ private:
     }
 
     void createDescriptorSets() {
-		// Graphic part
-		{
-			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
-				layouts = {m_graphicDescriptorSetLayout, m_graphicDescriptorSetLayout};
-			VkDescriptorSetAllocateInfo allocInfo{};
-			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			allocInfo.descriptorPool = m_descriptorPool;
-			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-			allocInfo.pSetLayouts = layouts.data();
+		createGraphicDescriptorSets();
+		createComputeDescriptorSets();
+	}
 
-			if (vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.data()) != VK_SUCCESS) {
-				throw std::runtime_error("failed to allocate graphic descriptor sets!");
-			}
+	void createGraphicDescriptorSets(){
+		std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
+			layouts = {m_graphicDescriptorSetLayout, m_graphicDescriptorSetLayout};
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = m_descriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		allocInfo.pSetLayouts = layouts.data();
 
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				VkDescriptorBufferInfo bufferInfo{};
-				bufferInfo.buffer = m_graphicUniformBuffers[i];
-				bufferInfo.offset = 0;
-				bufferInfo.range = sizeof(UniformBufferObject);
-
-				VkDescriptorImageInfo imageInfo{};
-				imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				imageInfo.imageView = textureImageView;
-				imageInfo.sampler = m_textureSampler;
-
-				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
-
-				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[0].dstSet = m_graphicDescriptorSets[i];
-				descriptorWrites[0].dstBinding = 0;
-				descriptorWrites[0].dstArrayElement = 0;
-				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-				descriptorWrites[0].descriptorCount = 1;
-				descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[1].dstSet = m_graphicDescriptorSets[i];
-				descriptorWrites[1].dstBinding = 1;
-				descriptorWrites[1].dstArrayElement = 0;
-				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				descriptorWrites[1].descriptorCount = 1;
-				descriptorWrites[1].pImageInfo = &imageInfo;
-
-				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-			}
+		if (vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate graphic descriptor sets!");
 		}
-		// Compute part
-		{
-			std::array<VkDescriptorSetLayout, 1> 
-				layouts = {m_computeDescriptorSetLayout};
 
-			VkDescriptorSetAllocateInfo allocInfo{};
-			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			allocInfo.descriptorSetCount = layouts.size();
-			allocInfo.descriptorPool = m_descriptorPool;
-			allocInfo.pSetLayouts = layouts.data();
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			VkDescriptorBufferInfo bufferInfo{};
+			bufferInfo.buffer = m_graphicUniformBuffers[i];
+			bufferInfo.offset = 0;
+			bufferInfo.range = sizeof(UniformBufferObject);
 
-			if (vkAllocateDescriptorSets(device, &allocInfo, &m_computeDescriptorSets) != VK_SUCCESS)
-				throw std::runtime_error("failed to allocate compute descriptor sets!");
-
-			VkDescriptorBufferInfo storageBufferInfo{};
-			storageBufferInfo.buffer = m_storageBuffer;
-			storageBufferInfo.offset = 0;
-			// FIXME: range is sus
-			storageBufferInfo.range = VK_WHOLE_SIZE;
-
-			VkDescriptorBufferInfo uboBufferInfo{};
-			uboBufferInfo.buffer = m_vortexUniformBuffer;
-			uboBufferInfo.offset = 0;
-			// FIXME: range is sus
-			uboBufferInfo.range = VK_WHOLE_SIZE;
+			VkDescriptorImageInfo imageInfo{};
+			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageInfo.imageView = textureImageView;
+			imageInfo.sampler = m_textureSampler;
 
 			std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[0].dstSet = m_computeDescriptorSets;
+			descriptorWrites[0].dstSet = m_graphicDescriptorSets[i];
 			descriptorWrites[0].dstBinding = 0;
 			descriptorWrites[0].dstArrayElement = 0;
-			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 			descriptorWrites[0].descriptorCount = 1;
-			descriptorWrites[0].pBufferInfo = &storageBufferInfo;
+			descriptorWrites[0].pBufferInfo = &bufferInfo;
 
 			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[1].dstSet = m_computeDescriptorSets;
+			descriptorWrites[1].dstSet = m_graphicDescriptorSets[i];
 			descriptorWrites[1].dstBinding = 1;
 			descriptorWrites[1].dstArrayElement = 0;
-			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			descriptorWrites[1].descriptorCount = 1;
-			descriptorWrites[1].pBufferInfo = &uboBufferInfo;
+			descriptorWrites[1].pImageInfo = &imageInfo;
 
-			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, 0);
+			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
-    }
+	}
+
+	void createComputeDescriptorSets() {
+		std::array<VkDescriptorSetLayout, 1> 
+			layouts = {m_computeDescriptorSetLayout};
+
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorSetCount = layouts.size();
+		allocInfo.descriptorPool = m_descriptorPool;
+		allocInfo.pSetLayouts = layouts.data();
+
+		if (vkAllocateDescriptorSets(device, &allocInfo, &m_computeDescriptorSets) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate compute descriptor sets!");
+
+		VkDescriptorBufferInfo storageBufferInfo{};
+		storageBufferInfo.buffer = m_storageBuffer;
+		storageBufferInfo.offset = 0;
+		// FIXME: range is sus
+		storageBufferInfo.range = VK_WHOLE_SIZE;
+
+		VkDescriptorBufferInfo uboBufferInfo{};
+		uboBufferInfo.buffer = m_vortexUniformBuffer;
+		uboBufferInfo.offset = 0;
+		// FIXME: range is sus
+		uboBufferInfo.range = VK_WHOLE_SIZE;
+
+		std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[0].dstSet = m_computeDescriptorSets;
+		descriptorWrites[0].dstBinding = 0;
+		descriptorWrites[0].dstArrayElement = 0;
+		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		descriptorWrites[0].descriptorCount = 1;
+		descriptorWrites[0].pBufferInfo = &storageBufferInfo;
+
+		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[1].dstSet = m_computeDescriptorSets;
+		descriptorWrites[1].dstBinding = 1;
+		descriptorWrites[1].dstArrayElement = 0;
+		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[1].descriptorCount = 1;
+		descriptorWrites[1].pBufferInfo = &uboBufferInfo;
+
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, 0);
+	}
 
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VmaAllocation& allocation) {
         VkBufferCreateInfo bufferInfo{};
@@ -2061,24 +2082,24 @@ private:
 				vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 				// wood tower
-				VkBuffer towerBuffers[2] = {m_towerVertexBuffer, m_towerInstanceBuffer};
+				VkBuffer towerBuffers[2] = {m_vertexBuffer.tower, m_towerInstanceBuffer};
 				VkDeviceSize offsets[2] = {0, 0};
 				vkCmdBindVertexBuffers(commandBuffer, 0, 2, towerBuffers, offsets);
-				vkCmdBindIndexBuffer(commandBuffer, m_towerIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.tower, 0, VK_INDEX_TYPE_UINT32);
 				uint32_t towerDynamicOffset[1] = {0};
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 1, towerDynamicOffset);
-				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_towerIndexRaw.size()), static_cast<uint32_t>(m_towerInstanceRaw.size()), 0, 0, 0);
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indexRaw.tower.size()), static_cast<uint32_t>(m_towerInstanceRaw.size()), 0, 0, 0);
 		
 				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.snow);
 				// snowflake
-				VkBuffer snowBuffers[2] = {m_snowVertexBuffer, m_storageBuffer};
+				VkBuffer snowBuffers[2] = {m_vertexBuffer.snow, m_storageBuffer};
 				VkDeviceSize snowOffsets[2] = {0,0};
 				vkCmdBindVertexBuffers(commandBuffer, 0, 2, snowBuffers, snowOffsets);
-				vkCmdBindIndexBuffer(commandBuffer, m_snowIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.snow, 0, VK_INDEX_TYPE_UINT32);
 				// this offset have to be 256 byte align
 				uint32_t snowDynamicOffset[1] = {sizeof(UniformBufferObject)};
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 1, snowDynamicOffset);
-				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_snowIndexRaw.size()), SNOWFLAKE_COUNT, 0, 0, 0);
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indexRaw.snow.size()), SNOWFLAKE_COUNT, 0, 0, 0);
 				
 			{
 				TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
