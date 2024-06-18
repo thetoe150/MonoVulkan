@@ -1,8 +1,11 @@
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnullability-completeness"
+#include "vma/vk_mem_alloc.h"
+#pragma clang diagnostic pop
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#define VMA_IMPLEMENTATION
-#include "vma/vk_mem_alloc.h"
 #include "vulkan/vulkan.hpp"
 
 #define GLM_FORCE_RADIANS
