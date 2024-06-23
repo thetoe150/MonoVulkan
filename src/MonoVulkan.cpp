@@ -459,9 +459,6 @@ private:
 		m_currentDeltaTime = currentTime - m_lastTime;
         m_lastTime = currentTime;
 
-		std::cout << "\nlast time: " << m_lastTime;
-		std::cout << "\ncurrent time: " << m_currentDeltaTime;
-
 		updateGraphicUniformBuffer();
 		updateComputeUniformBuffer();
 		updateComputePushConstant();
@@ -2250,11 +2247,19 @@ private:
     }
 
 
-	static void processImGui(){
+	void processImGui(){
         // ImGui::SeparatorText("Watch Tower Model");
 		// ImGui::SliderFloat3("Translate", s_translate, -10.f, 10.f, "%.2f");
 		// ImGui::SliderFloat3("Rotate", s_rotate, -10.f, 10.f, "%.2f");
 		// ImGui::SliderFloat3("Scale", s_scale, -10.f, 10.f, "%.2f");
+
+        ImGui::SeparatorText("Time: ");
+		ImGui::Text("Current time: (%f)", m_lastTime);
+		ImGui::Text("Delta time: (%f)", m_currentDeltaTime);
+		ImGui::Text("FPS: (%f)", 1 / m_currentDeltaTime);
+
+		ImGui::Spacing();
+
         ImGui::SeparatorText("Snowflake Model");
 		ImGui::SliderFloat3("Translate", s_snowTranslate, -10.f, 10.f, "%.2f");
 		ImGui::SliderFloat3("Rotate", s_snowRotate, -10.f, 10.f, "%.2f");
