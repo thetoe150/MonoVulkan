@@ -70,21 +70,25 @@ const std::string SNOWFLAKE_MODEL_PATH = "res/models/Snowflake.obj";
 const std::string TOWER_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 // const std::string SNOWFLAKE_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 
+constexpr int SNOWFLAKE_COUNT = 2048;
+constexpr int MAX_VORTEX_COUNT = 10;
+
 static auto startTime = std::chrono::high_resolution_clock::now();
+static std::array<float, MAX_VORTEX_COUNT> s_baseRadius;
+static std::array<float, MAX_VORTEX_COUNT> s_basePhase;
+static std::array<float, MAX_VORTEX_COUNT> s_baseForce;
 
 enum class ObjectType{
 	TOWER,
 	SNOWFLAKE
 };
 
-constexpr int SNOWFLAKE_COUNT = 5000;
-constexpr int MAX_VORTEX_COUNT = 10;
 
 struct Vortex {
 	alignas(16) glm::vec3 pos;
 	alignas(4) float force;
 	alignas(4) float radius;
-	alignas(4) float length;
+	alignas(4) float height;
 };
 
 inline auto getVortexRadius = [](float currentValue, float delta) -> float {

@@ -54,7 +54,7 @@ void main(){
 
 		// calculate force
 		float f = 0;
-		float y_ratio = y_distance / u_vortex[i].height;
+		float y_ratio = 1 - y_distance / u_vortex[i].height;
 		float xz_ratio = xz_distance <= u_vortex[i].radius ? (xz_distance / u_vortex[i].radius)
 			: (1 - (xz_distance / u_vortex[i].radius - 1));
 		f = xz_ratio * u_vortex[i].force * y_ratio;
@@ -69,8 +69,6 @@ void main(){
 
 		sum_vortex_force.value = length(new_force);
 		sum_vortex_force.direction = normalize(new_force);
-		// sum_vortex_force.direction = normalize(dir);
-
 	}
 
 	// apply force
@@ -78,20 +76,20 @@ void main(){
 	vec3 total_force = weight_force * vec3(0, -1, 0) 
 		+ vec3(sum_vortex_force.direction.x, 0, sum_vortex_force.direction.y) * sum_vortex_force.value;
 
-	vec3 d = vec3(sum_vortex_force.direction, 1) * p_const.deltaTime * p_const.deltaTime;
+	vec3 d = vec3(total_force) * p_const.deltaTime * 0.1;
 
 	// bound snowflake pos
 	s_snowflake[index].pos += d;
-	if (s_snowflake[index].pos.x < -20.f)
-		s_snowflake[index].pos.x = 20.f;
-	else if (s_snowflake[index].pos.x > 20.f)
-		s_snowflake[index].pos.x = -20.f;
+	if (s_snowflake[index].pos.x < -16.f)
+		s_snowflake[index].pos.x = 16.f;
+	else if (s_snowflake[index].pos.x > 16.f)
+		s_snowflake[index].pos.x = -16.f;
 
-	if (s_snowflake[index].pos.y < -20.f)
-		s_snowflake[index].pos.y = 20.f;
+	if (s_snowflake[index].pos.y < -16.f)
+		s_snowflake[index].pos.y = 16.f;
 
-	if (s_snowflake[index].pos.z < -20.f)
-		s_snowflake[index].pos.z = 20.f;
-	else if (s_snowflake[index].pos.z > 20.f)
-		s_snowflake[index].pos.z = -20.f;
+	if (s_snowflake[index].pos.z < -16.f)
+		s_snowflake[index].pos.z = 16.f;
+	else if (s_snowflake[index].pos.z > 16.f)
+		s_snowflake[index].pos.z = -16.f;
 }

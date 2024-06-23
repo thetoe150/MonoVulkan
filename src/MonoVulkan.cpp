@@ -425,7 +425,7 @@ private:
         ubo[1].model = glm::mat4(1.0f);
         ubo[1].model = glm::translate(ubo[1].model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
 		if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
-			ubo[1].model = glm::rotate(ubo[1].model, m_currentDeltaTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
+			ubo[1].model = glm::rotate(ubo[1].model, m_lastTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
         ubo[1].model = glm::scale(ubo[1].model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
 
 		glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -441,10 +441,12 @@ private:
     }
 	
 	void updateComputeUniformBuffer() {
-		// for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
-		// 	Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
-		// 	vortex.velocity = generateRandomFloat(0, 0.05f);
-		// }
+		for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
+			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
+
+			vortex.radius = s_baseRadius[i] * std::abs(std::sin(m_lastTime * 0.1f + s_basePhase[i]));
+			vortex.force = s_baseForce[i] * std::sin(m_lastTime * 0.2f);
+		}
 	}
 
 	void updateComputePushConstant() {
@@ -1788,12 +1790,16 @@ private:
 
 		for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
 			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
-			vortex.pos.x = generateRandomFloat(-10.f, 10.f);
-			vortex.pos.y = generateRandomFloat(-10.f, 10.f);
-			vortex.pos.z = generateRandomFloat(-10.f, 10.f);
-			vortex.force = generateRandomFloat(1.f, 15.f);
-			vortex.length = generateRandomFloat(1.f, 15.f);
-			vortex.radius = generateRandomFloat(1.f, 15.f);
+			vortex.pos.x = generateRandomFloat(-5.f, 5.f);
+			vortex.pos.y = generateRandomFloat(-5.f, 5.f);
+			vortex.pos.z = generateRandomFloat(-5.f, 5.f);
+			vortex.height = generateRandomFloat(5.f, 10.f);
+
+			s_basePhase[i] = generateRandomFloat(0.f, 3.14f);
+			s_baseForce[i] = generateRandomFloat(2.f, 4.f);
+			s_baseRadius[i] = generateRandomFloat(5.f, 15.f);
+			vortex.force = s_baseForce[i];
+			vortex.radius = s_baseRadius[i];
 		}
 	}
 
