@@ -1,11 +1,9 @@
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wnullability-completeness"
-#include "vma/vk_mem_alloc.h"
-#pragma clang diagnostic pop
-
+#include "glm/trigonometric.hpp"
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#define VMA_IMPLEMENTATION
+#include "vma/vk_mem_alloc.h"
 #include "vulkan/vulkan.hpp"
 
 #define GLM_FORCE_RADIANS
@@ -39,6 +37,7 @@
 #include <cstdint>
 #include <limits>
 #include <array>
+#include <math.h>
 #include <optional>
 #include <set>
 #include <unordered_map>
@@ -71,19 +70,29 @@ const std::string SNOWFLAKE_MODEL_PATH = "res/models/Snowflake.obj";
 const std::string TOWER_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 // const std::string SNOWFLAKE_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 
+static auto startTime = std::chrono::high_resolution_clock::now();
+
 enum class ObjectType{
 	TOWER,
 	SNOWFLAKE
 };
 
 constexpr int SNOWFLAKE_COUNT = 5000;
-constexpr int VORTEX_COUNT = 10;
+constexpr int MAX_VORTEX_COUNT = 10;
 
 struct Vortex {
-	alignas(16) glm::vec3 origin;
-	alignas(4) float velocity;
+	alignas(16) glm::vec3 pos;
+	alignas(4) float force;
 	alignas(4) float radius;
 	alignas(4) float length;
+};
+
+inline auto getVortexRadius = [](float currentValue, float delta) -> float {
+	return 2 + 3 * std::sin(delta);
+};
+
+inline auto getVortexVelocity = [](float currentValue, float delta) -> float {
+	return 2 + 3 * std::sin(delta);
 };
 
 struct Snowflake {
@@ -92,7 +101,8 @@ struct Snowflake {
 };
 
 struct ComputePushConstant{
-	float snowflakeCount = SNOWFLAKE_COUNT;
+	int snowflakeCount = SNOWFLAKE_COUNT;
+	float deltaTime;
 };
 
 struct GraphicPushConstant{

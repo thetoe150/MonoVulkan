@@ -1,6 +1,6 @@
 #include "MonoVulkan.hpp"
 #include "vulkan/vulkan_core.h"
-
+#include <chrono>
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -128,6 +128,7 @@ struct UniformBufferObject {
 class MonoVulkan {
 public:
 	void init(){
+		initContext();
         initGLFW();
         initVulkan();
 		initTracy();
@@ -274,11 +275,19 @@ private:
 
     std::vector<VkFence> m_inFlightFences;
 	VkSemaphore m_computeFinishedSemaphore;
-    uint32_t currentFrame = 0;
+    uint32_t m_currentFrame = 0;
+
+	float m_lastTime;
+	float m_currentDeltaTime;
 
 	VkDescriptorPool imguiDescriptorPool;
 
     bool framebufferResized = false;
+
+	void initContext() {
+        auto now = std::chrono::high_resolution_clock::now();
+        m_lastTime = std::chrono::duration<float, std::chrono::seconds::period>(now - startTime).count();
+	}
 
     void initGLFW() {
         glfwInit();
@@ -402,9 +411,66 @@ private:
 			std::cout << "Cache State of key X.\n";
 	}
 
+    void updateGraphicUniformBuffer() {
+		ZoneScopedN("UpdateUniformBuffer");
+
+
+        UniformBufferObject ubo[2]{};
+		// watch tower
+		ubo[0].model = glm::mat4(1.0f);
+		ubo[0].model = glm::translate(ubo[0].model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
+		ubo[0].model = glm::scale(ubo[0].model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
+		
+		// snowflake
+        ubo[1].model = glm::mat4(1.0f);
+        ubo[1].model = glm::translate(ubo[1].model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
+		if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
+			ubo[1].model = glm::rotate(ubo[1].model, m_currentDeltaTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
+        ubo[1].model = glm::scale(ubo[1].model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
+
+		glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+		proj[1][1] *= -1;
+
+        ubo[0].view = view;
+        ubo[0].proj = proj;
+        ubo[1].view = view;
+        ubo[1].proj = proj;
+
+        memcpy(m_graphicUniformBuffersMapped[m_currentFrame], &ubo, sizeof(ubo));
+    }
+	
+	void updateComputeUniformBuffer() {
+		// for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
+		// 	Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
+		// 	vortex.velocity = generateRandomFloat(0, 0.05f);
+		// }
+	}
+
+	void updateComputePushConstant() {
+		m_computePushConstant.snowflakeCount = SNOWFLAKE_COUNT;
+		m_computePushConstant.deltaTime = m_currentDeltaTime;
+	}
+
+	void updateContext() {
+        auto now = std::chrono::high_resolution_clock::now();
+        float currentTime = std::chrono::duration<float, std::chrono::seconds::period>(now - startTime).count();
+
+		m_currentDeltaTime = currentTime - m_lastTime;
+        m_lastTime = currentTime;
+
+		std::cout << "\nlast time: " << m_lastTime;
+		std::cout << "\ncurrent time: " << m_currentDeltaTime;
+
+		updateGraphicUniformBuffer();
+		updateComputeUniformBuffer();
+		updateComputePushConstant();
+	}
+
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
 			processInput();
+			updateContext();
             drawFrame();
 			FrameMark;
         }
@@ -1716,17 +1782,21 @@ private:
     }
 
     void createComputeUniformBuffers() {
-		m_vortexUniformBufferMapped = static_cast<void*>(new Vortex[VORTEX_COUNT]);
+		m_vortexUniformBufferMapped = static_cast<void*>(new Vortex[MAX_VORTEX_COUNT]);
 
-		VkDeviceSize bufferSize = sizeof(Vortex) * VORTEX_COUNT;
+		VkDeviceSize bufferSize = sizeof(Vortex) * MAX_VORTEX_COUNT;
 		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
 				, m_vortexUniformBuffer, m_vortexUniformBufferAlloc);
 		vmaMapMemory(m_allocator, m_vortexUniformBufferAlloc, &m_vortexUniformBufferMapped);
 
-		for(unsigned int i = 0; i < VORTEX_COUNT; i++){
+		for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
 			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
-			vortex.velocity = generateRandomFloat(0, 0.05f);
-			std::cout << " velocity: " << vortex.velocity;
+			vortex.pos.x = generateRandomFloat(-10.f, 10.f);
+			vortex.pos.y = generateRandomFloat(-10.f, 10.f);
+			vortex.pos.z = generateRandomFloat(-10.f, 10.f);
+			vortex.force = generateRandomFloat(1.f, 15.f);
+			vortex.length = generateRandomFloat(1.f, 15.f);
+			vortex.radius = generateRandomFloat(1.f, 15.f);
 		}
 	}
 
@@ -2087,7 +2157,7 @@ private:
 				vkCmdBindVertexBuffers(commandBuffer, 0, 2, towerBuffers, offsets);
 				vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.tower, 0, VK_INDEX_TYPE_UINT32);
 				uint32_t towerDynamicOffset[1] = {0};
-				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 1, towerDynamicOffset);
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[m_currentFrame], 1, towerDynamicOffset);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indexRaw.tower.size()), static_cast<uint32_t>(m_towerInstanceRaw.size()), 0, 0, 0);
 		
 				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.snow);
@@ -2098,7 +2168,7 @@ private:
 				vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.snow, 0, VK_INDEX_TYPE_UINT32);
 				// this offset have to be 256 byte align
 				uint32_t snowDynamicOffset[1] = {sizeof(UniformBufferObject)};
-				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[currentFrame], 1, snowDynamicOffset);
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[m_currentFrame], 1, snowDynamicOffset);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indexRaw.snow.size()), SNOWFLAKE_COUNT, 0, 0, 0);
 				
 			{
@@ -2109,7 +2179,7 @@ private:
 
 			vkCmdEndRenderPass(commandBuffer);
 		
-		TracyVkCollect(tracyContext, m_graphicCommandBuffers[currentFrame]);
+		TracyVkCollect(tracyContext, m_graphicCommandBuffers[m_currentFrame]);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record graphic command buffer!");
@@ -2124,7 +2194,6 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
 		}
 
-		updateComputeUniformBuffer();
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets, 0, nullptr);
 		vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), (void*)&m_computePushConstant);
@@ -2180,41 +2249,6 @@ private:
 				  , "failed to create compute synchronization objects for a frame!");
     }
 
-    void updateGraphicUniformBuffer(uint32_t currentImage) {
-		ZoneScopedN("UpdateUniformBuffer");
-        static auto startTime = std::chrono::high_resolution_clock::now();
-
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-        UniformBufferObject ubo[2]{};
-		// watch tower
-		ubo[0].model = glm::mat4(1.0f);
-		ubo[0].model = glm::translate(ubo[0].model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
-		ubo[0].model = glm::scale(ubo[0].model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
-		
-		// snowflake
-        ubo[1].model = glm::mat4(1.0f);
-        ubo[1].model = glm::translate(ubo[1].model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
-		if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
-			ubo[1].model = glm::rotate(ubo[1].model, time * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
-        ubo[1].model = glm::scale(ubo[1].model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
-
-		glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
-		proj[1][1] *= -1;
-
-        ubo[0].view = view;
-        ubo[0].proj = proj;
-        ubo[1].view = view;
-        ubo[1].proj = proj;
-
-        memcpy(m_graphicUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-    }
-	
-	void updateComputeUniformBuffer() {
-		m_computePushConstant.snowflakeCount = SNOWFLAKE_COUNT;
-	}
 
 	static void processImGui(){
         // ImGui::SeparatorText("Watch Tower Model");
@@ -2251,7 +2285,7 @@ private:
 				recordComputeCommandBuffer(m_computeCommandBuffer);
 
 				VkSubmitInfo computeSubmitInfo{};
-				VkSemaphore computeWaitSemaphores[] = {m_computeStartingSemaphores[(currentFrame - 1) % 2]};
+				VkSemaphore computeWaitSemaphores[] = {m_computeStartingSemaphores[(m_currentFrame - 1) % 2]};
 				VkSemaphore computeSignalSemaphores[] = {m_computeFinishedSemaphore};
 				VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
 				computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -2271,7 +2305,7 @@ private:
 
 			{
 				ZoneScopedN("Accquire Next Image");
-				result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, m_imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+				result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
 				if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 					recreateSwapChain();
@@ -2283,36 +2317,34 @@ private:
 
 			{
 				ZoneScopedN("Wait for Commandbuffer Fence");
-				vkWaitForFences(device, 1, &m_inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+				vkWaitForFences(device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
 			}
 
-			updateGraphicUniformBuffer(currentFrame);
+			vkResetFences(device, 1, &m_inFlightFences[m_currentFrame]);
 		
-			vkResetFences(device, 1, &m_inFlightFences[currentFrame]);
-		
-			vkResetCommandBuffer(m_graphicCommandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
-			recordGraphicCommandBuffer(m_graphicCommandBuffers[currentFrame], imageIndex);
+			vkResetCommandBuffer(m_graphicCommandBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+			recordGraphicCommandBuffer(m_graphicCommandBuffers[m_currentFrame], imageIndex);
 		}
 
-		VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[currentFrame], m_computeStartingSemaphores[currentFrame]};
+		VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_currentFrame], m_computeStartingSemaphores[m_currentFrame]};
 		{
 			ZoneScopedN("Submit Commandbuffer");
 			VkSubmitInfo submitInfo{};
 			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-			VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphores[currentFrame], m_computeFinishedSemaphore};
+			VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame], m_computeFinishedSemaphore};
 			VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT};
 			submitInfo.waitSemaphoreCount = sizeof(waitSemaphores) / sizeof(VkSemaphore);
 			submitInfo.pWaitSemaphores = waitSemaphores;
 			submitInfo.pWaitDstStageMask = waitStages;
 
 			submitInfo.commandBufferCount = 1;
-			submitInfo.pCommandBuffers = &m_graphicCommandBuffers[currentFrame];
+			submitInfo.pCommandBuffers = &m_graphicCommandBuffers[m_currentFrame];
 
 			submitInfo.signalSemaphoreCount = sizeof(signalSemaphores) / sizeof(VkSemaphore);
 			submitInfo.pSignalSemaphores = signalSemaphores;
 
-			if (VkResult res = vkQueueSubmit(m_graphicQueue, 1, &submitInfo, m_inFlightFences[currentFrame])) {
+			if (VkResult res = vkQueueSubmit(m_graphicQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame])) {
 				std::string msg = "failed to submit graphic command buffer with CODE: " + vk::to_string((vk::Result)res);
 				throw std::runtime_error(msg);
 			}
@@ -2324,7 +2356,7 @@ private:
 			presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
 			presentInfo.waitSemaphoreCount = 1;
-			presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[currentFrame];
+			presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
 
 			VkSwapchainKHR swapChains[] = {swapChain};
 			presentInfo.swapchainCount = 1;
@@ -2342,7 +2374,7 @@ private:
 			}
 		}
 
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     VkShaderModule createShaderModule(const std::vector<char>& code) {
