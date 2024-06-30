@@ -1,0 +1,11 @@
+Model Information:
+* title:	Candles set
+* source:	https://sketchfab.com/3d-models/candles-set-f09212756bc94764a8bcfcd3c7e38f8e
+* author:	shuvalov.di (https://sketchfab.com/shuvalov.di)
+
+Model License:
+* license type:	CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
+* requirements:	Author must be credited. No commercial use. Modified versions must have the same license.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Candles set" (https://sketchfab.com/3d-models/candles-set-f09212756bc94764a8bcfcd3c7e38f8e) by shuvalov.di (https://sketchfab.com/shuvalov.di) licensed under CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
