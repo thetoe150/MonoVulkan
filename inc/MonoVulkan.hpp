@@ -73,6 +73,7 @@ static float s_farPlane = 100.f;
 const std::string TOWER_MODEL_PATH = "res/models/wooden_watch_tower2.obj";
 const std::string SNOWFLAKE_MODEL_PATH = "res/models/Snowflake.obj";
 const std::string TOWER_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
+const std::string CANDLE_MODEL_PATH = "res/models/candles_set/scene.gltf";
 // const std::string SNOWFLAKE_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 
 constexpr int SNOWFLAKE_COUNT = 2048;
@@ -83,9 +84,10 @@ static std::array<float, MAX_VORTEX_COUNT> s_baseRadius;
 static std::array<float, MAX_VORTEX_COUNT> s_basePhase;
 static std::array<float, MAX_VORTEX_COUNT> s_baseForce;
 
-enum class ObjectType{
+enum Object{
 	TOWER,
-	SNOWFLAKE
+	SNOWFLAKE,
+	LAST
 };
 
 

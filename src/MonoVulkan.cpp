@@ -1,6 +1,7 @@
 #include "MonoVulkan.hpp"
 #include "vulkan/vulkan_core.h"
 #include <chrono>
+#include <map>
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -181,17 +182,16 @@ private:
 	VkPipelineCache m_pipelineCache;
 	std::vector<char> pipelineCacheBlob;
 
-	// Graphic handles
-	struct {
-		VkPipeline tower;
-		VkPipeline snow;
-	} m_graphicPipelines;
+	std::map<Object, VkPipeline> m_graphicPipelines;
 
     VkPipeline m_computePipeline;
 
     VkCommandPool m_graphicCommandPool;
     VkCommandPool m_computeCommandPool;
 	VkQueryPool timestampPool;
+
+	tinygltf::Model m_towerModel;
+	tinygltf::Model m_snowModel;
 
     VkImage colorImage;
 	VmaAllocation colorImageAlloc;
@@ -210,35 +210,12 @@ private:
     VkImageView textureImageView;
     VkSampler m_textureSampler;
 
-	struct {
-		std::vector<Vertex> tower;
-		std::vector<Vertex> snow;
-	} m_vertexRaw;
-
-	struct {
-		std::vector<uint32_t> tower;
-		std::vector<uint32_t> snow;
-	} m_indexRaw;
-
-	struct {
-		VkBuffer tower;
-		VkBuffer snow;
-	} m_vertexBuffer;
-
-	struct {
-		VkBuffer tower;
-		VkBuffer snow;
-	} m_indexBuffer;
-
-	struct {
-		VmaAllocation tower;
-		VmaAllocation snow;
-	} m_vertexBufferAlloc;
-
-	struct {
-		VmaAllocation tower;
-		VmaAllocation snow;
-	} m_indexBufferAlloc;
+	std::map<Object, std::vector<Vertex>> m_vertexRaw;
+	std::map<Object, std::vector<uint32_t>> m_indexRaw;
+	std::map<Object, VkBuffer> m_vertexBuffer;
+	std::map<Object, VkBuffer> m_indexBuffer;
+	std::map<Object, VmaAllocation> m_vertexBufferAlloc;
+	std::map<Object, VmaAllocation> m_indexBufferAlloc;
 
     std::vector<VertexInstance> m_towerInstanceRaw;
 	VkBuffer m_towerInstanceBuffer;
@@ -507,8 +484,8 @@ private:
         cleanupSwapChain();
 
 		savePipelineCache();
-        vkDestroyPipeline(device, m_graphicPipelines.tower, nullptr);
-        vkDestroyPipeline(device, m_graphicPipelines.snow, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines[Object::SNOWFLAKE], nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines[Object::TOWER], nullptr);
         vkDestroyPipeline(device, m_computePipeline, nullptr);
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayout, nullptr);
@@ -540,17 +517,17 @@ private:
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayout, nullptr);
 
-        vkDestroyBuffer(device, m_indexBuffer.tower, nullptr);
-        vmaFreeMemory(m_allocator, m_indexBufferAlloc.tower);
-        vkDestroyBuffer(device, m_vertexBuffer.tower, nullptr);
-        vmaFreeMemory(m_allocator, m_vertexBufferAlloc.tower);
+        vkDestroyBuffer(device, m_indexBuffer[Object::TOWER], nullptr);
+        vmaFreeMemory(m_allocator, m_indexBufferAlloc[Object::TOWER]);
+        vkDestroyBuffer(device, m_vertexBuffer[Object::TOWER], nullptr);
+        vmaFreeMemory(m_allocator, m_vertexBufferAlloc[Object::TOWER]);
         vkDestroyBuffer(device, m_towerInstanceBuffer, nullptr);
         vmaFreeMemory(m_allocator, instanceBufferAlloc);
 
-        vkDestroyBuffer(device, m_indexBuffer.snow, nullptr);
-        vmaFreeMemory(m_allocator, m_indexBufferAlloc.snow);
-        vkDestroyBuffer(device, m_vertexBuffer.snow, nullptr);
-        vmaFreeMemory(m_allocator, m_vertexBufferAlloc.snow);
+        vkDestroyBuffer(device, m_indexBuffer[Object::SNOWFLAKE], nullptr);
+        vmaFreeMemory(m_allocator, m_indexBufferAlloc[Object::SNOWFLAKE]);
+        vkDestroyBuffer(device, m_vertexBuffer[Object::SNOWFLAKE], nullptr);
+        vmaFreeMemory(m_allocator, m_vertexBufferAlloc[Object::SNOWFLAKE]);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, m_renderFinishedSemaphores[i], nullptr);
@@ -1147,13 +1124,13 @@ private:
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.tower) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines[Object::TOWER]) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
 		specConstant.useTexture = false;
 
-        if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.snow) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines[Object::SNOWFLAKE]) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
@@ -1288,10 +1265,10 @@ private:
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    void createTextureImage(ObjectType type) {
+    void createTextureImage(Object type) {
         int texWidth, texHeight, texChannels;
 		std::string texturePath;
-		if (type == ObjectType::TOWER)
+		if (type == Object::TOWER)
 			texturePath = TOWER_TEXTURE_PATH;
 		else
 			texturePath = TOWER_TEXTURE_PATH;
@@ -1332,7 +1309,7 @@ private:
     }
 
 	void createTextureImages(){
-		createTextureImage(ObjectType::TOWER);
+		createTextureImage(Object::TOWER);
 	}
 
     void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
@@ -1605,13 +1582,33 @@ private:
     }
 
     void loadModels() {
-		loadModel(ObjectType::TOWER);
-		loadModel(ObjectType::SNOWFLAKE);
+		loadModel(Object::TOWER);
+		loadModel(Object::SNOWFLAKE);
+
+		loadGltfModel(m_snowModel, CANDLE_MODEL_PATH.c_str());
 	}
 
-    void loadModel(ObjectType type) {
+	void loadGltfModel(tinygltf::Model &model, const char *filename) {
+		tinygltf::TinyGLTF loader;
+		std::string err;
+		std::string warn;
+
+		bool res = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
+		if (!warn.empty()) {
+		std::cout << "WARN: " << warn << std::endl;
+		}
+		if (!err.empty()) {
+		std::cout << "ERR: " << err << std::endl;
+		}
+		if (!res)
+		std::cout << "Failed to load glTF: " << filename << std::endl;
+		else
+		std::cout << "Loaded glTF: " << filename << std::endl;
+	}
+
+    void loadModel(Object type) {
 		std::string modelPath;
-		if (type == ObjectType::TOWER){
+		if (type == Object::TOWER){
 			modelPath = TOWER_MODEL_PATH;
 		}
 		else {
@@ -1647,25 +1644,25 @@ private:
                 vertex.color = {0.5f, 0.5f, 1.0f};
 
                 if (uniqueVertices.count(vertex) == 0) {
-					if (type == ObjectType::TOWER){
-						uniqueVertices[vertex] = static_cast<uint32_t>(m_vertexRaw.tower.size());
-						m_vertexRaw.tower.push_back(vertex);
+					if (type == Object::TOWER){
+						uniqueVertices[vertex] = static_cast<uint32_t>(m_vertexRaw[Object::TOWER].size());
+						m_vertexRaw[Object::TOWER].push_back(vertex);
 					}
 					else {
-						uniqueVertices[vertex] = static_cast<uint32_t>(m_vertexRaw.snow.size());
-						m_vertexRaw.snow.push_back(vertex);
+						uniqueVertices[vertex] = static_cast<uint32_t>(m_vertexRaw[Object::SNOWFLAKE].size());
+						m_vertexRaw[Object::SNOWFLAKE].push_back(vertex);
 					}
                 }
 
-				if (type == ObjectType::TOWER)
-					m_indexRaw.tower.push_back(uniqueVertices[vertex]);
+				if (type == Object::TOWER)
+					m_indexRaw[Object::TOWER].push_back(uniqueVertices[vertex]);
 				else
-					m_indexRaw.snow.push_back(uniqueVertices[vertex]);
+					m_indexRaw[Object::SNOWFLAKE].push_back(uniqueVertices[vertex]);
             }
         }
 
-		std::cout << "Size of tower index buffer: " << m_indexRaw.tower.size() << std::endl;
-		std::cout << "Size of snowflake index buffer: " << m_indexRaw.snow.size() << std::endl;
+		std::cout << "Size of tower index buffer: " << m_indexRaw[Object::TOWER].size() << std::endl;
+		std::cout << "Size of snowflake index buffer: " << m_indexRaw[Object::SNOWFLAKE].size() << std::endl;
 	}
 
 	void loadInstanceData() {
@@ -1690,74 +1687,46 @@ private:
 	}
 
 	void createVertexBuffers() {
-		createVertexBuffer(ObjectType::TOWER);
-		createVertexBuffer(ObjectType::SNOWFLAKE);
+		for (unsigned int i = 0; i < Object::LAST; i++){
+			Object obj = static_cast<Object>(i);
+
+			VkBuffer stagingBuffer;
+			VmaAllocation stagingBufferAlloc{};
+
+			VkDeviceSize bufferSize = sizeof(m_vertexRaw[obj][0]) * m_vertexRaw[obj].size();
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+				memcpy(data, m_vertexRaw[obj].data(), (size_t) bufferSize);
+			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vertexBuffer[obj], m_vertexBufferAlloc[obj]);
+			copyBuffer(stagingBuffer, m_vertexBuffer[obj], bufferSize);
+
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vmaFreeMemory(m_allocator, stagingBufferAlloc);
+		}
 	}
 
 	void createIndexBuffers() {
-		createIndexBuffer(ObjectType::TOWER);
-		createIndexBuffer(ObjectType::SNOWFLAKE);
+		for (unsigned int i = 0; i < Object::LAST; i++){
+			Object obj = static_cast<Object>(i);
+
+			VkBuffer stagingBuffer;
+			VmaAllocation stagingBufferAloc{};
+
+			VkDeviceSize bufferSize = sizeof(m_indexRaw[obj][0]) * m_indexRaw[obj].size();
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
+				memcpy(data, m_indexRaw[obj].data(), (size_t) bufferSize);
+			vmaUnmapMemory(m_allocator, stagingBufferAloc);
+			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_indexBuffer[obj], m_indexBufferAlloc[obj]);
+			copyBuffer(stagingBuffer, m_indexBuffer[obj], bufferSize);
+
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vmaFreeMemory(m_allocator, stagingBufferAloc);
+		}
 	}
-
-    void createVertexBuffer(ObjectType type) {
-        VkBuffer stagingBuffer;
-		VmaAllocation stagingBufferAlloc{};
-
-		if (type == ObjectType::TOWER) {
-			VkDeviceSize bufferSize = sizeof(m_vertexRaw.tower[0]) * m_vertexRaw.tower.size();
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
-			void* data;
-			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-				memcpy(data, m_vertexRaw.tower.data(), (size_t) bufferSize);
-			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vertexBuffer.tower, m_vertexBufferAlloc.tower);
-			copyBuffer(stagingBuffer, m_vertexBuffer.tower, bufferSize);
-		}
-		else if (type == ObjectType::SNOWFLAKE) {
-			VkDeviceSize bufferSize = sizeof(m_vertexRaw.snow[0]) * m_vertexRaw.snow.size();
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
-			void* data;
-			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-				memcpy(data, m_vertexRaw.snow.data(), (size_t) bufferSize);
-			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vertexBuffer.snow, m_vertexBufferAlloc.snow);
-			copyBuffer(stagingBuffer, m_vertexBuffer.snow, bufferSize);
-		}
-
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-		vmaFreeMemory(m_allocator, stagingBufferAlloc);
-    }
-
-    void createIndexBuffer(ObjectType type) {
-        VkBuffer stagingBuffer;
-		VmaAllocation stagingBufferAloc{};
-
-		if (type == ObjectType::TOWER) {
-			VkDeviceSize bufferSize = sizeof(m_indexRaw.tower[0]) * m_indexRaw.tower.size();
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
-			void* data;
-			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-				memcpy(data, m_indexRaw.tower.data(), (size_t) bufferSize);
-			vmaUnmapMemory(m_allocator, stagingBufferAloc);
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_indexBuffer.tower, m_indexBufferAlloc.tower);
-			copyBuffer(stagingBuffer, m_indexBuffer.tower, bufferSize);
-
-		}
-		else if (type == ObjectType::SNOWFLAKE) {
-			VkDeviceSize bufferSize = sizeof(m_indexRaw.snow[0]) * m_indexRaw.snow.size();
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
-			void* data;
-			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-				memcpy(data, m_indexRaw.snow.data(), (size_t) bufferSize);
-			vmaUnmapMemory(m_allocator, stagingBufferAloc);
-			createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_indexBuffer.snow, m_indexBufferAlloc.snow);
-			copyBuffer(stagingBuffer, m_indexBuffer.snow, bufferSize);
-
-		}
-
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vmaFreeMemory(m_allocator, stagingBufferAloc);
-    }
 
 	void createUniformBuffers(){
         createGraphicUniformBuffers();
@@ -2138,7 +2107,7 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.tower);
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines[Object::TOWER]);
 
 				VkViewport viewport{};
 				viewport.x = 0.0f;
@@ -2155,24 +2124,24 @@ private:
 				vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 				// wood tower
-				VkBuffer towerBuffers[2] = {m_vertexBuffer.tower, m_towerInstanceBuffer};
+				VkBuffer towerBuffers[2] = {m_vertexBuffer[Object::TOWER], m_towerInstanceBuffer};
 				VkDeviceSize offsets[2] = {0, 0};
 				vkCmdBindVertexBuffers(commandBuffer, 0, 2, towerBuffers, offsets);
-				vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.tower, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer[Object::TOWER], 0, VK_INDEX_TYPE_UINT32);
 				uint32_t towerDynamicOffset[1] = {0};
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[m_currentFrame], 1, towerDynamicOffset);
-				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indexRaw.tower.size()), static_cast<uint32_t>(m_towerInstanceRaw.size()), 0, 0, 0);
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indexRaw[Object::TOWER].size()), static_cast<uint32_t>(m_towerInstanceRaw.size()), 0, 0, 0);
 		
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.snow);
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines[Object::SNOWFLAKE]);
 				// snowflake
-				VkBuffer snowBuffers[2] = {m_vertexBuffer.snow, m_storageBuffer};
+				VkBuffer snowBuffers[2] = {m_vertexBuffer[Object::SNOWFLAKE], m_storageBuffer};
 				VkDeviceSize snowOffsets[2] = {0,0};
 				vkCmdBindVertexBuffers(commandBuffer, 0, 2, snowBuffers, snowOffsets);
-				vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.snow, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer[Object::SNOWFLAKE], 0, VK_INDEX_TYPE_UINT32);
 				// this offset have to be 256 byte align
 				uint32_t snowDynamicOffset[1] = {sizeof(UniformBufferObject)};
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 0, 1, &m_graphicDescriptorSets[m_currentFrame], 1, snowDynamicOffset);
-				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indexRaw.snow.size()), SNOWFLAKE_COUNT, 0, 0, 0);
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indexRaw[Object::SNOWFLAKE].size()), SNOWFLAKE_COUNT, 0, 0, 0);
 				
 			{
 				TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
