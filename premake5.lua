@@ -1,15 +1,20 @@
 workspace "MonoVulkan"
 	configurations {"Debug", "Release"}
-	location "build/dummy"
+	location "build"
 
 project "MonoVulkan"
 	kind "ConsoleApp"
 	language "C++"
 	cppdialect "C++17"
 	toolset "msc"
-	location "build/dummy"
 	targetname "MONO"
 	architecture "x86_64"
+
+	-- gcc makefile have cwd at binary, msvc have cwd at project for some reason
+	-- this is for loading resource at the right path
+	location "build"
+	filter {"options:cc=msc"}
+		location "build/VisualStudio"
 
 	includedirs {"inc", "tracy/public/tracy", "inc/vma", "inc/imgui"}
 	files {"src/**.cpp", "**.hpp", "tracy/public/TracyClient.cpp"}
@@ -32,3 +37,23 @@ project "MonoVulkan"
 		defines {"NDEBUG"}
 		optimize "On"
 		targetdir "bin/release"
+
+newaction {
+	trigger = "clean",
+	description = "clean object files",
+	execute = function ()
+		os.execute("./clean.ps1")
+	end
+}
+
+newoption {
+	trigger = "cc",
+	value = "compiler",
+	description = "Choose compiler to compile code",
+	allowed = {
+		{"gcc", "GCC"},
+		{"clang", "CLANG"},
+		{"msc", "MSVC"}
+	},
+	default = "gcc"
+}
