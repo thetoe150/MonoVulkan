@@ -3,6 +3,6 @@
 		"directory": "D:/L/Vulkan/MonoVulkan",
 		"arguments": ["clang++", "-std=c++17", "-IC:/VulkanSDK/1.3.268.0/Include/", "-Iinc", "-Iinc/imgui", "-Itracy/public/tracy"
 			, "-DTRACY_ENABLE", "-DTRACY_VK_USE_SYMBOL_TABLE", "-DVMA_IMPLEMENTATION", "-DTINYGLTF_IMPLEMENTATION"],
-		"file": ["src/MonoVulkan.cpp", "src/backward.cpp"]
+		"file": "src/MonoVulkan.cpp"
 	}
 ]

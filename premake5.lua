@@ -1,12 +1,13 @@
 workspace "MonoVulkan"
 	configurations {"Debug", "Release"}
+	location "build/dummy"
 
 project "MonoVulkan"
 	kind "ConsoleApp"
 	language "C++"
 	cppdialect "C++17"
 	toolset "msc"
-	location "build"
+	location "build/dummy"
 	targetname "MONO"
 	architecture "x86_64"
 

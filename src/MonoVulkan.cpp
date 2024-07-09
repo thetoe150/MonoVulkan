@@ -460,7 +460,7 @@ private:
 		if(dataSize){
 			char* data = new char[dataSize]();
 			vkGetPipelineCacheData(device, m_pipelineCache, &dataSize, data);
-			writeFile("res/cache/pipeline_cache.blob", data, dataSize);
+			writeFile("../../res/cache/pipeline_cache.blob", data, dataSize);
 		}
 	}
 
@@ -948,10 +948,10 @@ private:
 	}
 
     void createPipelineCache() {
-		if(!isFileExist("res/cache/pipeline_cache.blob"))
-			makeFile("res/cache/pipeline_cache.blob");
+		if(!isFileExist("../../res/cache/pipeline_cache.blob"))
+			makeFile("../../res/cache/pipeline_cache.blob");
 
-		pipelineCacheBlob = readFile("res/cache/pipeline_cache.blob");
+		pipelineCacheBlob = readFile("../../res/cache/pipeline_cache.blob");
 
 		VkPipelineCacheCreateInfo pipelineCacheInfo{};
 		pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -1071,8 +1071,8 @@ private:
             throw std::runtime_error("failed to create graphic pipeline layout!");
         }
 
-        auto vertShaderCode = readFile("src/shaders/model.vert.spv");
-        auto fragShaderCode = readFile("src/shaders/model.frag.spv");
+        auto vertShaderCode = readFile("../../src/shaders/model.vert.spv");
+        auto fragShaderCode = readFile("../../src/shaders/model.frag.spv");
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -1154,7 +1154,7 @@ private:
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_computePipelineLayout) != VK_SUCCESS)
             throw std::runtime_error("failed to create compute pipeline layout!");
 
-        auto snowflakeCompShaderCode = readFile("src/shaders/snowflake.comp.spv");
+        auto snowflakeCompShaderCode = readFile("../../src/shaders/snowflake.comp.spv");
 		VkShaderModule computeShaderModule = createShaderModule(snowflakeCompShaderCode);
 
 		VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
@@ -1666,7 +1666,7 @@ private:
 	}
 
 	void loadInstanceData() {
-		std::ifstream file("res/instance_position.csv");
+		std::ifstream file("../../res/instance_position.csv");
 		if(file.is_open()) {
 			std::string line;
 			while(std::getline(file, line)){
@@ -2675,7 +2675,7 @@ private:
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
         if (!file.is_open()) {
-            throw std::runtime_error("failed to open file!");
+            throw std::runtime_error("failed to open file - " + filename);
         }
 
         size_t fileSize = (size_t) file.tellg();
