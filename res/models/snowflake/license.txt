@@ -1,0 +1,11 @@
+Model Information:
+* title:	Snowflake
+* source:	https://sketchfab.com/3d-models/snowflake-c85fa886be4941418b5b4b18af2a65c2
+* author:	CrisDW (https://sketchfab.com/CrisDW)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Snowflake" (https://sketchfab.com/3d-models/snowflake-c85fa886be4941418b5b4b18af2a65c2) by CrisDW (https://sketchfab.com/CrisDW) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

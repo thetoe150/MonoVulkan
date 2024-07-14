@@ -13,7 +13,7 @@ project "MonoVulkan"
 	-- gcc makefile have cwd at binary, msvc have cwd at project for some reason
 	-- this is for loading resource at the right path
 	location "build"
-	filter {"options:cc=msc"}
+	filter "options:cc=msc"
 		location "build/VisualStudio"
 
 	includedirs {"inc", "tracy/public/tracy", "inc/vma", "inc/imgui"}
