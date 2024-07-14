@@ -84,79 +84,6 @@ struct Vertex {
     }
 };
 
-static std::map<std::string, std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>> 
-	getModelVertexDescriptions(tinygltf::Model model) {
-	std::map<std::string, std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>> vertexDescription;
-	unsigned int idx = 0;
-	for (auto& attribute : model.meshes[0].primitives[0].attributes) {
-		if(attribute.first != "NORMAL" && attribute.first != "POSITION" && attribute.first != "TEXCOORD_0") {
-			continue;
-		}
-		if (attribute.first == "NORMAL")
-			std::cout << "normal attribute" << std::endl;
-		else if (attribute.first == "POSITION")
-			std::cout << "position attribute" << std::endl;
-		else if (attribute.first == "TEXCOORD_0")
-			std::cout << "texture attribute" << std::endl;
-
-		// WANRING: hardcode each buffer binding for each attribute
-        VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = idx;
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        VkVertexInputAttributeDescription attributeDescription{};
-
-        attributeDescription.binding = idx;
-        attributeDescription.location = idx;
-
-		if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC2) {
-			attributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
-			bindingDescription.stride = 8;
-		}
-		else if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC3) {
-			attributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
-			bindingDescription.stride = 12;
-		}
-		else if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC4) {
-			attributeDescription.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-			bindingDescription.stride = 16;
-		}
-
-        attributeDescription.offset = 0;
-
-		vertexDescription[attribute.first] = {bindingDescription, attributeDescription};
-		++idx;
-	}
-	return vertexDescription;
-}
-
-static std::vector<int> findModelVertexBufferView(tinygltf::Model model) {
-	std::vector<int> vertexViewIdx;
-	for (auto& mesh : model.meshes) {
-		for (auto& primitive : mesh.primitives) {
-			for (auto& attribute : primitive.attributes) {
-				int bufferViewIdx = model.accessors[attribute.second].bufferView;
-				if (std::find(vertexViewIdx.begin(), vertexViewIdx.end(), bufferViewIdx) == vertexViewIdx.end()){
-					vertexViewIdx.push_back(bufferViewIdx);
-				}
-			}
-		}
-	}
-	return vertexViewIdx;
-}
-
-static std::vector<int> findModelIndexBufferView(tinygltf::Model model) {
-	std::vector<int> indexViewIdx;
-	for (auto& mesh : model.meshes) {
-		for (auto& primitive : mesh.primitives) {
-			int bufferViewIdx = model.accessors[primitive.indices].bufferView;
-			if(std::find(indexViewIdx.begin(), indexViewIdx.end(), bufferViewIdx) == indexViewIdx.end()) {
-				indexViewIdx.push_back(bufferViewIdx);
-			}
-		}
-	}
-	return indexViewIdx;
-}
 
 struct VertexInstance {
 	alignas(16) glm::vec3 pos;
@@ -271,6 +198,7 @@ private:
 	VkQueryPool timestampPool;
 
 	std::map<Object, tinygltf::Model> m_model;
+	std::map<unsigned int, glm::mat4> m_modelMeshTransforms;
 
     VkImage colorImage;
 	VmaAllocation colorImageAlloc;
@@ -1105,7 +1033,7 @@ private:
 
 			// auto bindingDescription = Vertex::getBindingDescription();
 			// auto attributeDescriptions = Vertex::getAttributeDescriptions();
-			auto vertexDef = getModelVertexDescriptions(model);
+			auto vertexDef = getModelVertexDescriptions(objIdx);
 
 			// instance attribute is the same for snowflake and candle
 			auto instanceBindingDescription = VertexInstance::getBindingDescription();
@@ -1406,7 +1334,7 @@ private:
     void createTextureImages() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
-			tinygltf::Model model = m_model[objIdx];
+			tinygltf::Model& model = m_model[objIdx];
 			if (model.images.empty()) {
 				m_textureImages[objIdx].push_back(VK_NULL_HANDLE);
 				m_textureImageAllocs[objIdx].push_back(VK_NULL_HANDLE);
@@ -1573,7 +1501,7 @@ private:
     void createTextureImageView() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
-			tinygltf::Model model = m_model[objIdx];
+			tinygltf::Model& model = m_model[objIdx];
 			for (auto& textureImage : m_textureImages[objIdx]) {
 				if(textureImage != VK_NULL_HANDLE){
 					m_textureImageViews[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
@@ -1762,6 +1690,92 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
+	std::map<std::string, std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>> 
+		getModelVertexDescriptions(Object obj) {
+		tinygltf::Model& model = m_model[obj];
+		std::map<std::string, std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>> vertexDescription;
+		unsigned int idx = 0;
+		for (auto& attribute : model.meshes[0].primitives[0].attributes) {
+			if(attribute.first != "NORMAL" && attribute.first != "POSITION" && attribute.first != "TEXCOORD_0") {
+				continue;
+			}
+			if (attribute.first == "NORMAL")
+				std::cout << "normal attribute" << std::endl;
+			else if (attribute.first == "POSITION")
+				std::cout << "position attribute" << std::endl;
+			else if (attribute.first == "TEXCOORD_0")
+				std::cout << "texture attribute" << std::endl;
+
+			// WANRING: hardcode each buffer binding for each attribute
+			VkVertexInputBindingDescription bindingDescription{};
+			bindingDescription.binding = idx;
+			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+			VkVertexInputAttributeDescription attributeDescription{};
+
+			attributeDescription.binding = idx;
+			attributeDescription.location = idx;
+
+			if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC2) {
+				attributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
+				bindingDescription.stride = 8;
+			}
+			else if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC3) {
+				attributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
+				bindingDescription.stride = 12;
+			}
+			else if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC4) {
+				attributeDescription.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+				bindingDescription.stride = 16;
+			}
+
+			attributeDescription.offset = 0;
+
+			vertexDescription[attribute.first] = {bindingDescription, attributeDescription};
+			++idx;
+		}
+		return vertexDescription;
+	}
+
+	std::vector<int> findModelVertexBufferView(Object obj) {
+		tinygltf::Model& model = m_model[obj];
+		std::vector<int> vertexViewIdx;
+		for (auto& mesh : model.meshes) {
+			for (auto& primitive : mesh.primitives) {
+				for (auto& attribute : primitive.attributes) {
+					int bufferViewIdx = model.accessors[attribute.second].bufferView;
+					if (std::find(vertexViewIdx.begin(), vertexViewIdx.end(), bufferViewIdx) == vertexViewIdx.end()){
+						vertexViewIdx.push_back(bufferViewIdx);
+					}
+				}
+			}
+		}
+		return vertexViewIdx;
+	}
+
+	std::vector<int> findModelIndexBufferView(Object obj) {
+		tinygltf::Model& model = m_model[obj];
+		std::vector<int> indexViewIdx;
+		for (auto& mesh : model.meshes) {
+			for (auto& primitive : mesh.primitives) {
+				int bufferViewIdx = model.accessors[primitive.indices].bufferView;
+				if(std::find(indexViewIdx.begin(), indexViewIdx.end(), bufferViewIdx) == indexViewIdx.end()) {
+					indexViewIdx.push_back(bufferViewIdx);
+				}
+			}
+		}
+		return indexViewIdx;
+	}
+
+	void traverseModelNodeTransform(Object obj, tinygltf::Node node, glm::mat4 mat) {
+		tinygltf::Model& model = m_model[obj];
+		if (node.children.empty()) {
+			if (node.mesh != -1) {
+				m_modelMeshTransforms[node.mesh] = mat;
+			}
+		}
+	}
+
     void loadModels() {
 		// trace();
 		std::cout << "start loading models \n";
@@ -1875,8 +1889,8 @@ private:
 	void createVertexBuffers() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
-			tinygltf::Model model = m_model[objIdx];
-			auto bufferViews = findModelVertexBufferView(model);
+			tinygltf::Model& model = m_model[objIdx];
+			auto bufferViews = findModelVertexBufferView(objIdx);
 
 			for (auto& viewIdx : bufferViews) {
 				tinygltf::BufferView view = model.bufferViews[viewIdx];
@@ -1906,8 +1920,8 @@ private:
 	void createIndexBuffers() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
-			tinygltf::Model model = m_model[objIdx];
-			auto bufferViews = findModelIndexBufferView(model);
+			tinygltf::Model& model = m_model[objIdx];
+			auto bufferViews = findModelIndexBufferView(objIdx);
 
 			for (auto& viewIdx : bufferViews) {
 				tinygltf::BufferView view = model.bufferViews[viewIdx];
@@ -2029,7 +2043,7 @@ private:
 		unsigned int materialCount = 0;
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
-			tinygltf::Model model = m_model[objIdx];
+			tinygltf::Model& model = m_model[objIdx];
 
 			materialCount += model.meshes.size();
 		}
@@ -2067,7 +2081,7 @@ private:
 	void createGraphicDescriptorSets(){
 		for (unsigned int o = 0; o < Object::COUNT; o++){
 			Object objIdx = static_cast<Object>(o);
-			tinygltf::Model model = m_model[objIdx];
+			tinygltf::Model& model = m_model[objIdx];
 			m_graphicDescriptorSets.meshMaterial[objIdx].resize(model.meshes.size());
 			int meshIdx = 0;
 
@@ -2348,7 +2362,7 @@ private:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		tinygltf::Model model = m_model[object];
+		tinygltf::Model& model = m_model[object];
 
 		int meshIdx = 0;
 		for (auto& mesh : model.meshes) {
@@ -2362,14 +2376,10 @@ private:
 			VkBuffer instanceBuffer;
 			uint32_t instanceCount{};
 			if (object == Object::SNOWFLAKE) {
-				// this offset have to be 256 byte aligned
-				DynamicOffset = {sizeof(UniformBufferObject)};
 				instanceBuffer = m_storageBuffer;
 				instanceCount = SNOWFLAKE_COUNT;
-				
 			}
 			else if (object == Object::CANDLE) {
-				DynamicOffset = 0;
 				instanceBuffer = m_towerInstanceBuffer;
 				instanceCount = m_towerInstanceRaw.size();
 			}
@@ -2387,6 +2397,14 @@ private:
 			VkBuffer indexBuffer = m_indexBuffer[object][model.accessors[indexAccessoridx].bufferView];
 			uint64_t indexBufferOffsets = model.accessors[indexAccessoridx].byteOffset;
 			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
+
+			if (object == Object::SNOWFLAKE) {
+				// this offset have to be 256 byte aligned
+				DynamicOffset = {sizeof(UniformBufferObject)};
+			}
+			else if (object == Object::CANDLE) {
+				DynamicOffset = 0;
+			}
 
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 
 						   0, 1, &m_graphicDescriptorSets.tranformUniform[object][m_currentFrame], 1, &DynamicOffset);
