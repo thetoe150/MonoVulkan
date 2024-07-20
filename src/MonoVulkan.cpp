@@ -367,6 +367,7 @@ private:
         loadModels();
         createDescriptorSetLayouts();
 		createPipelineCache();
+		createPipelineLayouts();
 		createPipelines();
         createCommandPools();
         createColorResources();
@@ -1023,12 +1024,37 @@ private:
 		vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr, &m_pipelineCache);
 	}
 
-	void createPipelines() {
-        createGraphicPipeline();
-		createComputePipeline();
+	void createPipelineLayouts() {
+		createGraphicPipelineLayouts();
+		createComputePipelineLayouts();
 	}
 
-    void createGraphicPipeline() {
+	void createPipelines() {
+        createGraphicPipelines();
+		createComputePipelines();
+	}
+
+	void createGraphicPipelineLayouts() {
+		VkPushConstantRange pushConstant{};
+		pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		pushConstant.size = sizeof(GraphicPushConstant);
+		pushConstant.offset = 0;
+
+		VkDescriptorSetLayout layouts[2] = {m_graphicDescriptorSetLayouts.tranformUniform, m_graphicDescriptorSetLayouts.meshMaterial};
+
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.setLayoutCount = 2;
+		pipelineLayoutInfo.pSetLayouts = layouts;
+		pipelineLayoutInfo.pushConstantRangeCount = 1;
+		pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
+
+		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayout) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create graphic pipeline layout!");
+		}
+	}
+
+    void createGraphicPipelines() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 			tinygltf::Model& model = m_model[objIdx];
@@ -1126,24 +1152,6 @@ private:
 			dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 			dynamicState.pDynamicStates = dynamicStates.data();
 
-			VkPushConstantRange pushConstant{};
-			pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-			pushConstant.size = sizeof(GraphicPushConstant);
-			pushConstant.offset = 0;
-
-			VkDescriptorSetLayout layouts[2] = {m_graphicDescriptorSetLayouts.tranformUniform, m_graphicDescriptorSetLayouts.meshMaterial};
-
-			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-			pipelineLayoutInfo.setLayoutCount = 2;
-			pipelineLayoutInfo.pSetLayouts = layouts;
-			pipelineLayoutInfo.pushConstantRangeCount = 1;
-			pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
-
-			if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayout) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create graphic pipeline layout!");
-			}
-
 			auto vertShaderCode = readFile("../../src/shaders/model.vert.spv");
 			auto fragShaderCode = readFile("../../src/shaders/model.frag.spv");
 
@@ -1209,7 +1217,7 @@ private:
 		}
     }
 
-	void createComputePipeline() {
+	void createComputePipelineLayouts() {
 		VkPushConstantRange pushConstant{};
 		pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 		pushConstant.size = sizeof(ComputePushConstant);
@@ -1224,7 +1232,9 @@ private:
 
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_computePipelineLayout) != VK_SUCCESS)
             throw std::runtime_error("failed to create compute pipeline layout!");
+	}
 
+	void createComputePipelines() {
         auto snowflakeCompShaderCode = readFile("../../src/shaders/snowflake.comp.spv");
 		VkShaderModule computeShaderModule = createShaderModule(snowflakeCompShaderCode);
 
