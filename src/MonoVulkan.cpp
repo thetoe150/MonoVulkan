@@ -1,7 +1,6 @@
 #include "MonoVulkan.hpp"
-#include "vulkan/vulkan_core.h"
-#include <chrono>
-#include <map>
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/gtc/type_ptr.hpp"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -198,7 +197,7 @@ private:
 	VkQueryPool timestampPool;
 
 	std::map<Object, tinygltf::Model> m_model;
-	std::map<unsigned int, glm::mat4> m_modelMeshTransforms;
+	std::map<Object, std::vector< glm::mat4>> m_modelMeshTransforms;
 
     VkImage colorImage;
 	VmaAllocation colorImageAlloc;
@@ -224,15 +223,14 @@ private:
 	std::map<Object, std::map<int, VmaAllocation>> m_vertexBufferAlloc;
 	std::map<Object, std::map<int, VmaAllocation>> m_indexBufferAlloc;
 
+    std::map<Object, std::vector<void*>> m_graphicUniformBuffersMapped;
+    std::map<Object, std::vector<VkBuffer>> m_graphicUniformBuffers;
+    std::map<Object, std::vector<VmaAllocation>> uniformBuffersAlloc;
+
     std::vector<VertexInstance> m_towerInstanceRaw;
 	VkBuffer m_towerInstanceBuffer;
 	VmaAllocation instanceBufferAlloc;
 
-
-    std::vector<VkBuffer> m_graphicUniformBuffers;
-    std::vector<VmaAllocation> uniformBuffersAlloc;
-    // std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> m_graphicUniformBuffersMapped;
 
 	// Compute buffers
 	VkBuffer m_storageBuffer;
@@ -402,31 +400,38 @@ private:
 
     void updateGraphicUniformBuffer() {
 		ZoneScopedN("UpdateUniformBuffer");
+		for (unsigned int i = 0; i < Object::COUNT; i++){
+			Object objIdx = static_cast<Object>(i);
+			tinygltf::Model& model = m_model[objIdx];
 
+			unsigned int meshCount = model.meshes.size();
+			UniformBufferObject ubo{};
 
-        UniformBufferObject ubo[2]{};
-		// watch tower
-		ubo[0].model = glm::mat4(1.0f);
-		ubo[0].model = glm::translate(ubo[0].model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
-		ubo[0].model = glm::scale(ubo[0].model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
-		
-		// snowflake
-        ubo[1].model = glm::mat4(1.0f);
-        ubo[1].model = glm::translate(ubo[1].model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
-		if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
-			ubo[1].model = glm::rotate(ubo[1].model, m_lastTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
-        ubo[1].model = glm::scale(ubo[1].model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
+			if (objIdx == Object::CANDLE) {
+				ubo.model = glm::mat4(1.0f);
+				ubo.model = glm::translate(ubo.model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
+				ubo.model = glm::scale(ubo.model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
+			}
+			else if (objIdx == Object::SNOWFLAKE) {
+				ubo.model = glm::mat4(1.0f);
+				ubo.model = glm::translate(ubo.model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
+				if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
+					ubo.model = glm::rotate(ubo.model, m_lastTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
+				ubo.model = glm::scale(ubo.model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
+			}
+			
+			glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+			glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+			proj[1][1] *= -1;
 
-		glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
-		proj[1][1] *= -1;
+			ubo.view = view;
+			ubo.proj = proj;
 
-        ubo[0].view = view;
-        ubo[0].proj = proj;
-        ubo[1].view = view;
-        ubo[1].proj = proj;
-
-        memcpy(m_graphicUniformBuffersMapped[m_currentFrame], &ubo, sizeof(ubo));
+			UniformBufferObject* tranformUBO = (UniformBufferObject*)m_graphicUniformBuffersMapped[objIdx][m_currentFrame];
+			for (unsigned int i = 0; i < meshCount; i++){
+				tranformUBO[i] = ubo;
+			}
+		}
     }
 	
 	void updateComputeUniformBuffer() {
@@ -504,12 +509,6 @@ private:
         vkDestroyPipelineLayout(device, m_computePipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroyBuffer(device, m_graphicUniformBuffers[i], nullptr);
-            vmaUnmapMemory(m_allocator, uniformBuffersAlloc[i]);
-            vmaFreeMemory(m_allocator, uniformBuffersAlloc[i]);
-        }
-
 		vkDestroyBuffer(device, m_vortexUniformBuffer, nullptr);
 		vmaUnmapMemory(m_allocator, m_vortexUniformBufferAlloc);
 		vmaFreeMemory(m_allocator, m_vortexUniformBufferAlloc);
@@ -537,6 +536,12 @@ private:
 			}
 			for (auto& bufferAllocIdx : m_vertexBufferAlloc[objIdx]) {
 				vmaFreeMemory(m_allocator, bufferAllocIdx.second);
+			}
+
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				vkDestroyBuffer(device, m_graphicUniformBuffers[objIdx][i], nullptr);
+				vmaUnmapMemory(m_allocator, uniformBuffersAlloc[objIdx][i]);
+				vmaFreeMemory(m_allocator, uniformBuffersAlloc[objIdx][i]);
 			}
 
 			for (auto& image : m_textureImages[objIdx]) {
@@ -1767,12 +1772,34 @@ private:
 		return indexViewIdx;
 	}
 
-	void traverseModelNodeTransform(Object obj, tinygltf::Node node, glm::mat4 mat) {
+	void traverseModelNodesForTransform(Object obj, tinygltf::Node node, glm::mat4 mat) {
 		tinygltf::Model& model = m_model[obj];
 		if (node.children.empty()) {
 			if (node.mesh != -1) {
-				m_modelMeshTransforms[node.mesh] = mat;
+				m_modelMeshTransforms[obj][node.mesh] = mat;
+				std::cout << "m_modelMeshTransforms at mesh " << node.mesh << " is:" << glm::to_string(mat) << "\n";
+				return;
 			}
+		}
+		
+		if(!node.matrix.empty()) {
+			glm::mat4 nodeMat = glm::make_mat4(node.matrix.data());
+			// nodeMat = glm::transpose(nodeMat);
+			mat = nodeMat * mat;
+		} else if(!node.scale.empty() || !node.rotation.empty() || !node.translation.empty()) {
+			if (!node.translation.empty()) {
+				glm::vec3 translateVec = glm::make_vec3(node.translation.data());
+				mat = glm::translate(mat, translateVec);
+			}
+			if (!node.scale.empty()) {
+				glm::vec3 scaleVec = glm::make_vec3(node.scale.data());
+				mat = glm::scale(mat, scaleVec);
+			}
+		}
+
+		for (auto& childIdx : node.children) {
+			tinygltf::Node& child = model.nodes[childIdx];
+			traverseModelNodesForTransform(obj, child, mat);
 		}
 	}
 
@@ -1782,8 +1809,21 @@ private:
 		// loadObjectModel(Object::TOWER);
 		// loadObjectModel(Object::SNOWFLAKE);
 
-		loadGltfModel(m_model[Object::CANDLE], CANDLE_MODEL_PATH.c_str());
-		loadGltfModel(m_model[Object::SNOWFLAKE], SNOWFLAKE_MODEL_PATH.c_str());
+		for (unsigned int i = 0; i < Object::COUNT; i++){
+			Object objIdx = static_cast<Object>(i);
+			tinygltf::Model& model = m_model[objIdx];
+
+			std::string path{};
+			if (objIdx == Object::CANDLE)
+				path = CANDLE_MODEL_PATH;
+			else if (objIdx == Object::SNOWFLAKE)
+				path = SNOWFLAKE_MODEL_PATH;
+
+			loadGltfModel(model, path.c_str());
+
+			m_modelMeshTransforms[objIdx].resize(model.meshes.size());
+			traverseModelNodesForTransform(objIdx, model.nodes[0], glm::mat4(1.0f));
+		}
 
 		std::cout << "finish loading models \n";
 	}
@@ -1953,18 +1993,23 @@ private:
 	}
 
     void createGraphicUniformBuffers() {
-		// one uniform buffer for both tower and snowflake
-		VkDeviceSize bufferSize = sizeof(UniformBufferObject) * 2;
+		for (unsigned int i = 0; i < Object::COUNT; i++){
+			Object objIdx = static_cast<Object>(i);
+			tinygltf::Model& model = m_model[objIdx];
+			unsigned int meshCount = model.meshes.size();
+			VkDeviceSize bufferSize = sizeof(UniformBufferObject) * meshCount;
 
-		m_graphicUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-		uniformBuffersAlloc.resize(MAX_FRAMES_IN_FLIGHT);
-		m_graphicUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+			m_graphicUniformBuffers[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+			uniformBuffersAlloc[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+			m_graphicUniformBuffersMapped[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
 
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-				, m_graphicUniformBuffers[i], uniformBuffersAlloc[i]);
 
-			vmaMapMemory(m_allocator, uniformBuffersAlloc[i], &m_graphicUniformBuffersMapped[i]);
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					, m_graphicUniformBuffers[objIdx][i], uniformBuffersAlloc[objIdx][i]);
+
+				vmaMapMemory(m_allocator, uniformBuffersAlloc[objIdx][i], &m_graphicUniformBuffersMapped[objIdx][i]);
+			}
 		}
     }
 
@@ -2136,7 +2181,7 @@ private:
 
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				VkDescriptorBufferInfo bufferInfo{};
-				bufferInfo.buffer = m_graphicUniformBuffers[i];
+				bufferInfo.buffer = m_graphicUniformBuffers[objIdx][i];
 				bufferInfo.offset = 0;
 				bufferInfo.range = sizeof(UniformBufferObject);
 
@@ -2398,13 +2443,12 @@ private:
 			uint64_t indexBufferOffsets = model.accessors[indexAccessoridx].byteOffset;
 			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
 
-			if (object == Object::SNOWFLAKE) {
-				// this offset have to be 256 byte aligned
-				DynamicOffset = {sizeof(UniformBufferObject)};
-			}
-			else if (object == Object::CANDLE) {
-				DynamicOffset = 0;
-			}
+			// mesh local transform
+			UniformBufferObject* uniformMapped = (UniformBufferObject*)m_graphicUniformBuffersMapped[object][m_currentFrame];
+			uniformMapped[meshIdx].model = uniformMapped[meshIdx].model * m_modelMeshTransforms[object][meshIdx];
+
+			// this offset have to be 256 byte aligned
+			DynamicOffset = sizeof(UniformBufferObject) * meshIdx;
 
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 
 						   0, 1, &m_graphicDescriptorSets.tranformUniform[object][m_currentFrame], 1, &DynamicOffset);
