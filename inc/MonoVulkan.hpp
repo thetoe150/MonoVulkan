@@ -12,12 +12,19 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+// already included in tiny_obj_loader.h
+// #include "stb_image.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
+
+#define TINYGLTF_IMPLEMENTATION
+#define TINYGLTF_NO_STB_IMAGE_WRITE
+#include <tiny_gltf.h>
 
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
@@ -42,6 +49,11 @@
 #include <set>
 #include <unordered_map>
 
+#include "cpptrace/cpptrace.hpp"
+// static void trace() {
+//     cpptrace::generate_trace().print();
+// }
+
 #define CHECK_VK_RESULT(f, msg)																	\
 {																								\
 	if(VkResult res = f){																		\
@@ -53,24 +65,25 @@ constexpr uint32_t WIDTH = 1600;
 constexpr uint32_t HEIGHT = 900;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
-constexpr float c_towerScale[3] = {0.7f, 0.7f, 0.7f};
+constexpr float c_towerScale[3] = {10.0f, 10.0f, 10.0f};
 constexpr float c_towerRotate[3] = {0.f, 0.f, 0.f};
-constexpr float c_towerTranslate[3] = {0.f, -5.f, 0.f};
+constexpr float c_towerTranslate[3] = {0.f, 0.f, 0.f};
 
-static float s_snowScale[3] = {0.001f, 0.001f, 0.001f};
+static float s_snowScale[3] = {0.008f, 0.008f, 0.005f};
 static float s_snowRotate[3] = {0.f, 0.f, 0.f};
 static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
 
-static float s_viewPos[3] = {20.f, 15.f, 0.f};
+static float s_viewPos[3] = {20.f, 3.f, -10.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 
-const std::string TOWER_MODEL_PATH = "res/models/wooden_watch_tower2.obj";
-const std::string SNOWFLAKE_MODEL_PATH = "res/models/Snowflake.obj";
-const std::string TOWER_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
+const std::string CANDLE_MODEL_PATH = "../../res/models/candles_set/scene.gltf";
+const std::string SNOWFLAKE_MODEL_PATH = "../../res/models/snowflake/scene.gltf";
+const std::string TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
 // const std::string SNOWFLAKE_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
+// const std::string TOWER_MODEL_PATH = "../../res/models/wooden_watch_tower2.obj";
 
-constexpr int SNOWFLAKE_COUNT = 2048;
+constexpr int SNOWFLAKE_COUNT = 4096;
 constexpr int MAX_VORTEX_COUNT = 10;
 
 static auto startTime = std::chrono::high_resolution_clock::now();
@@ -78,9 +91,10 @@ static std::array<float, MAX_VORTEX_COUNT> s_baseRadius;
 static std::array<float, MAX_VORTEX_COUNT> s_basePhase;
 static std::array<float, MAX_VORTEX_COUNT> s_baseForce;
 
-enum class ObjectType{
-	TOWER,
-	SNOWFLAKE
+enum Object{
+	CANDLE = 0,
+	SNOWFLAKE,
+	COUNT
 };
 
 
@@ -123,7 +137,8 @@ const std::vector<const char*> validationLayers = {
 
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-	VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME
+	VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME,
+	VK_EXT_ROBUSTNESS_2_EXTENSION_NAME
 };
 
 #ifdef NDEBUG
