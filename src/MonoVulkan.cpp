@@ -146,6 +146,7 @@ public:
 
     void run() {
 		init();
+			 updateContext();
         mainLoop();
 		clean();
     }
@@ -260,7 +261,8 @@ private:
     std::vector<VkSemaphore> m_renderFinishedSemaphores;
     std::vector<VkSemaphore> m_computeStartingSemaphores;
 
-    std::vector<VkFence> m_inFlightFences;
+    std::vector<VkFence> m_inFlightGraphicFences;
+    VkFence m_inFlightComputeFences;
 	VkSemaphore m_computeFinishedSemaphore;
     uint32_t m_currentFrame = 0;
 
@@ -456,9 +458,9 @@ private:
 		m_currentDeltaTime = currentTime - m_lastTime;
         m_lastTime = currentTime;
 
-		updateGraphicUniformBuffer();
-		updateComputeUniformBuffer();
-		updateComputePushConstant();
+		// updateGraphicUniformBuffer();
+		// updateComputeUniformBuffer();
+		// updateComputePushConstant();
 	}
 
     void mainLoop() {
@@ -565,8 +567,9 @@ private:
             vkDestroySemaphore(device, m_renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(device, m_imageAvailableSemaphores[i], nullptr);
             vkDestroySemaphore(device, m_computeStartingSemaphores[i], nullptr);
-            vkDestroyFence(device, m_inFlightFences[i], nullptr);
+            vkDestroyFence(device, m_inFlightGraphicFences[i], nullptr);
         }
+		vkDestroyFence(device, m_inFlightComputeFences, nullptr);
 		vkDestroySemaphore(device, m_computeFinishedSemaphore, nullptr);
 
         vkDestroyCommandPool(device, m_graphicCommandPool, nullptr);
@@ -1301,8 +1304,6 @@ private:
 		if (vkCreateCommandPool(device, &computePoolInfo, nullptr, &m_computeCommandPool) != VK_SUCCESS){
 			throw std::runtime_error("failed to create compute command pool!");
 		}
-			
-
     }
 
     void createColorResources() {
@@ -2480,6 +2481,7 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
+		{
 			VkRenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			renderPassInfo.renderPass = renderPass;
@@ -2497,18 +2499,20 @@ private:
 			vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 				// draw models	
 				for (unsigned int i = 0; i < Object::COUNT; i++){
+					TracyVkZone(tracyContext, commandBuffer, "Draw Model");
 					Object objIdx = static_cast<Object>(i);
 					drawModel(commandBuffer, objIdx);
 				}
-			{
-				TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
-				ImGui::Render();
-				ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, VK_NULL_HANDLE);
-			}
+				{
+					TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
+					ImGui::Render();
+					ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, VK_NULL_HANDLE);
+				}
 
 			vkCmdEndRenderPass(commandBuffer);
 		
-		TracyVkCollect(tracyContext, m_graphicCommandBuffers[m_currentFrame]);
+			TracyVkCollect(tracyContext, commandBuffer);
+		}
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record graphic command buffer!");
@@ -2523,22 +2527,27 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
 		}
 
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets, 0, nullptr);
-		vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), (void*)&m_computePushConstant);
-		// FIXME: choose right number of workgroups
-		vkCmdDispatch(commandBuffer, 256, 1, 1);
+		{
+			// TracyVkZone(tracyContext, commandBuffer, "Dispatch Snowflake Compute");
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets, 0, nullptr);
+			vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), (void*)&m_computePushConstant);
+			// FIXME: choose right number of workgroups
+			vkCmdDispatch(commandBuffer, 1024, 1, 1);
+		}
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record compute command buffer!");
         }
+
+		// TracyVkCollect(tracyContext, commandBuffer);
 	}
 
     void createSyncObjects() {
         m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         m_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 		m_computeStartingSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+        m_inFlightGraphicFences.resize(MAX_FRAMES_IN_FLIGHT);
 
 		// we can submit an empty command buffer to signal the m_renderFinishedSemaphores but
 		// doing this way creating a timeline semaphore is cooler
@@ -2558,11 +2567,14 @@ private:
             if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_computeStartingSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(device, &fenceInfo, nullptr, &m_inFlightFences[i]) != VK_SUCCESS) {
+                vkCreateFence(device, &fenceInfo, nullptr, &m_inFlightGraphicFences[i]) != VK_SUCCESS ){
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
         }
-		// signal the last index compute starting semaphore because if we don't manually, noone do :(
+		CHECK_VK_RESULT(vkCreateFence(device, &fenceInfo, nullptr, &m_inFlightComputeFences)
+					, "fail to create Compute fence");
+
+		// signal the last index computeStartingSemaphore because if we don't do manually, noone do :(
 		VkSubmitInfo submitInfo{};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.signalSemaphoreCount = 1;
@@ -2616,15 +2628,26 @@ private:
 		uint32_t imageIndex;
 		VkResult result{};
 		{
+			ZoneScopedN("Submit Compute Command Buffer");
 			{
-				ZoneScopedN("Execute Compute Command Buffer");
+				ZoneScopedN("Wait for Compute Fence");
+				vkWaitForFences(device, 1, &m_inFlightComputeFences, VK_TRUE, UINT64_MAX);
+				vkResetFences(device, 1, &m_inFlightComputeFences);
+			}
+			{
+				// NOTE: only update Uniform buffer after the command buffer with the same m_currentFrame (the last 2 frames) have FINISHED.
+				// have to update uniform after WaitForFence or else uniform are override within that frame
+				updateComputeUniformBuffer();
+				updateComputePushConstant();
+
+				ZoneScopedN("Dispatch Compute Command Buffer");
 				vkResetCommandBuffer(m_computeCommandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
 				recordComputeCommandBuffer(m_computeCommandBuffer);
 
 				VkSubmitInfo computeSubmitInfo{};
 				VkSemaphore computeWaitSemaphores[] = {m_computeStartingSemaphores[(m_currentFrame - 1) % 2]};
-				VkSemaphore computeSignalSemaphores[] = {m_computeFinishedSemaphore};
 				VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
+				VkSemaphore computeSignalSemaphores[] = {m_computeFinishedSemaphore};
 				computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
 				computeSubmitInfo.waitSemaphoreCount = sizeof(computeWaitSemaphores) / sizeof(VkSemaphore);
@@ -2635,15 +2658,17 @@ private:
 				computeSubmitInfo.commandBufferCount = 1;
 				computeSubmitInfo.pCommandBuffers = &m_computeCommandBuffer;
 
-				CHECK_VK_RESULT(vkQueueSubmit(m_computeQueue, 1, &computeSubmitInfo, 0)
+				CHECK_VK_RESULT(vkQueueSubmit(m_computeQueue, 1, &computeSubmitInfo, m_inFlightComputeFences)
 					, "fail to submit compute command buffer");
-				vkQueueWaitIdle(m_computeQueue);
+				// vkQueueWaitIdle(m_computeQueue);
 			}
+		}
 
+		{
+			ZoneScopedN("Submit Graphic Command Buffer");
 			{
 				ZoneScopedN("Accquire Next Image");
 				result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
-
 				if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 					recreateSwapChain();
 					return;
@@ -2651,21 +2676,19 @@ private:
 					throw std::runtime_error("failed to acquire swap chain image!");
 				}
 			}
-
 			{
-				ZoneScopedN("Wait for Commandbuffer Fence");
-				vkWaitForFences(device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+				ZoneScopedN("Wait for Graphic Fence");
+				vkWaitForFences(device, 1, &m_inFlightGraphicFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+				vkResetFences(device, 1, &m_inFlightGraphicFences[m_currentFrame]);
 			}
 
-			vkResetFences(device, 1, &m_inFlightFences[m_currentFrame]);
-		
+			// NOTE: only update Uniform buffer after the command buffer with the same m_currentFrame (the last 2 frames) have FINISHED.
+			// have to update uniform after WaitForFence or else uniform are override within that frame
+			updateGraphicUniformBuffer();
+
 			vkResetCommandBuffer(m_graphicCommandBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
 			recordGraphicCommandBuffer(m_graphicCommandBuffers[m_currentFrame], imageIndex);
-		}
 
-		VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_currentFrame], m_computeStartingSemaphores[m_currentFrame]};
-		{
-			ZoneScopedN("Submit Commandbuffer");
 			VkSubmitInfo submitInfo{};
 			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -2678,10 +2701,11 @@ private:
 			submitInfo.commandBufferCount = 1;
 			submitInfo.pCommandBuffers = &m_graphicCommandBuffers[m_currentFrame];
 
+			VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_currentFrame], m_computeStartingSemaphores[m_currentFrame]};
 			submitInfo.signalSemaphoreCount = sizeof(signalSemaphores) / sizeof(VkSemaphore);
 			submitInfo.pSignalSemaphores = signalSemaphores;
 
-			if (VkResult res = vkQueueSubmit(m_graphicQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame])) {
+			if (VkResult res = vkQueueSubmit(m_graphicQueue, 1, &submitInfo, m_inFlightGraphicFences[m_currentFrame])) {
 				std::string msg = "failed to submit graphic command buffer with CODE: " + vk::to_string((vk::Result)res);
 				throw std::runtime_error(msg);
 			}
