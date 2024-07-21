@@ -402,7 +402,7 @@ private:
 	}
 
     void updateGraphicUniformBuffer() {
-		ZoneScopedN("UpdateUniformBuffer");
+		ZoneScopedN("Update Graphic Transform Uniform Buffer");
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 			tinygltf::Model& model = m_model[objIdx];
@@ -438,6 +438,7 @@ private:
     }
 	
 	void updateComputeUniformBuffer() {
+		ZoneScopedN("Update Compute Vortex Uniform Buffer");
 		for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
 			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
 
@@ -2528,19 +2529,18 @@ private:
 		}
 
 		{
-			// TracyVkZone(tracyContext, commandBuffer, "Dispatch Snowflake Compute");
+			TracyVkZone(tracyContext, commandBuffer, "Dispatch Snowflake Compute");
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets, 0, nullptr);
 			vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), (void*)&m_computePushConstant);
 			// FIXME: choose right number of workgroups
 			vkCmdDispatch(commandBuffer, 1024, 1, 1);
+			TracyVkCollect(tracyContext, commandBuffer);
 		}
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record compute command buffer!");
         }
-
-		// TracyVkCollect(tracyContext, commandBuffer);
 	}
 
     void createSyncObjects() {
