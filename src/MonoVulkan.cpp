@@ -229,6 +229,7 @@ private:
 	std::map<Object, std::map<int, VmaAllocation>> m_indexBufferAlloc;
 
 	std::map<Object, std::map<int, VkBuffer>> m_animBuffer;
+	std::map<Object, std::map<int, VmaAllocation>> m_animBufferAlloc;
 
     std::map<Object, std::vector<void*>> m_graphicUniformBuffersMapped;
     std::map<Object, std::vector<VkBuffer>> m_graphicUniformBuffers;
@@ -282,7 +283,13 @@ private:
 
 	void initContext() {
         auto now = std::chrono::high_resolution_clock::now();
-        m_lastTime = std::chrono::duration<float, std::chrono::seconds::period>(now - startTime).count();
+        float currentTime = std::chrono::duration<float, std::chrono::seconds::period>(now - startTime).count();
+
+        m_lastTime = currentTime;
+		m_currentDeltaTime = 0;
+
+        loadModels();
+		computeAnimation(Object::CANDLE);
 	}
 
     void initGLFW() {
@@ -373,7 +380,6 @@ private:
         createSwapChain();
         createImageViews();
         createRenderPass();
-        loadModels();
         createDescriptorSetLayouts();
 		createPipelineCache();
 		createPipelineLayouts();
@@ -390,6 +396,7 @@ private:
         createIndexBuffers();
 		createInstanceBuffer();
 		createUniformBuffers();
+		createAnimationBuffers();
 		createStorageBuffer();
         createDescriptorPool();
         createDescriptorSets();
@@ -548,6 +555,12 @@ private:
 				vkDestroyBuffer(device, bufferIdx.second, nullptr);
 			}
 			for (auto& bufferAllocIdx : m_vertexBufferAlloc[objIdx]) {
+				vmaFreeMemory(m_allocator, bufferAllocIdx.second);
+			}
+			for (auto& bufferIdx : m_animBuffer[objIdx]) {
+				vkDestroyBuffer(device, bufferIdx.second, nullptr);
+			}
+			for (auto& bufferAllocIdx : m_animBufferAlloc[objIdx]) {
 				vmaFreeMemory(m_allocator, bufferAllocIdx.second);
 			}
 
@@ -2138,6 +2151,22 @@ private:
 		}
     }
 
+	void createAnimationBuffers() {
+		for (unsigned int i = 0; i < Object::COUNT; i++){
+			Object objIdx = static_cast<Object>(i);
+			if (m_modelMeshAnimPositions.find(objIdx) == m_modelMeshAnimPositions.end()) {
+				continue;
+			}
+			for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
+				if (!m_modelMeshAnimPositions[objIdx][meshIdx].empty()){
+					unsigned int size = m_modelMeshAnimPositions[objIdx][meshIdx].size() * sizeof(glm::vec3);
+					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+						  , m_animBuffer[objIdx][meshIdx], m_animBufferAlloc[objIdx][meshIdx]);
+				}
+			}
+		}
+	}
+
     void createComputeUniformBuffers() {
 		m_vortexUniformBufferMapped = static_cast<void*>(new Vortex[MAX_VORTEX_COUNT]);
 
@@ -2595,12 +2624,14 @@ private:
 	}
 
 	void transferBuffers(VkCommandBuffer commandBuffer) {
-
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 			if (m_modelMeshAnimPositions.find(objIdx) == m_modelMeshAnimPositions.end()) {
 				continue;
 			}
+			std::vector<VkBufferMemoryBarrier> animBarriers{};
+			std::vector<VkBuffer> stagingBuffers{};
+			std::vector<VmaAllocation> stagingAllocs{};
 			for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
 				if (!m_modelMeshAnimPositions[objIdx][meshIdx].empty()){
 					// Transfer vertex position animation data
@@ -2615,35 +2646,39 @@ private:
 						memcpy(data, m_modelMeshAnimPositions[objIdx][meshIdx].data(), static_cast<size_t>(size));
 					vmaUnmapMemory(m_allocator, stagingAlloc);
 
-					VkBuffer animPosBuffer;
-					VmaAllocation animPosAlloc;
-					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, animPosBuffer, animPosAlloc);
-
 					VkBufferCopy copyRegion{};
 					copyRegion.size = size;
-					vkCmdCopyBuffer(commandBuffer, stagingBuffer, animPosBuffer, 1, &copyRegion);
 
-					vkDestroyBuffer(device, stagingBuffer, nullptr);
-					vmaFreeMemory(m_allocator, stagingAlloc);
-					
-					VkBufferMemoryBarrier animBarrier;
+					vkCmdCopyBuffer(commandBuffer, stagingBuffer, m_animBuffer[objIdx][meshIdx], 1, &copyRegion);
+
+					stagingBuffers.push_back(stagingBuffer);
+					stagingAllocs.push_back(stagingAlloc);
+
+					VkBufferMemoryBarrier animBarrier{};
 					animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 					animBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
-					animBarrier.srcAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+					animBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
 					animBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 					animBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					animBarrier.buffer = animPosBuffer;
+					animBarrier.buffer = m_animBuffer[objIdx][meshIdx];
 					animBarrier.size = size;
 					animBarrier.offset = 0;
-
-					m_animBuffer[objIdx][meshIdx] = animPosBuffer;
-
-					// vkCmdPipelineBarrier(commandBuffer,
-					// 	VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
-					// 	0, nullptr,
-					// 	1, &animBarrier,
-					// 	0, nullptr);
+				 
+					animBarriers.push_back(animBarrier);
 				}
+			}
+
+			vkCmdPipelineBarrier(commandBuffer,
+				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+				0, nullptr,
+				animBarriers.size(), animBarriers.data(),
+				0, nullptr);
+
+			for(auto& buffer : stagingBuffers) {
+					vkDestroyBuffer(device, buffer, nullptr);
+			}
+			for(auto& alloc : stagingAllocs) {
+					vmaFreeMemory(m_allocator, alloc);
 			}
 		}
 	}

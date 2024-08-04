@@ -49,10 +49,6 @@
 #include <set>
 #include <unordered_map>
 
-#include "cpptrace/cpptrace.hpp"
-// static void trace() {
-//     cpptrace::generate_trace().print();
-// }
 
 #define CHECK_VK_RESULT(f, msg)																	\
 {																								\
