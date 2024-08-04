@@ -1,0 +1,35 @@
+#version 450
+
+layout (constant_id = 0) const int weightCount = 100;
+
+layout (push_constant) uniform AnimationData{
+	// int weightCount;
+	int vertexCount;
+};
+
+layout (std140, binding = 0) buffer BaseVertexPosition{
+	vec3 s_baseVertexPos[ ];
+};
+
+layout (std140, binding = 1) buffer MorphTargets{
+	vec3 s_morphTargets[ ];
+};
+
+layout (binding = 2) uniform Weight{
+	float u_weight[weightCount];
+};
+
+layout (std140, binding = 3) buffer VertexPosition{
+	vec3 s_morphVertexPos[];
+};
+
+void main(){
+	s_morphVertexPos = s_baseVertexPos;
+
+	for (int w = 0; w < weightCount; w++) {
+		int weightVertexIdx = w * vertexCount;
+		for(int v = 0; v < vertexCount; v++) {
+			s_morphVertexPos[v] += u_weight[w] * s_morphTargets[weightVertexIdx + v];
+		}
+	}
+}

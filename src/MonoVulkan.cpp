@@ -1,6 +1,7 @@
 #include "MonoVulkan.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "vulkan/vulkan_core.h"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -146,7 +147,7 @@ public:
 
     void run() {
 		init();
-			 updateContext();
+		updateContext();
         mainLoop();
 		clean();
     }
@@ -200,6 +201,9 @@ private:
 	std::map<Object, tinygltf::Model> m_model;
 	std::map<Object, std::vector< glm::mat4>> m_modelMeshTransforms;
 
+	std::map<Object, std::vector<std::vector< glm::vec3>>> m_modelMeshAnimPositions;
+	std::map<Object, std::vector<std::vector< float>>> m_modelMeshFrameWeights;
+
     VkImage colorImage;
 	VmaAllocation colorImageAlloc;
     // VkDeviceMemory colorImageMemory;
@@ -223,6 +227,8 @@ private:
 	std::map<Object, std::map<int, VkBuffer>> m_indexBuffer;
 	std::map<Object, std::map<int, VmaAllocation>> m_vertexBufferAlloc;
 	std::map<Object, std::map<int, VmaAllocation>> m_indexBufferAlloc;
+
+	std::map<Object, std::map<int, VkBuffer>> m_animBuffer;
 
     std::map<Object, std::vector<void*>> m_graphicUniformBuffersMapped;
     std::map<Object, std::vector<VkBuffer>> m_graphicUniformBuffers;
@@ -268,6 +274,7 @@ private:
 
 	float m_lastTime;
 	float m_currentDeltaTime;
+	float m_currentAnimTime = 0;
 
 	VkDescriptorPool imguiDescriptorPool;
 
@@ -462,6 +469,8 @@ private:
 		// updateGraphicUniformBuffer();
 		// updateComputeUniformBuffer();
 		// updateComputePushConstant();
+
+		computeAnimation(Object::CANDLE);
 	}
 
     void mainLoop() {
@@ -1540,7 +1549,7 @@ private:
 			// 	continue;
 			// }
 			
-			// assume there is 1 sampler per model
+			// assume there is 1 texture sampler per model
 			// TODO: set sampler according to gltf model
 			// tinygltf::Sampler& modelSampler = m_model[objIdx].samplers[0];
 
@@ -1783,6 +1792,110 @@ private:
 		}
 		return indexViewIdx;
 	}
+
+#if 1
+	void computeAnimation(Object obj) {
+		tinygltf::Model& model = m_model[obj];
+		m_modelMeshAnimPositions[obj].resize(model.meshes.size());
+		
+		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+			auto weights = computeWeights(obj, meshIdx);
+			if (!weights.empty()) {
+				computeMorphTargets(obj, meshIdx, weights);
+			}
+			else {
+				m_modelMeshAnimPositions[obj][meshIdx] = {};
+			}
+		}
+	}
+
+	std::vector<float> computeWeights(Object obj, unsigned int meshIdx) {
+		// sample animation
+		tinygltf::Model& model = m_model[obj];
+		// WANRING: assume only 1 animation per object
+		tinygltf::Animation& anims = model.animations[0];
+		std::vector<tinygltf::AnimationChannel>& channels = anims.channels;
+		std::vector<tinygltf::AnimationChannel>::iterator channel = std::find_if(channels.begin(), channels.end(), [&model, meshIdx](tinygltf::AnimationChannel& i_channel){
+			auto& node = model.nodes[i_channel.target_node];
+			if(node.mesh == meshIdx)
+				return true;
+			return false;
+		});
+
+		if (channel == channels.end())
+			return {};
+
+		auto& sampler = anims.samplers[channel->sampler];
+		const tinygltf::Accessor& inputAcc = model.accessors[sampler.input];
+		const tinygltf::BufferView& inputView = model.bufferViews[inputAcc.bufferView];
+		const tinygltf::Buffer& inputBuffer = model.buffers[inputView.buffer];
+		const unsigned char* pInData = inputBuffer.data.data() + inputView.byteOffset + inputAcc.byteOffset;	
+
+		m_currentAnimTime += m_currentDeltaTime;
+		if (m_currentAnimTime > inputAcc.maxValues[0])
+			m_currentAnimTime -= inputAcc.maxValues[0];
+
+		const float* inputWeights = reinterpret_cast<const float*>(pInData);
+		unsigned int hi = 1;
+		for (; hi < inputAcc.count; hi++) {
+			if(inputWeights[hi] > m_currentAnimTime)
+				break;
+		}
+
+		float ratio = (m_currentAnimTime - inputWeights[hi-1]) / (inputWeights[hi] - inputWeights[hi-1]);
+
+		const tinygltf::Accessor& outputAcc = model.accessors[sampler.output];
+		const tinygltf::BufferView& outputView = model.bufferViews[outputAcc.bufferView];
+		const tinygltf::Buffer& outputBuffer = model.buffers[outputView.buffer];
+		const unsigned char* pOutData = outputBuffer.data.data() + outputView.byteOffset + outputAcc.byteOffset;	
+
+		const float* outputWeights = reinterpret_cast<const float*>(pOutData);
+		const float* liWeights = outputWeights + (hi - 1) * inputAcc.count;
+		const float* hiWeights = outputWeights + hi * inputAcc.count;
+		
+		std::vector<float> res{};
+		res.resize(inputAcc.count);
+		for (unsigned int i = 0; i < res.size(); i++) {
+			res[i] = hiWeights[i] * ratio + liWeights[i] * (1 - ratio);
+			// std::cout << "hiWeights[" << i << "]" << " = " << hiWeights[i] << "\n";
+			// std::cout << "liWeights[" << i << "]" << " = " << liWeights[i] << "\n";
+			// std::cout << "res[" << i << "]" << " = " << res[i] << "\n";
+		}
+
+		return res;
+	}
+
+	void computeMorphTargets(Object obj, unsigned int meshIdx, std::vector<float> weights) {
+		tinygltf::Model& model = m_model[obj];
+		auto& mesh = model.meshes[meshIdx];
+
+		// set original position
+		const tinygltf::Accessor& posAccessor = model.accessors[mesh.primitives[0].attributes["POSITION"]];
+		const tinygltf::BufferView& posView = model.bufferViews[posAccessor.bufferView];
+		const tinygltf::Buffer& posBuffer = model.buffers[posView.buffer];
+		
+		const unsigned char* pData = posBuffer.data.data() + posView.byteOffset + posAccessor.byteOffset;
+		const glm::vec3* pPos = reinterpret_cast<const glm::vec3*>(pData);
+		m_modelMeshAnimPositions[obj][meshIdx].resize(posAccessor.count);
+
+		memcpy(m_modelMeshAnimPositions[obj][meshIdx].data(), pPos, posAccessor.count * sizeof(glm::vec3));
+
+		// compute morph target
+		auto& morphTargets = mesh.primitives[0].targets;
+		for (unsigned int morphIdx = 0; morphIdx < morphTargets.size(); morphIdx++) {
+			unsigned int morphAccessorIdx = morphTargets[morphIdx]["POSITION"];
+			const tinygltf::Accessor& morphAccessor = model.accessors[morphAccessorIdx];
+			const tinygltf::BufferView& bufferView = model.bufferViews[morphAccessor.bufferView];
+			const tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+			const unsigned char* pData = buffer.data.data() + bufferView.byteOffset + morphAccessor.byteOffset;
+			const glm::vec3* pPos = reinterpret_cast<const glm::vec3*>(pData);
+
+			for (unsigned int vertexIdx = 0; vertexIdx < morphAccessor.count; vertexIdx++){
+				m_modelMeshAnimPositions[obj][meshIdx][vertexIdx] += pPos[vertexIdx] * weights[morphIdx];
+			}
+		}
+	}
+#endif
 
 	void traverseModelNodesForTransform(Object obj, tinygltf::Node node, glm::mat4 mat) {
 		tinygltf::Model& model = m_model[obj];
@@ -2425,7 +2538,18 @@ private:
 		for (auto& mesh : model.meshes) {
 			// assume there is 1 primitive per mesh
 			auto& attributes = mesh.primitives[0].attributes;
+
 			VkBuffer positionBuffer = m_vertexBuffer[object][model.accessors[attributes["POSITION"]].bufferView];
+			size_t positionBufferOffset = model.accessors[attributes["POSITION"]].byteOffset;
+			bool hasAnimation = m_modelMeshAnimPositions.find(object) !=  m_modelMeshAnimPositions.end();
+			if (hasAnimation && !m_modelMeshAnimPositions[object][meshIdx].empty()) {
+				positionBuffer = m_animBuffer[object][meshIdx];
+				positionBufferOffset = 0;
+			}
+
+			size_t normalBufferOffset = model.accessors[attributes["NORMAL"]].byteOffset;
+			size_t texCordBufferOffset = model.accessors[attributes["TEXCOORD_0"]].byteOffset;
+
 			VkBuffer normalBuffer = m_vertexBuffer[object][model.accessors[attributes["NORMAL"]].bufferView];
 			VkBuffer texCordBuffer = m_vertexBuffer[object][model.accessors[attributes["TEXCOORD_0"]].bufferView];
 
@@ -2442,12 +2566,8 @@ private:
 			}
 
 			VkBuffer vertexBuffers[4] = {positionBuffer, normalBuffer, texCordBuffer, instanceBuffer};
-			// TODO: is this vertex offset right?
-			size_t positionBufferOffset = model.accessors[attributes["POSITION"]].byteOffset;
-			size_t normalBufferOffset = model.accessors[attributes["NORMAL"]].byteOffset;
-			size_t texCordBufferOffset = model.accessors[attributes["TEXCOORD_0"]].byteOffset;
-
 			VkDeviceSize vertexBufferOffsets[4] = {positionBufferOffset, normalBufferOffset, texCordBufferOffset, 0};
+
 			vkCmdBindVertexBuffers(commandBuffer, 0, 4, vertexBuffers, vertexBufferOffsets);
 
 			auto& indexAccessoridx = mesh.primitives[0].indices;
@@ -2474,6 +2594,60 @@ private:
 		}
 	}
 
+	void transferBuffers(VkCommandBuffer commandBuffer) {
+
+		for (unsigned int i = 0; i < Object::COUNT; i++){
+			Object objIdx = static_cast<Object>(i);
+			if (m_modelMeshAnimPositions.find(objIdx) == m_modelMeshAnimPositions.end()) {
+				continue;
+			}
+			for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
+				if (!m_modelMeshAnimPositions[objIdx][meshIdx].empty()){
+					// Transfer vertex position animation data
+					VkBuffer stagingBuffer;
+					VmaAllocation stagingAlloc;
+					unsigned int size = m_modelMeshAnimPositions[objIdx][meshIdx].size() * sizeof(glm::vec3);
+
+					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
+
+					void* data;
+					vmaMapMemory(m_allocator, stagingAlloc, &data);
+						memcpy(data, m_modelMeshAnimPositions[objIdx][meshIdx].data(), static_cast<size_t>(size));
+					vmaUnmapMemory(m_allocator, stagingAlloc);
+
+					VkBuffer animPosBuffer;
+					VmaAllocation animPosAlloc;
+					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, animPosBuffer, animPosAlloc);
+
+					VkBufferCopy copyRegion{};
+					copyRegion.size = size;
+					vkCmdCopyBuffer(commandBuffer, stagingBuffer, animPosBuffer, 1, &copyRegion);
+
+					vkDestroyBuffer(device, stagingBuffer, nullptr);
+					vmaFreeMemory(m_allocator, stagingAlloc);
+					
+					VkBufferMemoryBarrier animBarrier;
+					animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					animBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
+					animBarrier.srcAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+					animBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					animBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					animBarrier.buffer = animPosBuffer;
+					animBarrier.size = size;
+					animBarrier.offset = 0;
+
+					m_animBuffer[objIdx][meshIdx] = animPosBuffer;
+
+					// vkCmdPipelineBarrier(commandBuffer,
+					// 	VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+					// 	0, nullptr,
+					// 	1, &animBarrier,
+					// 	0, nullptr);
+				}
+			}
+		}
+	}
+
     void recordGraphicCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -2481,6 +2655,10 @@ private:
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
             throw std::runtime_error("failed to begin recording command buffer!");
         }
+
+		{
+			transferBuffers(commandBuffer);
+		}
 
 		{
 			VkRenderPassBeginInfo renderPassInfo{};
@@ -2498,10 +2676,12 @@ private:
 			renderPassInfo.pClearValues = clearValues.data();
 
 			vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
 				// draw models	
 				for (unsigned int i = 0; i < Object::COUNT; i++){
 					TracyVkZone(tracyContext, commandBuffer, "Draw Model");
 					Object objIdx = static_cast<Object>(i);
+
 					drawModel(commandBuffer, objIdx);
 				}
 				{
