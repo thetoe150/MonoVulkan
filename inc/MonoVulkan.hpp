@@ -81,6 +81,7 @@ const std::string TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
 
 constexpr int SNOWFLAKE_COUNT = 4096;
 constexpr int MAX_VORTEX_COUNT = 10;
+constexpr float CANDLE_ANIMATION_SPEED = 0.5f;
 
 static auto startTime = std::chrono::high_resolution_clock::now();
 static std::array<float, MAX_VORTEX_COUNT> s_baseRadius;

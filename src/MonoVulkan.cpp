@@ -274,7 +274,7 @@ private:
     uint32_t m_currentFrame = 0;
 
 	float m_lastTime;
-	float m_currentDeltaTime;
+	float m_currentDeltaTime = 0;
 	float m_currentAnimTime = 0;
 
 	VkDescriptorPool imguiDescriptorPool;
@@ -286,7 +286,6 @@ private:
         float currentTime = std::chrono::duration<float, std::chrono::seconds::period>(now - startTime).count();
 
         m_lastTime = currentTime;
-		m_currentDeltaTime = 0;
 
         loadModels();
 		computeAnimation(Object::CANDLE);
@@ -1844,7 +1843,7 @@ private:
 		const tinygltf::Buffer& inputBuffer = model.buffers[inputView.buffer];
 		const unsigned char* pInData = inputBuffer.data.data() + inputView.byteOffset + inputAcc.byteOffset;	
 
-		m_currentAnimTime += m_currentDeltaTime;
+		m_currentAnimTime += m_currentDeltaTime * CANDLE_ANIMATION_SPEED;
 		if (m_currentAnimTime > inputAcc.maxValues[0])
 			m_currentAnimTime -= inputAcc.maxValues[0];
 
