@@ -1,0 +1,63 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Google Shaderc over Glslang; 11
+; Bound: 32
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %outColor %v_fragTexCoord %v_fragColor
+               OpExecutionMode %main OriginUpperLeft
+               OpSource GLSL 450
+               OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
+               OpSourceExtension "GL_GOOGLE_include_directive"
+               OpName %main "main"
+               OpName %useTexture "useTexture"
+               OpName %outColor "outColor"
+               OpName %u_texSampler "u_texSampler"
+               OpName %v_fragTexCoord "v_fragTexCoord"
+               OpName %v_fragColor "v_fragColor"
+               OpDecorate %useTexture SpecId 0
+               OpDecorate %outColor Location 0
+               OpDecorate %u_texSampler DescriptorSet 1
+               OpDecorate %u_texSampler Binding 1
+               OpDecorate %v_fragTexCoord Location 1
+               OpDecorate %v_fragColor Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+       %bool = OpTypeBool
+ %useTexture = OpSpecConstantTrue %bool
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+   %outColor = OpVariable %_ptr_Output_v4float Output
+         %14 = OpTypeImage %float 2D 0 0 0 1 Unknown
+         %15 = OpTypeSampledImage %14
+%_ptr_UniformConstant_15 = OpTypePointer UniformConstant %15
+%u_texSampler = OpVariable %_ptr_UniformConstant_15 UniformConstant
+    %v2float = OpTypeVector %float 2
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+%v_fragTexCoord = OpVariable %_ptr_Input_v2float Input
+%float_0_899999976 = OpConstant %float 0.899999976
+    %float_1 = OpConstant %float 1
+  %float_0_5 = OpConstant %float 0.5
+         %28 = OpConstantComposite %v4float %float_0_899999976 %float_0_899999976 %float_1 %float_0_5
+    %v3float = OpTypeVector %float 3
+%_ptr_Input_v3float = OpTypePointer Input %v3float
+%v_fragColor = OpVariable %_ptr_Input_v3float Input
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+               OpSelectionMerge %9 None
+               OpBranchConditional %useTexture %8 %24
+          %8 = OpLabel
+         %18 = OpLoad %15 %u_texSampler
+         %22 = OpLoad %v2float %v_fragTexCoord
+         %23 = OpImageSampleImplicitLod %v4float %18 %22
+               OpStore %outColor %23
+               OpBranch %9
+         %24 = OpLabel
+               OpStore %outColor %28
+               OpBranch %9
+          %9 = OpLabel
+               OpReturn
+               OpFunctionEnd

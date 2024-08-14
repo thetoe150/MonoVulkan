@@ -1,0 +1,405 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Google Shaderc over Glslang; 11
+; Bound: 270
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main" %gl_GlobalInvocationID
+               OpExecutionMode %main LocalSize 1024 1 1
+               OpSource GLSL 450
+               OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
+               OpSourceExtension "GL_GOOGLE_include_directive"
+               OpName %main "main"
+               OpName %index "index"
+               OpName %gl_GlobalInvocationID "gl_GlobalInvocationID"
+               OpName %DataPushConstant "DataPushConstant"
+               OpMemberName %DataPushConstant 0 "snowflakeCount"
+               OpMemberName %DataPushConstant 1 "deltaTime"
+               OpName %p_const "p_const"
+               OpName %Force "Force"
+               OpMemberName %Force 0 "value"
+               OpMemberName %Force 1 "direction"
+               OpName %sum_vortex_force "sum_vortex_force"
+               OpName %i "i"
+               OpName %vortexCount "vortexCount"
+               OpName %y_distance "y_distance"
+               OpName %Vortex "Vortex"
+               OpMemberName %Vortex 0 "pos"
+               OpMemberName %Vortex 1 "force"
+               OpMemberName %Vortex 2 "radius"
+               OpMemberName %Vortex 3 "height"
+               OpName %VortexUniformBuffer "VortexUniformBuffer"
+               OpMemberName %VortexUniformBuffer 0 "u_vortex"
+               OpName %_ ""
+               OpName %Snowflake "Snowflake"
+               OpMemberName %Snowflake 0 "pos"
+               OpMemberName %Snowflake 1 "weight"
+               OpName %SnowflakeStorageBuffer "SnowflakeStorageBuffer"
+               OpMemberName %SnowflakeStorageBuffer 0 "s_snowflake"
+               OpName %__0 ""
+               OpName %xz_distance "xz_distance"
+               OpName %f "f"
+               OpName %y_ratio "y_ratio"
+               OpName %xz_ratio "xz_ratio"
+               OpName %origin_vec "origin_vec"
+               OpName %perpen_vec "perpen_vec"
+               OpName %dir "dir"
+               OpName %new_force "new_force"
+               OpName %weight_force "weight_force"
+               OpName %total_force "total_force"
+               OpName %d "d"
+               OpDecorate %gl_GlobalInvocationID BuiltIn GlobalInvocationId
+               OpMemberDecorate %DataPushConstant 0 Offset 0
+               OpMemberDecorate %DataPushConstant 1 Offset 4
+               OpDecorate %DataPushConstant Block
+               OpDecorate %vortexCount SpecId 0
+               OpMemberDecorate %Vortex 0 Offset 0
+               OpMemberDecorate %Vortex 1 Offset 12
+               OpMemberDecorate %Vortex 2 Offset 16
+               OpMemberDecorate %Vortex 3 Offset 20
+               OpDecorate %_arr_Vortex_vortexCount ArrayStride 32
+               OpMemberDecorate %VortexUniformBuffer 0 Offset 0
+               OpDecorate %VortexUniformBuffer Block
+               OpDecorate %_ DescriptorSet 0
+               OpDecorate %_ Binding 1
+               OpMemberDecorate %Snowflake 0 Offset 0
+               OpMemberDecorate %Snowflake 1 Offset 12
+               OpDecorate %_runtimearr_Snowflake ArrayStride 16
+               OpMemberDecorate %SnowflakeStorageBuffer 0 Offset 0
+               OpDecorate %SnowflakeStorageBuffer BufferBlock
+               OpDecorate %__0 DescriptorSet 0
+               OpDecorate %__0 Binding 0
+               OpDecorate %gl_WorkGroupSize BuiltIn WorkgroupSize
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+       %uint = OpTypeInt 32 0
+%_ptr_Function_uint = OpTypePointer Function %uint
+     %v3uint = OpTypeVector %uint 3
+%_ptr_Input_v3uint = OpTypePointer Input %v3uint
+%gl_GlobalInvocationID = OpVariable %_ptr_Input_v3uint Input
+     %uint_0 = OpConstant %uint 0
+%_ptr_Input_uint = OpTypePointer Input %uint
+        %int = OpTypeInt 32 1
+      %float = OpTypeFloat 32
+%DataPushConstant = OpTypeStruct %int %float
+%_ptr_PushConstant_DataPushConstant = OpTypePointer PushConstant %DataPushConstant
+    %p_const = OpVariable %_ptr_PushConstant_DataPushConstant PushConstant
+      %int_0 = OpConstant %int 0
+%_ptr_PushConstant_int = OpTypePointer PushConstant %int
+       %bool = OpTypeBool
+    %v2float = OpTypeVector %float 2
+      %Force = OpTypeStruct %float %v2float
+%_ptr_Function_Force = OpTypePointer Function %Force
+      %int_1 = OpConstant %int 1
+    %float_0 = OpConstant %float 0
+         %38 = OpConstantComposite %v2float %float_0 %float_0
+%_ptr_Function_v2float = OpTypePointer Function %v2float
+%_ptr_Function_float = OpTypePointer Function %float
+%_ptr_Function_int = OpTypePointer Function %int
+%vortexCount = OpSpecConstant %int 10
+    %v3float = OpTypeVector %float 3
+     %Vortex = OpTypeStruct %v3float %float %float %float
+%_arr_Vortex_vortexCount = OpTypeArray %Vortex %vortexCount
+%VortexUniformBuffer = OpTypeStruct %_arr_Vortex_vortexCount
+%_ptr_Uniform_VortexUniformBuffer = OpTypePointer Uniform %VortexUniformBuffer
+          %_ = OpVariable %_ptr_Uniform_VortexUniformBuffer Uniform
+     %uint_1 = OpConstant %uint 1
+%_ptr_Uniform_float = OpTypePointer Uniform %float
+  %Snowflake = OpTypeStruct %v3float %float
+%_runtimearr_Snowflake = OpTypeRuntimeArray %Snowflake
+%SnowflakeStorageBuffer = OpTypeStruct %_runtimearr_Snowflake
+%_ptr_Uniform_SnowflakeStorageBuffer = OpTypePointer Uniform %SnowflakeStorageBuffer
+        %__0 = OpVariable %_ptr_Uniform_SnowflakeStorageBuffer Uniform
+      %int_3 = OpConstant %int 3
+%_ptr_Uniform_v3float = OpTypePointer Uniform %v3float
+    %float_2 = OpConstant %float 2
+      %int_2 = OpConstant %int 2
+    %float_1 = OpConstant %float 1
+%float_9_80000019 = OpConstant %float 9.80000019
+%_ptr_Function_v3float = OpTypePointer Function %v3float
+   %float_n1 = OpConstant %float -1
+        %194 = OpConstantComposite %v3float %float_0 %float_n1 %float_0
+%_ptr_PushConstant_float = OpTypePointer PushConstant %float
+%float_0_100000001 = OpConstant %float 0.100000001
+  %float_n16 = OpConstant %float -16
+   %float_16 = OpConstant %float 16
+     %uint_2 = OpConstant %uint 2
+  %uint_1024 = OpConstant %uint 1024
+%gl_WorkGroupSize = OpConstantComposite %v3uint %uint_1024 %uint_1 %uint_1
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+      %index = OpVariable %_ptr_Function_uint Function
+%sum_vortex_force = OpVariable %_ptr_Function_Force Function
+          %i = OpVariable %_ptr_Function_int Function
+ %y_distance = OpVariable %_ptr_Function_float Function
+%xz_distance = OpVariable %_ptr_Function_float Function
+          %f = OpVariable %_ptr_Function_float Function
+    %y_ratio = OpVariable %_ptr_Function_float Function
+   %xz_ratio = OpVariable %_ptr_Function_float Function
+        %121 = OpVariable %_ptr_Function_float Function
+ %origin_vec = OpVariable %_ptr_Function_v2float Function
+ %perpen_vec = OpVariable %_ptr_Function_v2float Function
+        %dir = OpVariable %_ptr_Function_v2float Function
+  %new_force = OpVariable %_ptr_Function_v2float Function
+%weight_force = OpVariable %_ptr_Function_float Function
+%total_force = OpVariable %_ptr_Function_v3float Function
+          %d = OpVariable %_ptr_Function_v3float Function
+         %14 = OpAccessChain %_ptr_Input_uint %gl_GlobalInvocationID %uint_0
+         %15 = OpLoad %uint %14
+               OpStore %index %15
+         %16 = OpLoad %uint %index
+         %24 = OpAccessChain %_ptr_PushConstant_int %p_const %int_0
+         %25 = OpLoad %int %24
+         %26 = OpBitcast %uint %25
+         %28 = OpUGreaterThan %bool %16 %26
+               OpSelectionMerge %30 None
+               OpBranchConditional %28 %29 %30
+         %29 = OpLabel
+               OpReturn
+         %30 = OpLabel
+         %40 = OpAccessChain %_ptr_Function_v2float %sum_vortex_force %int_1
+               OpStore %40 %38
+         %42 = OpAccessChain %_ptr_Function_float %sum_vortex_force %int_0
+               OpStore %42 %float_0
+               OpStore %i %int_0
+               OpBranch %45
+         %45 = OpLabel
+               OpLoopMerge %47 %48 None
+               OpBranch %49
+         %49 = OpLabel
+         %50 = OpLoad %int %i
+         %52 = OpSLessThan %bool %50 %vortexCount
+               OpBranchConditional %52 %46 %47
+         %46 = OpLabel
+         %60 = OpLoad %int %i
+         %63 = OpAccessChain %_ptr_Uniform_float %_ %int_0 %60 %int_0 %uint_1
+         %64 = OpLoad %float %63
+         %70 = OpLoad %uint %index
+         %71 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %70 %int_0 %uint_1
+         %72 = OpLoad %float %71
+         %73 = OpFSub %float %64 %72
+         %74 = OpExtInst %float %1 FAbs %73
+               OpStore %y_distance %74
+         %75 = OpLoad %float %y_distance
+         %76 = OpLoad %int %i
+         %78 = OpAccessChain %_ptr_Uniform_float %_ %int_0 %76 %int_3
+         %79 = OpLoad %float %78
+         %80 = OpFOrdGreaterThanEqual %bool %75 %79
+               OpSelectionMerge %82 None
+               OpBranchConditional %80 %81 %82
+         %81 = OpLabel
+               OpBranch %48
+         %82 = OpLabel
+         %85 = OpLoad %int %i
+         %87 = OpAccessChain %_ptr_Uniform_v3float %_ %int_0 %85 %int_0
+         %88 = OpLoad %v3float %87
+         %89 = OpVectorShuffle %v2float %88 %88 0 2
+         %90 = OpLoad %uint %index
+         %91 = OpAccessChain %_ptr_Uniform_v3float %__0 %int_0 %90 %int_0
+         %92 = OpLoad %v3float %91
+         %93 = OpVectorShuffle %v2float %92 %92 0 2
+         %94 = OpExtInst %float %1 Distance %89 %93
+               OpStore %xz_distance %94
+         %95 = OpLoad %float %xz_distance
+         %97 = OpLoad %int %i
+         %99 = OpAccessChain %_ptr_Uniform_float %_ %int_0 %97 %int_2
+        %100 = OpLoad %float %99
+        %101 = OpFMul %float %float_2 %100
+        %102 = OpFOrdGreaterThan %bool %95 %101
+               OpSelectionMerge %104 None
+               OpBranchConditional %102 %103 %104
+        %103 = OpLabel
+               OpBranch %48
+        %104 = OpLabel
+               OpStore %f %float_0
+        %109 = OpLoad %float %y_distance
+        %110 = OpLoad %int %i
+        %111 = OpAccessChain %_ptr_Uniform_float %_ %int_0 %110 %int_3
+        %112 = OpLoad %float %111
+        %113 = OpFDiv %float %109 %112
+        %114 = OpFSub %float %float_1 %113
+               OpStore %y_ratio %114
+        %116 = OpLoad %float %xz_distance
+        %117 = OpLoad %int %i
+        %118 = OpAccessChain %_ptr_Uniform_float %_ %int_0 %117 %int_2
+        %119 = OpLoad %float %118
+        %120 = OpFOrdLessThanEqual %bool %116 %119
+               OpSelectionMerge %123 None
+               OpBranchConditional %120 %122 %129
+        %122 = OpLabel
+        %124 = OpLoad %float %xz_distance
+        %125 = OpLoad %int %i
+        %126 = OpAccessChain %_ptr_Uniform_float %_ %int_0 %125 %int_2
+        %127 = OpLoad %float %126
+        %128 = OpFDiv %float %124 %127
+               OpStore %121 %128
+               OpBranch %123
+        %129 = OpLabel
+        %130 = OpLoad %float %xz_distance
+        %131 = OpLoad %int %i
+        %132 = OpAccessChain %_ptr_Uniform_float %_ %int_0 %131 %int_2
+        %133 = OpLoad %float %132
+        %134 = OpFDiv %float %130 %133
+        %135 = OpFSub %float %134 %float_1
+        %136 = OpFSub %float %float_1 %135
+               OpStore %121 %136
+               OpBranch %123
+        %123 = OpLabel
+        %137 = OpLoad %float %121
+               OpStore %xz_ratio %137
+        %138 = OpLoad %float %xz_ratio
+        %139 = OpLoad %int %i
+        %140 = OpAccessChain %_ptr_Uniform_float %_ %int_0 %139 %int_1
+        %141 = OpLoad %float %140
+        %142 = OpFMul %float %138 %141
+        %143 = OpLoad %float %y_ratio
+        %144 = OpFMul %float %142 %143
+               OpStore %f %144
+        %146 = OpLoad %uint %index
+        %147 = OpAccessChain %_ptr_Uniform_v3float %__0 %int_0 %146 %int_0
+        %148 = OpLoad %v3float %147
+        %149 = OpVectorShuffle %v2float %148 %148 0 2
+        %150 = OpLoad %int %i
+        %151 = OpAccessChain %_ptr_Uniform_v3float %_ %int_0 %150 %int_0
+        %152 = OpLoad %v3float %151
+        %153 = OpVectorShuffle %v2float %152 %152 0 2
+        %154 = OpFSub %v2float %149 %153
+               OpStore %origin_vec %154
+        %156 = OpAccessChain %_ptr_Function_float %origin_vec %uint_0
+        %157 = OpLoad %float %156
+        %158 = OpFNegate %float %157
+        %159 = OpAccessChain %_ptr_Function_float %origin_vec %uint_1
+        %160 = OpLoad %float %159
+        %161 = OpFDiv %float %158 %160
+        %162 = OpCompositeConstruct %v2float %float_1 %161
+               OpStore %perpen_vec %162
+        %164 = OpLoad %v2float %perpen_vec
+        %165 = OpExtInst %v2float %1 Normalize %164
+               OpStore %dir %165
+        %167 = OpLoad %v2float %dir
+        %168 = OpLoad %float %f
+        %169 = OpVectorTimesScalar %v2float %167 %168
+        %170 = OpAccessChain %_ptr_Function_v2float %sum_vortex_force %int_1
+        %171 = OpLoad %v2float %170
+        %172 = OpAccessChain %_ptr_Function_float %sum_vortex_force %int_0
+        %173 = OpLoad %float %172
+        %174 = OpVectorTimesScalar %v2float %171 %173
+        %175 = OpFAdd %v2float %169 %174
+               OpStore %new_force %175
+        %176 = OpLoad %v2float %new_force
+        %177 = OpExtInst %float %1 Length %176
+        %178 = OpAccessChain %_ptr_Function_float %sum_vortex_force %int_0
+               OpStore %178 %177
+        %179 = OpLoad %v2float %new_force
+        %180 = OpExtInst %v2float %1 Normalize %179
+        %181 = OpAccessChain %_ptr_Function_v2float %sum_vortex_force %int_1
+               OpStore %181 %180
+               OpBranch %48
+         %48 = OpLabel
+        %182 = OpLoad %int %i
+        %183 = OpIAdd %int %182 %int_1
+               OpStore %i %183
+               OpBranch %45
+         %47 = OpLabel
+        %185 = OpLoad %uint %index
+        %186 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %185 %int_1
+        %187 = OpLoad %float %186
+        %189 = OpFMul %float %187 %float_9_80000019
+               OpStore %weight_force %189
+        %192 = OpLoad %float %weight_force
+        %195 = OpVectorTimesScalar %v3float %194 %192
+        %196 = OpAccessChain %_ptr_Function_float %sum_vortex_force %int_1 %uint_0
+        %197 = OpLoad %float %196
+        %198 = OpAccessChain %_ptr_Function_float %sum_vortex_force %int_1 %uint_1
+        %199 = OpLoad %float %198
+        %200 = OpCompositeConstruct %v3float %197 %float_0 %199
+        %201 = OpAccessChain %_ptr_Function_float %sum_vortex_force %int_0
+        %202 = OpLoad %float %201
+        %203 = OpVectorTimesScalar %v3float %200 %202
+        %204 = OpFAdd %v3float %195 %203
+               OpStore %total_force %204
+        %206 = OpLoad %v3float %total_force
+        %207 = OpCompositeExtract %float %206 0
+        %208 = OpCompositeExtract %float %206 1
+        %209 = OpCompositeExtract %float %206 2
+        %210 = OpCompositeConstruct %v3float %207 %208 %209
+        %212 = OpAccessChain %_ptr_PushConstant_float %p_const %int_1
+        %213 = OpLoad %float %212
+        %214 = OpVectorTimesScalar %v3float %210 %213
+        %216 = OpVectorTimesScalar %v3float %214 %float_0_100000001
+               OpStore %d %216
+        %217 = OpLoad %uint %index
+        %218 = OpLoad %v3float %d
+        %219 = OpAccessChain %_ptr_Uniform_v3float %__0 %int_0 %217 %int_0
+        %220 = OpLoad %v3float %219
+        %221 = OpFAdd %v3float %220 %218
+        %222 = OpAccessChain %_ptr_Uniform_v3float %__0 %int_0 %217 %int_0
+               OpStore %222 %221
+        %223 = OpLoad %uint %index
+        %224 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %223 %int_0 %uint_0
+        %225 = OpLoad %float %224
+        %227 = OpFOrdLessThan %bool %225 %float_n16
+               OpSelectionMerge %229 None
+               OpBranchConditional %227 %228 %233
+        %228 = OpLabel
+        %230 = OpLoad %uint %index
+        %232 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %230 %int_0 %uint_0
+               OpStore %232 %float_16
+               OpBranch %229
+        %233 = OpLabel
+        %234 = OpLoad %uint %index
+        %235 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %234 %int_0 %uint_0
+        %236 = OpLoad %float %235
+        %237 = OpFOrdGreaterThan %bool %236 %float_16
+               OpSelectionMerge %239 None
+               OpBranchConditional %237 %238 %239
+        %238 = OpLabel
+        %240 = OpLoad %uint %index
+        %241 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %240 %int_0 %uint_0
+               OpStore %241 %float_n16
+               OpBranch %239
+        %239 = OpLabel
+               OpBranch %229
+        %229 = OpLabel
+        %242 = OpLoad %uint %index
+        %243 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %242 %int_0 %uint_1
+        %244 = OpLoad %float %243
+        %245 = OpFOrdLessThan %bool %244 %float_n16
+               OpSelectionMerge %247 None
+               OpBranchConditional %245 %246 %247
+        %246 = OpLabel
+        %248 = OpLoad %uint %index
+        %249 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %248 %int_0 %uint_1
+               OpStore %249 %float_16
+               OpBranch %247
+        %247 = OpLabel
+        %250 = OpLoad %uint %index
+        %252 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %250 %int_0 %uint_2
+        %253 = OpLoad %float %252
+        %254 = OpFOrdLessThan %bool %253 %float_n16
+               OpSelectionMerge %256 None
+               OpBranchConditional %254 %255 %259
+        %255 = OpLabel
+        %257 = OpLoad %uint %index
+        %258 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %257 %int_0 %uint_2
+               OpStore %258 %float_16
+               OpBranch %256
+        %259 = OpLabel
+        %260 = OpLoad %uint %index
+        %261 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %260 %int_0 %uint_2
+        %262 = OpLoad %float %261
+        %263 = OpFOrdGreaterThan %bool %262 %float_16
+               OpSelectionMerge %265 None
+               OpBranchConditional %263 %264 %265
+        %264 = OpLabel
+        %266 = OpLoad %uint %index
+        %267 = OpAccessChain %_ptr_Uniform_float %__0 %int_0 %266 %int_0 %uint_2
+               OpStore %267 %float_n16
+               OpBranch %265
+        %265 = OpLabel
+               OpBranch %256
+        %256 = OpLabel
+               OpReturn
+               OpFunctionEnd
