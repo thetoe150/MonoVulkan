@@ -16,8 +16,8 @@ project "MonoVulkan"
 	filter "options:cc=msc"
 		location "build/VisualStudio"
 
-	includedirs {"inc", "tracy/public/tracy", "inc/vma", "inc/imgui"}
-	files {"src/**.cpp", "**.hpp", "tracy/public/TracyClient.cpp"}
+	includedirs {"inc/", "tracy/public/tracy", "inc/vma", "inc/imgui"}
+	files {"src/**.cpp", "**.hpp", "tracy/public/TracyClient.cpp", "src/spirv_reflect.c"}
 	removefiles {"src/cpptrace/**", "src/shaders"}
 
 	libdirs {"lib", "C:/VulkanSDK/1.3.268.0/Lib"}
