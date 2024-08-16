@@ -302,6 +302,8 @@ private:
         glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 		glfwSetKeyCallback(window, keyCallback);
+		glfwSetCursorPosCallback(window, mouseCallback);
+		glfwSetScrollCallback(window, scrollCallback);
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
@@ -314,6 +316,25 @@ private:
 			glfwSetWindowShouldClose(window, true);
 		if(key == GLFW_KEY_Z && action == GLFW_PRESS)
 			std::cout << "Callback key Z is pressed.\n";
+	}
+
+	static void mouseCallback(GLFWwindow* window, double xpos, double ypos){
+		if (firstMouse) {
+			lastX = xpos;
+			lastY = ypos;
+			firstMouse = false;
+		}
+		
+		float xoffset = xpos - lastX;
+		float yoffset = lastY - ypos;
+		lastX = xpos;
+		lastY = ypos;
+
+		g_camera.processMouseMovement(xoffset, yoffset);
+	}
+
+	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset){
+		g_camera.processMouseScroll(static_cast<float>(yoffset));
 	}
 
 	void initTracy(){
@@ -411,10 +432,40 @@ private:
     }
 
 	void processInput(){
-		ZoneScopedN("Process Input");
 		glfwPollEvents();
-		if(glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS)
-			std::cout << "Cache State of key X.\n";
+
+		if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+			glfwSetWindowShouldClose(window, true);
+
+		//// key for camera
+		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+			g_camera.processKeyboard(MovementDirection::FORWARD, m_currentDeltaTime);
+		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+			g_camera.processKeyboard(MovementDirection::BACKWARD, m_currentDeltaTime);
+		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+			g_camera.processKeyboard(MovementDirection::LEFT, m_currentDeltaTime);
+		if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+			g_camera.processKeyboard(MovementDirection::RIGHT, m_currentDeltaTime);
+		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+			g_camera.processKeyboard(MovementDirection::UP, m_currentDeltaTime);
+		if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+			g_camera.processKeyboard(MovementDirection::DOWN, m_currentDeltaTime);
+
+		if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS)
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS)
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+		//// key for rotate object
+		//float rotateVelocity = deltaTime * 40.0f;
+		//if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS)
+		//    yAngle -= rotateVelocity;
+		//if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS)
+		//    yAngle += rotateVelocity;
+		//if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS)
+		//    xAngle += rotateVelocity;
+		//if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS)
+		//    xAngle -= rotateVelocity;
 	}
 
     void updateGraphicUniformBuffer() {
@@ -439,8 +490,10 @@ private:
 				ubo.model = glm::scale(ubo.model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
 			}
 			
-			glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-			glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+			// glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+			// glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+			glm::mat4 view = g_camera.getViewMatrix();
+			glm::mat4 proj = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
 			proj[1][1] *= -1;
 
 			ubo.view = view;

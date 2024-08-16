@@ -1,3 +1,4 @@
+#include "glm/ext/matrix_transform.hpp"
 #include "glm/trigonometric.hpp"
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -214,3 +215,135 @@ void testAlignment()
 				<< "\noffset of weight is:" << offsetof(Struct6, weight) << std::endl;
 
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+//										Camera
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+enum MovementDirection 
+{
+	FORWARD,
+	BACKWARD,
+	LEFT,
+	RIGHT,
+	UP,
+	DOWN
+};
+
+constexpr glm::vec3 POSITION{0.f, 0.f, 0.f};
+constexpr glm::vec3 FRONT{0.f, 0.f, 1.f};
+constexpr glm::vec3 WORLD_UP{0.f, 1.f, 0.f};
+
+constexpr float YAW{90.f};
+constexpr float PITCH{0.f};
+
+constexpr float MOVE_SPEED{15.f};
+constexpr float MOUSE_MOVE_SPEED{0.1f};
+constexpr float MOUSE_SCROLL_SPEED{1.f};
+constexpr float ZOOM{45.f};
+
+class Camera{
+public:
+	Camera(glm::vec3 position = POSITION, glm::vec3 front = FRONT,
+		  glm::vec3 up = WORLD_UP, float yaw = YAW, float pitch = PITCH)
+		  : m_position(position), m_front(front), m_worldUp(up),
+			m_yaw(yaw), m_pitch(pitch), m_zoom(ZOOM)
+	{
+		updateCameraVectors();
+	}
+
+	void updateCameraVectors() {
+		glm::vec3 front{};
+		front.y = glm::sin(glm::radians(m_pitch));
+		front.x = glm::cos(glm::radians(m_pitch)) * cos(glm::radians(m_yaw));
+		front.z = glm::cos(glm::radians(m_pitch)) * sin(glm::radians(m_yaw));
+
+		m_front = glm::normalize(front);
+		m_right = glm::normalize(glm::cross(m_front, m_worldUp));
+		m_up = glm::normalize(glm::cross(m_right, m_front));
+	}
+
+	glm::vec3 getPostion(){
+		return m_position;
+	}
+
+	glm::mat4 getViewMatrix(){
+		return glm::lookAt(m_position, m_position + m_front, m_up);
+	}
+
+	float getZoom(){
+		return m_zoom;
+	}
+
+	void processKeyboard(MovementDirection direction, float offset) {
+		float speed = offset * MOVE_SPEED;
+		switch(direction){
+			case MovementDirection::UP: {
+				m_position += m_up * speed;
+				break;
+			}
+			case MovementDirection::DOWN: {
+				m_position -= m_up * speed;
+				break;
+			}
+			case MovementDirection::FORWARD: {
+				m_position += m_front * speed;
+				break;
+			}
+			case MovementDirection::BACKWARD: {
+				m_position -= m_front * speed;
+				break;
+			}
+			case MovementDirection::RIGHT: {
+				m_position += m_right * speed;
+				break;
+			}
+			case MovementDirection::LEFT: {
+				m_position -= m_right * speed;
+				break;
+			}
+		}
+	}
+
+	void processMouseMovement(float x_offset, float y_offset, bool isPitchBound = true) {
+		m_yaw += x_offset * MOUSE_MOVE_SPEED;
+		m_pitch += y_offset * MOUSE_MOVE_SPEED;
+
+		if (isPitchBound && m_pitch > 89.f)
+			m_pitch = 89.f;
+		if (isPitchBound && m_pitch < -89.f)
+			m_pitch = -89.f;
+
+		updateCameraVectors();
+	}
+
+	void processMouseScroll(float scrollOffset) {
+		m_zoom -= scrollOffset * MOUSE_SCROLL_SPEED;
+
+		if(m_zoom < 1.f)
+			m_zoom = 1.f;
+		if(m_zoom > 45.f)
+			m_zoom = 45.f;
+	}
+
+private:
+	glm::vec3 m_position;
+
+	glm::vec3 m_front;
+	glm::vec3 m_up{0.f};
+	glm::vec3 m_worldUp{0.f};
+	glm::vec3 m_right{0.f};
+
+	float m_yaw;
+	float m_pitch;
+
+	float m_zoom;
+};
+
+
+inline Camera g_camera{};
+
+inline bool firstMouse = true;
+inline float lastX = 0.f;
+inline float lastY = 0.f;
+inline unsigned int speedCount = 0;
