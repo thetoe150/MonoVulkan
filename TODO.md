@@ -1,12 +1,12 @@
-- add animation for candle
-- add light and bloom + dof
+- add light and bloom
+- add shadow
+- add dof when moving cam?
 - add barrier when compute and graphic queue is not the same 
 - more *physic-based* realistic vortex snow-fall
-- need a camera movement
 - hot reload with that file watcher library
 - shader reflection
 - fix that Vulkan instance extensions layers
-- Other feature:
+- Vulkan features:
     - Separate images and sampler descriptors
     - Multi-threaded command buffer generation
     - Multiple subpasses
@@ -14,10 +14,9 @@
         - Asynchronous compute
         - Atomic operations
         - Subgroups
-    - Multiple target rendering?
-
 
 ### Done
+- add animation for candle - done
 - Push constants - done
 - Specialization constants - done
 - Instanced rendering - done
