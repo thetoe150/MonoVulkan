@@ -4,7 +4,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 model;
     mat4 view;
     mat4 proj;
-} ubo;
+} u_transform;
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
@@ -23,15 +23,15 @@ void main() {
 	instanceModel[3] = vec4(instancePos.x, instancePos.y, instancePos.z, 1.0f);
 
 	// equivalent to this
-	// mat4 model = ubo.model;
+	// mat4 model = u_transform.model;
 	// model[3][0] = model[3][0] + instancePos.x;
 	// model[3][1] = model[3][1] + instancePos.y;
 	// model[3][2] = model[3][2] + instancePos.z;
 
 
-	mat4 model = instanceModel * ubo.model;
+	mat4 model = instanceModel * u_transform.model;
 
-    gl_Position = ubo.proj * ubo.view * model * vec4(inPosition, 1.0);
+    gl_Position = u_transform.proj * u_transform.view * model * vec4(inPosition, 1.0);
     fragColor = inColor;
     fragTexCoord = inTexCoord;
 }

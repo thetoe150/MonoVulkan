@@ -18,7 +18,7 @@
                OpMemberName %UniformBufferObject 0 "model"
                OpMemberName %UniformBufferObject 1 "view"
                OpMemberName %UniformBufferObject 2 "proj"
-               OpName %ubo "ubo"
+               OpName %u_transform "u_transform"
                OpName %gl_PerVertex "gl_PerVertex"
                OpMemberName %gl_PerVertex 0 "gl_Position"
                OpMemberName %gl_PerVertex 1 "gl_PointSize"
@@ -41,8 +41,8 @@
                OpMemberDecorate %UniformBufferObject 2 Offset 128
                OpMemberDecorate %UniformBufferObject 2 MatrixStride 16
                OpDecorate %UniformBufferObject Block
-               OpDecorate %ubo DescriptorSet 0
-               OpDecorate %ubo Binding 0
+               OpDecorate %u_transform DescriptorSet 0
+               OpDecorate %u_transform Binding 0
                OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
                OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
                OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
@@ -80,7 +80,7 @@
      %uint_2 = OpConstant %uint 2
 %UniformBufferObject = OpTypeStruct %mat4v4float %mat4v4float %mat4v4float
 %_ptr_Uniform_UniformBufferObject = OpTypePointer Uniform %UniformBufferObject
-        %ubo = OpVariable %_ptr_Uniform_UniformBufferObject Uniform
+%u_transform = OpVariable %_ptr_Uniform_UniformBufferObject Uniform
 %_ptr_Uniform_mat4v4float = OpTypePointer Uniform %mat4v4float
 %_arr_float_uint_1 = OpTypeArray %float %uint_1
 %gl_PerVertex = OpTypeStruct %v4float %float %_arr_float_uint_1 %_arr_float_uint_1
@@ -116,13 +116,13 @@
          %40 = OpAccessChain %_ptr_Function_v4float %instanceModel %int_3
                OpStore %40 %39
          %42 = OpLoad %mat4v4float %instanceModel
-         %47 = OpAccessChain %_ptr_Uniform_mat4v4float %ubo %int_0
+         %47 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_0
          %48 = OpLoad %mat4v4float %47
          %49 = OpMatrixTimesMatrix %mat4v4float %42 %48
                OpStore %model %49
-         %54 = OpAccessChain %_ptr_Uniform_mat4v4float %ubo %int_2
+         %54 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_2
          %55 = OpLoad %mat4v4float %54
-         %56 = OpAccessChain %_ptr_Uniform_mat4v4float %ubo %int_1
+         %56 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_1
          %57 = OpLoad %mat4v4float %56
          %58 = OpMatrixTimesMatrix %mat4v4float %55 %57
          %59 = OpLoad %mat4v4float %model

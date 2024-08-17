@@ -1,6 +1,12 @@
 #version 450
 
-layout(set = 1, binding = 1) uniform sampler2D u_texSampler;
+layout(set = 0, binding = 1) uniform LightingObject {
+    vec3 lightDir;
+    vec3 camPos;
+} u_lighting;
+
+layout(set = 1, binding = 2) uniform sampler2D u_texSampler;
+layout(set = 1, binding = 3) uniform sampler2D u_normalSampler;
 
 layout(location = 0) in vec3 v_fragColor;
 layout(location = 1) in vec2 v_fragTexCoord;

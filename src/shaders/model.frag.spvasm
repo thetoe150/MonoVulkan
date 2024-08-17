@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 32
+; Bound: 36
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -16,12 +16,24 @@
                OpName %outColor "outColor"
                OpName %u_texSampler "u_texSampler"
                OpName %v_fragTexCoord "v_fragTexCoord"
+               OpName %LightingObject "LightingObject"
+               OpMemberName %LightingObject 0 "lightDir"
+               OpMemberName %LightingObject 1 "camPos"
+               OpName %u_lighting "u_lighting"
+               OpName %u_normalSampler "u_normalSampler"
                OpName %v_fragColor "v_fragColor"
                OpDecorate %useTexture SpecId 0
                OpDecorate %outColor Location 0
                OpDecorate %u_texSampler DescriptorSet 1
-               OpDecorate %u_texSampler Binding 1
+               OpDecorate %u_texSampler Binding 2
                OpDecorate %v_fragTexCoord Location 1
+               OpMemberDecorate %LightingObject 0 Offset 0
+               OpMemberDecorate %LightingObject 1 Offset 16
+               OpDecorate %LightingObject Block
+               OpDecorate %u_lighting DescriptorSet 0
+               OpDecorate %u_lighting Binding 1
+               OpDecorate %u_normalSampler DescriptorSet 1
+               OpDecorate %u_normalSampler Binding 3
                OpDecorate %v_fragColor Location 0
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
@@ -43,6 +55,10 @@
   %float_0_5 = OpConstant %float 0.5
          %28 = OpConstantComposite %v4float %float_0_899999976 %float_0_899999976 %float_1 %float_0_5
     %v3float = OpTypeVector %float 3
+%LightingObject = OpTypeStruct %v3float %v3float
+%_ptr_Uniform_LightingObject = OpTypePointer Uniform %LightingObject
+ %u_lighting = OpVariable %_ptr_Uniform_LightingObject Uniform
+%u_normalSampler = OpVariable %_ptr_UniformConstant_15 UniformConstant
 %_ptr_Input_v3float = OpTypePointer Input %v3float
 %v_fragColor = OpVariable %_ptr_Input_v3float Input
        %main = OpFunction %void None %3

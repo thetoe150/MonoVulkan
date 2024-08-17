@@ -121,11 +121,18 @@ namespace std {
     };
 }
 
-struct UniformBufferObject {
+struct TransformUniform {
     alignas(16) glm::mat4 model;
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
     alignas(16) glm::mat4 dummy;
+};
+
+struct LightingUniform {
+    alignas(16) glm::vec3 lightDir;
+    alignas(16) glm::vec3 camPos;
+    alignas(16) glm::mat3 dummy1;
+    alignas(16) glm::mat3 dummy2;
 };
 
 class MonoVulkan {
@@ -217,10 +224,22 @@ private:
     VkImageView depthImageView;
 
     uint32_t mipLevels;
-	std::map<Object, std::vector<VkImage>> m_textureImages;
-	std::map<Object, std::vector<VmaAllocation>> m_textureImageAllocs;
-    // VkDeviceMemory textureImageMemory;
-    std::map<Object, std::vector<VkImageView>> m_textureImageViews;
+
+	struct {
+		std::map<Object, std::vector<VkImage>> baseImage;
+		std::map<Object, std::vector<VkImage>> normalImage;
+	} m_images;
+
+	struct {
+		std::map<Object, std::vector<VmaAllocation>> baseAlloc;
+		std::map<Object, std::vector<VmaAllocation>> normalAlloc;
+	} m_imageAllocs;
+
+	struct {
+		std::map<Object, std::vector<VkImageView>> baseView;
+		std::map<Object, std::vector<VkImageView>> normalView;
+	} m_imageViews;
+
 	std::map<Object, VkSampler> m_samplers;
 
 	std::map<Object, std::vector<Vertex>> m_vertexRaw;
@@ -233,9 +252,20 @@ private:
 	std::map<Object, std::map<int, VkBuffer>> m_animBuffer;
 	std::map<Object, std::map<int, VmaAllocation>> m_animBufferAlloc;
 
-    std::map<Object, std::vector<void*>> m_graphicUniformBuffersMapped;
-    std::map<Object, std::vector<VkBuffer>> m_graphicUniformBuffers;
-    std::map<Object, std::vector<VmaAllocation>> uniformBuffersAlloc;
+	struct {
+		std::map<Object, std::vector<void*>> transform;
+		std::map<Object, std::vector<void*>> lighting;
+	} m_graphicUniformBuffersMapped;
+
+	struct {
+		std::map<Object, std::vector<VkBuffer>> transform;
+		std::map<Object, std::vector<VkBuffer>> lighting;
+	} m_graphicUniformBuffers;
+
+	struct {
+		std::map<Object, std::vector<VmaAllocation>> transform;
+		std::map<Object, std::vector<VmaAllocation>> lighting;
+	} m_uniformBuffersAlloc;
 
     std::vector<VertexInstance> m_towerInstanceRaw;
 	VkBuffer m_towerInstanceBuffer;
@@ -256,8 +286,8 @@ private:
     VkDescriptorPool m_descriptorPool;
 
 	struct {
-	std::map<Object, std::vector<std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>>> meshMaterial;
-	std::map<Object, std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> tranformUniform;
+		std::map<Object, std::vector<std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>>> meshMaterial;
+		std::map<Object, std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> tranformUniform;
 	} m_graphicDescriptorSets;
 
     VkDescriptorSet m_computeDescriptorSets;
@@ -410,9 +440,9 @@ private:
         createColorResources();
         createDepthResources();
         createFramebuffers();
-        createTextureImages();
-        createTextureImageView();
-        createTextureSampler();
+        createImages();
+        createImageView();
+        createSampler();
 		loadInstanceData();
         createVertexBuffers();
         createIndexBuffers();
@@ -474,34 +504,44 @@ private:
 			Object objIdx = static_cast<Object>(i);
 			tinygltf::Model& model = m_model[objIdx];
 
-			unsigned int meshCount = model.meshes.size();
-			UniformBufferObject ubo{};
+			// transform uniform
+			{
+				unsigned int meshCount = model.meshes.size();
+				TransformUniform ubo{};
 
-			if (objIdx == Object::CANDLE) {
-				ubo.model = glm::mat4(1.0f);
-				ubo.model = glm::translate(ubo.model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
-				ubo.model = glm::scale(ubo.model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
+				if (objIdx == Object::CANDLE) {
+					ubo.model = glm::mat4(1.0f);
+					ubo.model = glm::translate(ubo.model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
+					ubo.model = glm::scale(ubo.model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
+				}
+				else if (objIdx == Object::SNOWFLAKE) {
+					ubo.model = glm::mat4(1.0f);
+					ubo.model = glm::translate(ubo.model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
+					if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
+						ubo.model = glm::rotate(ubo.model, m_lastTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
+					ubo.model = glm::scale(ubo.model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
+				}
+				
+				// glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+				// glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+				glm::mat4 view = g_camera.getViewMatrix();
+				glm::mat4 proj = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+				proj[1][1] *= -1;
+
+				ubo.view = view;
+				ubo.proj = proj;
+
+				TransformUniform* tranformUBO = (TransformUniform*)m_graphicUniformBuffersMapped.transform[objIdx][m_currentFrame];
+				for (unsigned int i = 0; i < meshCount; i++){
+					tranformUBO[i] = ubo;
+				}
 			}
-			else if (objIdx == Object::SNOWFLAKE) {
-				ubo.model = glm::mat4(1.0f);
-				ubo.model = glm::translate(ubo.model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
-				if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
-					ubo.model = glm::rotate(ubo.model, m_lastTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
-				ubo.model = glm::scale(ubo.model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
-			}
-			
-			// glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-			// glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
-			glm::mat4 view = g_camera.getViewMatrix();
-			glm::mat4 proj = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
-			proj[1][1] *= -1;
 
-			ubo.view = view;
-			ubo.proj = proj;
-
-			UniformBufferObject* tranformUBO = (UniformBufferObject*)m_graphicUniformBuffersMapped[objIdx][m_currentFrame];
-			for (unsigned int i = 0; i < meshCount; i++){
-				tranformUBO[i] = ubo;
+			// lighting uniform
+			{
+				LightingUniform* lightingUBO = (LightingUniform*)m_graphicUniformBuffersMapped.lighting[objIdx][m_currentFrame];
+				lightingUBO->lightDir = glm::vec3(s_lightDir[0], s_lightDir[1], s_lightDir[2]);
+				lightingUBO->camPos = g_camera.getPostion();
 			}
 		}
     }
@@ -620,18 +660,32 @@ private:
 			}
 
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				vkDestroyBuffer(device, m_graphicUniformBuffers[objIdx][i], nullptr);
-				vmaUnmapMemory(m_allocator, uniformBuffersAlloc[objIdx][i]);
-				vmaFreeMemory(m_allocator, uniformBuffersAlloc[objIdx][i]);
+				vkDestroyBuffer(device, m_graphicUniformBuffers.transform[objIdx][i], nullptr);
+				vmaUnmapMemory(m_allocator, m_uniformBuffersAlloc.transform[objIdx][i]);
+				vmaFreeMemory(m_allocator, m_uniformBuffersAlloc.transform[objIdx][i]);
+
+				vkDestroyBuffer(device, m_graphicUniformBuffers.lighting[objIdx][i], nullptr);
+				vmaUnmapMemory(m_allocator, m_uniformBuffersAlloc.lighting[objIdx][i]);
+				vmaFreeMemory(m_allocator, m_uniformBuffersAlloc.lighting[objIdx][i]);
 			}
 
-			for (auto& image : m_textureImages[objIdx]) {
+			for (auto& image : m_images.baseImage[objIdx]) {
 				vkDestroyImage(device, image, nullptr);
 			}
-			for (auto& imageAlloc : m_textureImageAllocs[objIdx]) {
+			for (auto& imageAlloc : m_imageAllocs.baseAlloc[objIdx]) {
 				vmaFreeMemory(m_allocator, imageAlloc);
 			}
-			for (auto& textureImageView : m_textureImageViews[objIdx]) {
+			for (auto& textureImageView : m_imageViews.baseView[objIdx]) {
+				vkDestroyImageView(device, textureImageView, nullptr);
+			}
+
+			for (auto& image : m_images.normalImage[objIdx]) {
+				vkDestroyImage(device, image, nullptr);
+			}
+			for (auto& imageAlloc : m_imageAllocs.normalAlloc[objIdx]) {
+				vmaFreeMemory(m_allocator, imageAlloc);
+			}
+			for (auto& textureImageView : m_imageViews.normalView[objIdx]) {
 				vkDestroyImageView(device, textureImageView, nullptr);
 			}
 
@@ -1035,7 +1089,14 @@ private:
 			uboLayoutBinding.pImmutableSamplers = nullptr;
 			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-			std::array<VkDescriptorSetLayoutBinding, 1> bindings = {uboLayoutBinding};
+			VkDescriptorSetLayoutBinding lightBinding{};
+			lightBinding.binding = 1;
+			lightBinding.descriptorCount = 1;
+			lightBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			lightBinding.pImmutableSamplers = nullptr;
+			lightBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, lightBinding};
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
 			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -1048,13 +1109,20 @@ private:
 
 		{
 			VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-			samplerLayoutBinding.binding = 1;
+			samplerLayoutBinding.binding = 2;
 			samplerLayoutBinding.descriptorCount = 1;
 			samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			samplerLayoutBinding.pImmutableSamplers = nullptr;
 			samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-			std::array<VkDescriptorSetLayoutBinding, 1> bindings = {samplerLayoutBinding};
+			VkDescriptorSetLayoutBinding normalBinding{};
+			normalBinding.binding = 3;
+			normalBinding.descriptorCount = 1;
+			normalBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			normalBinding.pImmutableSamplers = nullptr;
+			normalBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {samplerLayoutBinding, normalBinding};
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
 			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -1427,13 +1495,16 @@ private:
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    void createTextureImages() {
+    void createImages() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 			tinygltf::Model& model = m_model[objIdx];
 			if (model.images.empty()) {
-				m_textureImages[objIdx].push_back(VK_NULL_HANDLE);
-				m_textureImageAllocs[objIdx].push_back(VK_NULL_HANDLE);
+				m_images.baseImage[objIdx].push_back(VK_NULL_HANDLE);
+				m_imageAllocs.baseAlloc[objIdx].push_back(VK_NULL_HANDLE);
+
+				m_images.normalImage[objIdx].push_back(VK_NULL_HANDLE);
+				m_imageAllocs.normalAlloc[objIdx].push_back(VK_NULL_HANDLE);
 				std::cout << "No image for this model type" << std::endl;
 				continue;
 			}
@@ -1441,56 +1512,74 @@ private:
 			int meshIdx = 0;
 			for (auto& mesh : model.meshes) {
 				tinygltf::Material material = model.materials[mesh.primitives[0].material];
-				tinygltf::Texture texture = model.textures[material.pbrMetallicRoughness.baseColorTexture.index];
-				tinygltf::Image image = model.images[texture.source];
 
-				int texWidth = image.width;
-				int texHeight = image.height;
-				int texChannels = image.component;
-				
-				VkDeviceSize imageSize = texWidth * texHeight * 4;
-				mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+				tinygltf::Texture baseTexture = model.textures[material.pbrMetallicRoughness.baseColorTexture.index];
+				auto baseImage = createModelImage(objIdx, baseTexture, true);
+				m_images.baseImage[objIdx].push_back(baseImage.first);
+				m_imageAllocs.baseAlloc[objIdx].push_back(baseImage.second);
 
-				unsigned char* pixels = image.image.data();
-				if (!pixels) {
-					throw std::runtime_error("failed to load texture image!");
+				if (material.normalTexture.index == -1) {
+					m_images.normalImage[objIdx].push_back(VK_NULL_HANDLE);
+					m_imageAllocs.normalAlloc[objIdx].push_back(VK_NULL_HANDLE);
+					std::cout << "No normal mapping image for this mesh of model" << std::endl;
+					continue;
 				}
-
-				VkBuffer stagingBuffer{};
-				VmaAllocation stagingBufferAlloc{};
-				VkImage textureImage{};
-				VmaAllocation textureImageAlloc{};
-				createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
-
-				void* data;
-				// vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-				//     memcpy(data, pixels, static_cast<size_t>(imageSize));
-				// vkUnmapMemory(device, stagingBufferMemory);
-				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-					memcpy(data, pixels, static_cast<size_t>(imageSize));
-				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-
-				//
-				// stbi_image_free(pixels);
-
-				createImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
-					VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-					textureImage, textureImageAlloc);
-
-				transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-				copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-				//transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
-
-				vkDestroyBuffer(device, stagingBuffer, nullptr);
-				//vkFreeMemory(device, stagingBufferMemory, nullptr);
-				vmaFreeMemory(m_allocator, stagingBufferAlloc);
-
-				generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
-				m_textureImages[objIdx].push_back(textureImage);
-				m_textureImageAllocs[objIdx].push_back(textureImageAlloc);
+				tinygltf::Texture normalTexture = model.textures[material.normalTexture.index];
+				auto normalImage = createModelImage(objIdx, normalTexture, true);
+				m_images.normalImage[objIdx].push_back(normalImage.first);
+				m_imageAllocs.normalAlloc[objIdx].push_back(normalImage.second);
 			}
 		}
     }
+
+	std::pair<VkImage, VmaAllocation> createModelImage(Object objIdx, const tinygltf::Texture& tex, bool isMipmap) {
+		tinygltf::Image image = m_model[objIdx].images[tex.source];
+
+		int texWidth = image.width;
+		int texHeight = image.height;
+		int texChannels = image.component;
+		
+		VkDeviceSize imageSize = texWidth * texHeight * 4;
+		mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+
+		unsigned char* pixels = image.image.data();
+		if (!pixels) {
+			throw std::runtime_error("failed to load texture image!");
+		}
+
+		VkBuffer stagingBuffer{};
+		VmaAllocation stagingBufferAlloc{};
+		VkImage textureImage{};
+		VmaAllocation textureImageAlloc{};
+		createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+
+		void* data;
+		vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+			memcpy(data, pixels, static_cast<size_t>(imageSize));
+		vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+
+		// stbi_image_free(pixels);
+
+		createImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
+			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+			textureImage, textureImageAlloc);
+
+		transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+		copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+
+		//transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
+		if (isMipmap)
+			generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+		else
+			transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels);
+
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		//vkFreeMemory(device, stagingBufferMemory, nullptr);
+		vmaFreeMemory(m_allocator, stagingBufferAlloc);
+
+
+		return {textureImage, textureImageAlloc};
+	}
 
     void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
         // Check if image format supports linear blitting
@@ -1594,22 +1683,31 @@ private:
         return VK_SAMPLE_COUNT_1_BIT;
     }
 
-    void createTextureImageView() {
+    void createImageView() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 			tinygltf::Model& model = m_model[objIdx];
-			for (auto& textureImage : m_textureImages[objIdx]) {
+			for (auto& textureImage : m_images.baseImage[objIdx]) {
 				if(textureImage != VK_NULL_HANDLE){
-					m_textureImageViews[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
+					m_imageViews.baseView[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
 				}
 				else {
-					m_textureImageViews[objIdx].push_back(VK_NULL_HANDLE);
+					m_imageViews.baseView[objIdx].push_back(VK_NULL_HANDLE);
+				}
+			}
+
+			for (auto& textureImage : m_images.normalImage[objIdx]) {
+				if(textureImage != VK_NULL_HANDLE){
+					m_imageViews.normalView[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
+				}
+				else {
+					m_imageViews.normalView[objIdx].push_back(VK_NULL_HANDLE);
 				}
 			}
 		}
     }
 
-    void createTextureSampler() {
+    void createSampler() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 
@@ -2188,19 +2286,38 @@ private:
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 			tinygltf::Model& model = m_model[objIdx];
-			unsigned int meshCount = model.meshes.size();
-			VkDeviceSize bufferSize = sizeof(UniformBufferObject) * meshCount;
 
-			m_graphicUniformBuffers[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
-			uniformBuffersAlloc[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
-			m_graphicUniformBuffersMapped[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+			// transform uniform
+			{
+				unsigned int meshCount = model.meshes.size();
+				VkDeviceSize bufferSize = sizeof(TransformUniform) * meshCount;
 
+				m_graphicUniformBuffers.transform[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+				m_uniformBuffersAlloc.transform[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+				m_graphicUniformBuffersMapped.transform[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
 
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-					, m_graphicUniformBuffers[objIdx][i], uniformBuffersAlloc[objIdx][i]);
+				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+					createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+						, m_graphicUniformBuffers.transform[objIdx][i], m_uniformBuffersAlloc.transform[objIdx][i]);
 
-				vmaMapMemory(m_allocator, uniformBuffersAlloc[objIdx][i], &m_graphicUniformBuffersMapped[objIdx][i]);
+					vmaMapMemory(m_allocator, m_uniformBuffersAlloc.transform[objIdx][i], &m_graphicUniformBuffersMapped.transform[objIdx][i]);
+				}
+			}
+
+			// lighting uniform
+			{
+				VkDeviceSize bufferSize = sizeof(LightingUniform);
+
+				m_graphicUniformBuffers.lighting[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+				m_uniformBuffersAlloc.lighting[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+				m_graphicUniformBuffersMapped.lighting[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+
+				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+					createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+						, m_graphicUniformBuffers.lighting[objIdx][i], m_uniformBuffersAlloc.lighting[objIdx][i]);
+
+					vmaMapMemory(m_allocator, m_uniformBuffersAlloc.lighting[objIdx][i], &m_graphicUniformBuffersMapped.lighting[objIdx][i]);
+				}
 			}
 		}
     }
@@ -2304,9 +2421,9 @@ private:
 			std::array<VkDescriptorPoolSize, 3> poolSizes{};
 			poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			// +1 for compute uniform
-			poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) + 1;
+			poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) * 2 + 1; // for mesh transform + light uniform
 			poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount);
+			poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount) * 2; // for texture and normal map
 			poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			poolSizes[2].descriptorCount = static_cast<uint32_t>(1);
 
@@ -2319,7 +2436,7 @@ private:
 			// materialCount for the number of mesh material
 			// 1 for compute descriptor set
 			// 1 for imgui descriptor set
-			poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT) + 3; // for graphics and compute
+			poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 2) + 3; // for graphics and compute
 
 			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create descriptor pool!");
@@ -2353,21 +2470,38 @@ private:
 
 				// can it write to the 2 frame descirptor set at once??
 				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+					std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
 					VkDescriptorImageInfo imageInfo{};
 					imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					imageInfo.imageView = m_textureImageViews[objIdx][meshIdx];
+					imageInfo.imageView = m_imageViews.baseView[objIdx][meshIdx];
 					// assume 1 sampler per object type
 					imageInfo.sampler = m_samplers[objIdx];
 
-					std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
-
 					descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 					descriptorWrites[0].dstSet = m_graphicDescriptorSets.meshMaterial[objIdx][meshIdx][i];
-					descriptorWrites[0].dstBinding = 1;
+					descriptorWrites[0].dstBinding = 2;
 					descriptorWrites[0].dstArrayElement = 0;
 					descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 					descriptorWrites[0].descriptorCount = 1;
 					descriptorWrites[0].pImageInfo = &imageInfo;
+					
+					VkDescriptorImageInfo normalImageInfo{};
+					normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					normalImageInfo.imageView = m_imageViews.normalView[objIdx][meshIdx];
+					// assume 1 sampler per object type
+					normalImageInfo.sampler = m_samplers[objIdx];
+
+					// if (m_imageViews.normalView[objIdx][meshIdx] == VK_NULL_HANDLE)
+					// 	normalImageInfo.sampler = VK_NULL_HANDLE;
+
+					descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					descriptorWrites[1].dstSet = m_graphicDescriptorSets.meshMaterial[objIdx][meshIdx][i];
+					descriptorWrites[1].dstBinding = 3;
+					descriptorWrites[1].dstArrayElement = 0;
+					descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+					descriptorWrites[1].descriptorCount = 1;
+					descriptorWrites[1].pImageInfo = &normalImageInfo;
 
 					vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 				}
@@ -2388,12 +2522,13 @@ private:
 			}
 
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				VkDescriptorBufferInfo bufferInfo{};
-				bufferInfo.buffer = m_graphicUniformBuffers[objIdx][i];
-				bufferInfo.offset = 0;
-				bufferInfo.range = sizeof(UniformBufferObject);
+				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
-				std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+				VkDescriptorBufferInfo bufferInfo{};
+				bufferInfo.buffer = m_graphicUniformBuffers.transform[objIdx][i];
+				bufferInfo.offset = 0;
+				bufferInfo.range = sizeof(TransformUniform);
+
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.tranformUniform[objIdx][i];
 				descriptorWrites[0].dstBinding = 0;
@@ -2401,7 +2536,21 @@ private:
 				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 				descriptorWrites[0].descriptorCount = 1;
 				descriptorWrites[0].pBufferInfo = &bufferInfo;
-					vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+
+				VkDescriptorBufferInfo lightBufferInfo{};
+				lightBufferInfo.buffer = m_graphicUniformBuffers.lighting[objIdx][i];
+				lightBufferInfo.offset = 0;
+				lightBufferInfo.range = sizeof(LightingUniform);
+
+				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[1].dstSet = m_graphicDescriptorSets.tranformUniform[objIdx][i];
+				descriptorWrites[1].dstBinding = 1;
+				descriptorWrites[1].dstArrayElement = 0;
+				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				descriptorWrites[1].descriptorCount = 1;
+				descriptorWrites[1].pBufferInfo = &lightBufferInfo;
+
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 			}
 		}
 	}
@@ -2659,11 +2808,11 @@ private:
 			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
 
 			// mesh local transform
-			UniformBufferObject* uniformMapped = (UniformBufferObject*)m_graphicUniformBuffersMapped[object][m_currentFrame];
+			TransformUniform* uniformMapped = (TransformUniform*)m_graphicUniformBuffersMapped.transform[object][m_currentFrame];
 			uniformMapped[meshIdx].model = uniformMapped[meshIdx].model * m_modelMeshTransforms[object][meshIdx];
 
 			// this offset have to be 256 byte aligned
-			DynamicOffset = sizeof(UniformBufferObject) * meshIdx;
+			DynamicOffset = sizeof(TransformUniform) * meshIdx;
 
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 
 						   0, 1, &m_graphicDescriptorSets.tranformUniform[object][m_currentFrame], 1, &DynamicOffset);
@@ -2879,8 +3028,8 @@ private:
 		ImGui::SliderFloat3("Rotate", s_snowRotate, -10.f, 10.f, "%.2f");
 		ImGui::SliderFloat3("Scale", s_snowScale, -10.f, 10.f, "%.2f");
 
-        ImGui::SeparatorText("View");
-		ImGui::SliderFloat3("View", s_viewPos, -20.f, 20.f, "%.2f");
+        ImGui::SeparatorText("Light");
+		ImGui::SliderFloat3("Light Direction", s_lightDir, -20.f, 20.f, "%.2f");
         ImGui::SeparatorText("Projection");
 		ImGui::SliderFloat("Near Plane", &s_nearPlane, -10.f, 10.f, "%.5f");
 		ImGui::SliderFloat("Far Plane", &s_farPlane, -10.f, 100.f, "%.5f");
