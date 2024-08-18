@@ -22,7 +22,6 @@ layout(location = 0) out vec2 v_texCoord;
 layout(location = 1) out vec3 v_tangentFragPos;
 layout(location = 2) out vec3 v_tangentLightPos;
 layout(location = 3) out vec3 v_tangentCamPos;
-
 // in case not using normal mapping
 layout(location = 4) out vec3 v_fragPosition;
 layout(location = 5) out vec3 v_normal;
@@ -33,11 +32,6 @@ void main() {
 	instanceModel[1] = vec4(0.0f, 1.0f, 0.0f, 0.0f);
 	instanceModel[2] = vec4(0.0f, 0.0f, 1.0f, 0.0f);
 	instanceModel[3] = vec4(instancePos.x, instancePos.y, instancePos.z, 1.0f);
-	// equivalent to this
-	// mat4 model = u_transform.model;
-	// model[3][0] = model[3][0] + instancePos.x;
-	// model[3][1] = model[3][1] + instancePos.y;
-	// model[3][2] = model[3][2] + instancePos.z;
 
 	mat4 model = instanceModel * u_transform.model;
 	vec3 fragPos = vec3(model * vec4(a_position, 1.0));
@@ -46,7 +40,7 @@ void main() {
 	vec3 N = normalize(worldModel * a_normal);
 	vec3 T = normalize(worldModel * vec3(a_tangent));
 	// ???
-	// T = normalize(T - dot(T, N) * N);
+	T = normalize(T - dot(T, N) * N);
 	vec3 B = cross(N, T);
 	mat3 TBN = transpose(mat3(T, B, N));
 

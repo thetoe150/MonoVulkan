@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 130
+; Bound: 137
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -94,7 +94,7 @@
 %v_tangentLightPos = OpVariable %_ptr_Input_v3float Input
 %v_tangentFragPos = OpVariable %_ptr_Input_v3float Input
 %v_tangentCamPos = OpVariable %_ptr_Input_v3float Input
-%float_0_200000003 = OpConstant %float 0.200000003
+  %float_1_5 = OpConstant %float 1.5
 %_ptr_Function_float = OpTypePointer Function %float
     %float_0 = OpConstant %float 0
    %float_32 = OpConstant %float 32
@@ -175,7 +175,7 @@
          %91 = OpExtInst %v3float %1 Normalize %90
                OpStore %h %91
          %94 = OpLoad %v3float %color
-         %95 = OpVectorTimesScalar %v3float %94 %float_0_200000003
+         %95 = OpVectorTimesScalar %v3float %94 %float_1_5
                OpStore %ambient %95
          %98 = OpLoad %v3float %l
          %99 = OpLoad %v3float %n
@@ -205,5 +205,13 @@
         %128 = OpCompositeExtract %float %125 2
         %129 = OpCompositeConstruct %v4float %126 %127 %128 %float_1
                OpStore %outColor %129
+        %130 = OpLoad %v3float %ambient
+        %131 = OpLoad %v3float %n
+        %132 = OpFAdd %v3float %130 %131
+        %133 = OpCompositeExtract %float %132 0
+        %134 = OpCompositeExtract %float %132 1
+        %135 = OpCompositeExtract %float %132 2
+        %136 = OpCompositeConstruct %v4float %133 %134 %135 %float_1
+               OpStore %outColor %136
                OpReturn
                OpFunctionEnd

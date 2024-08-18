@@ -23,7 +23,6 @@ layout (push_constant) uniform DataPushConstant{
 
 void main() {
 	vec3 color = texture(u_texSampler, v_fragTexCoord).rgb;
-
 	vec3 n = v_normal;
 	vec3 l = normalize(u_lighting.lightPos - v_fragPos);
 	vec3 c = normalize(u_lighting.camPos - v_fragPos);
@@ -38,7 +37,7 @@ void main() {
 	vec3 r = reflect(-l, n);
 	vec3 h = normalize(l + c);
 
-	vec3 ambient = 0.2 * color;
+	vec3 ambient = 1.5 * color;
 
 	float diff = max(dot(l, n), 0.0);
 	vec3 diffuse = diff * color;
@@ -47,4 +46,5 @@ void main() {
 	vec3 specular = vec3(0.1) * spec;
 
 	outColor = vec4(ambient + diffuse + specular, 1.0);
+	outColor = vec4(ambient + n, 1.0);
 }
