@@ -70,7 +70,7 @@ static float s_snowScale[3] = {0.008f, 0.008f, 0.005f};
 static float s_snowRotate[3] = {0.f, 0.f, 0.f};
 static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
 
-static float s_lightDir[3] = {20.f, 3.f, -10.f};
+static float s_lightPos[3] = {20.f, 3.f, -10.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 
@@ -237,7 +237,7 @@ constexpr glm::vec3 WORLD_UP{0.f, 1.f, 0.f};
 constexpr float YAW{90.f};
 constexpr float PITCH{0.f};
 
-constexpr float MOVE_SPEED{15.f};
+constexpr float MOVE_SPEED{10.f};
 constexpr float MOUSE_MOVE_SPEED{0.1f};
 constexpr float MOUSE_SCROLL_SPEED{1.f};
 constexpr float ZOOM{45.f};

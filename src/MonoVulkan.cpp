@@ -129,7 +129,7 @@ struct TransformUniform {
 };
 
 struct LightingUniform {
-    alignas(16) glm::vec3 lightDir;
+    alignas(16) glm::vec3 lightPos;
     alignas(16) glm::vec3 camPos;
     alignas(16) glm::mat3 dummy1;
     alignas(16) glm::mat3 dummy2;
@@ -540,7 +540,7 @@ private:
 			// lighting uniform
 			{
 				LightingUniform* lightingUBO = (LightingUniform*)m_graphicUniformBuffersMapped.lighting[objIdx][m_currentFrame];
-				lightingUBO->lightDir = glm::vec3(s_lightDir[0], s_lightDir[1], s_lightDir[2]);
+				lightingUBO->lightPos = glm::vec3(s_lightPos[0], s_lightPos[1], s_lightPos[2]);
 				lightingUBO->camPos = g_camera.getPostion();
 			}
 		}
@@ -1094,7 +1094,7 @@ private:
 			lightBinding.descriptorCount = 1;
 			lightBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			lightBinding.pImmutableSamplers = nullptr;
-			lightBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+			lightBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
 			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, lightBinding};
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
@@ -1303,8 +1303,8 @@ private:
 			dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 			dynamicState.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/model.vert.spv");
-			auto fragShaderCode = readFile("../../src/shaders/model.frag.spv");
+			auto vertShaderCode = readFile("../../src/shaders/candles.vert.spv");
+			auto fragShaderCode = readFile("../../src/shaders/candles.frag.spv");
 
 			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
 			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -1525,7 +1525,7 @@ private:
 					continue;
 				}
 				tinygltf::Texture normalTexture = model.textures[material.normalTexture.index];
-				auto normalImage = createModelImage(objIdx, normalTexture, true);
+				auto normalImage = createModelImage(objIdx, normalTexture, false);
 				m_images.normalImage[objIdx].push_back(normalImage.first);
 				m_imageAllocs.normalAlloc[objIdx].push_back(normalImage.second);
 			}
@@ -2800,7 +2800,7 @@ private:
 			VkBuffer vertexBuffers[5] = {positionBuffer, normalBuffer, tangentBuffer, texCordBuffer, instanceBuffer};
 			VkDeviceSize vertexBufferOffsets[5] = {positionBufferOffset, normalBufferOffset, tangentBufferOffset, texCordBufferOffset, 0};
 
-			vkCmdBindVertexBuffers(commandBuffer, 0, 5, vertexBuffers, vertexBufferOffsets);
+			vkCmdBindVertexBuffers(commandBuffer, 0, sizeof(vertexBuffers) / sizeof(VkBuffer), vertexBuffers, vertexBufferOffsets);
 
 			auto& indexAccessoridx = mesh.primitives[0].indices;
 			VkBuffer indexBuffer = m_indexBuffer[object][model.accessors[indexAccessoridx].bufferView];
@@ -3031,7 +3031,7 @@ private:
 		ImGui::SliderFloat3("Scale", s_snowScale, -10.f, 10.f, "%.2f");
 
         ImGui::SeparatorText("Light");
-		ImGui::SliderFloat3("Light Direction", s_lightDir, -20.f, 20.f, "%.2f");
+		ImGui::SliderFloat3("Light Direction", s_lightPos, -20.f, 20.f, "%.2f");
         ImGui::SeparatorText("Projection");
 		ImGui::SliderFloat("Near Plane", &s_nearPlane, -10.f, 10.f, "%.5f");
 		ImGui::SliderFloat("Far Plane", &s_farPlane, -10.f, 100.f, "%.5f");
