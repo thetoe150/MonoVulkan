@@ -1225,9 +1225,9 @@ private:
 			// std::array<VkVertexInputBindingDescription, 2> totalBindingDescription = {bindingDescription, instanceBindingDescription};
 
 			std::array<VkVertexInputBindingDescription, 5> totalBindingDescriptions = 
-				{vertexDef["POSITION"].first, vertexDef["NORMAL"].first, vertexDef["TEXCOORD_0"].first, vertexDef["TANGENT"].first, instanceBindingDescription};
+				{vertexDef["POSITION"].first, vertexDef["NORMAL"].first, vertexDef["TANGENT"].first, vertexDef["TEXCOORD_0"].first, instanceBindingDescription};
 			std::array<VkVertexInputAttributeDescription, 5> totalAttributeDescriptions = 
-				{vertexDef["POSITION"].second, vertexDef["NORMAL"].second, vertexDef["TEXCOORD_0"].second, vertexDef["TANGENT"].second, instanceAttributeDescription[0]};
+				{vertexDef["POSITION"].second, vertexDef["NORMAL"].second, vertexDef["TANGENT"].second, vertexDef["TEXCOORD_0"].second, instanceAttributeDescription[0]};
 
 			vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(totalBindingDescriptions.size());
 			vertexInputInfo.pVertexBindingDescriptions = totalBindingDescriptions.data();
@@ -1900,7 +1900,6 @@ private:
 			if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC2) {
 				attributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
 				bindingDescription.stride = 8;
-				std::cout << "vec2 attribute: " << attribute.first << "\n";
 			}
 			else if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC3) {
 				attributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -2760,7 +2759,6 @@ private:
 		int meshIdx = 0;
 		// factor out tangent
 		auto& attribute = model.meshes[0].primitives[0].attributes;
-		size_t tangentBufferOffset = model.accessors[attribute["TANGENT"]].byteOffset; 
 		VkBuffer tangentBuffer = m_vertexBuffer[object][model.accessors[attribute["TANGENT"]].bufferView]; 
 		
 		for (auto& mesh : model.meshes) {
@@ -2781,6 +2779,7 @@ private:
 			size_t texCordBufferOffset = model.accessors[attributes["TEXCOORD_0"]].byteOffset;
 			VkBuffer texCordBuffer = m_vertexBuffer[object][model.accessors[attributes["TEXCOORD_0"]].bufferView];
 
+			size_t tangentBufferOffset = model.accessors[attributes["TANGENT"]].byteOffset; 
 			// some mesh of the model don't have tangent attribute
 			// if(attribute.find("TANGENT") != attribute.end()) {
 			// 	tangentBuffer = m_vertexBuffer[object][model.accessors[attribute["TANGENT"]].bufferView];
@@ -2798,8 +2797,8 @@ private:
 				instanceCount = m_towerInstanceRaw.size();
 			}
 
-			VkBuffer vertexBuffers[5] = {positionBuffer, normalBuffer, texCordBuffer, tangentBuffer, instanceBuffer};
-			VkDeviceSize vertexBufferOffsets[5] = {positionBufferOffset, normalBufferOffset, texCordBufferOffset, tangentBufferOffset, 0};
+			VkBuffer vertexBuffers[5] = {positionBuffer, normalBuffer, tangentBuffer, texCordBuffer, instanceBuffer};
+			VkDeviceSize vertexBufferOffsets[5] = {positionBufferOffset, normalBufferOffset, tangentBufferOffset, texCordBufferOffset, 0};
 
 			vkCmdBindVertexBuffers(commandBuffer, 0, 5, vertexBuffers, vertexBufferOffsets);
 

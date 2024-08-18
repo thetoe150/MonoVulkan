@@ -8,8 +8,8 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
-layout(location = 2) in vec2 a_texCoord;
-layout(location = 3) in vec4 a_tangent;
+layout(location = 2) in vec4 a_tangent;
+layout(location = 3) in vec2 a_texCoord;
 
 layout(location = 4) in vec3 instancePos;
 
