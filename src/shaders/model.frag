@@ -8,8 +8,7 @@ layout(set = 0, binding = 1) uniform LightingObject {
 layout(set = 1, binding = 2) uniform sampler2D u_texSampler;
 layout(set = 1, binding = 3) uniform sampler2D u_normalSampler;
 
-layout(location = 0) in vec3 v_fragColor;
-layout(location = 1) in vec2 v_fragTexCoord;
+layout(location = 0) in vec2 v_fragTexCoord;
 
 layout(location = 0) out vec4 outColor;
 

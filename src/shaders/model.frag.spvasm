@@ -1,12 +1,12 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 36
+; Bound: 34
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Fragment %main "main" %outColor %v_fragTexCoord %v_fragColor
+               OpEntryPoint Fragment %main "main" %outColor %v_fragTexCoord
                OpExecutionMode %main OriginUpperLeft
                OpSource GLSL 450
                OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
@@ -21,12 +21,11 @@
                OpMemberName %LightingObject 1 "camPos"
                OpName %u_lighting "u_lighting"
                OpName %u_normalSampler "u_normalSampler"
-               OpName %v_fragColor "v_fragColor"
                OpDecorate %useTexture SpecId 0
                OpDecorate %outColor Location 0
                OpDecorate %u_texSampler DescriptorSet 1
                OpDecorate %u_texSampler Binding 2
-               OpDecorate %v_fragTexCoord Location 1
+               OpDecorate %v_fragTexCoord Location 0
                OpMemberDecorate %LightingObject 0 Offset 0
                OpMemberDecorate %LightingObject 1 Offset 16
                OpDecorate %LightingObject Block
@@ -34,7 +33,6 @@
                OpDecorate %u_lighting Binding 1
                OpDecorate %u_normalSampler DescriptorSet 1
                OpDecorate %u_normalSampler Binding 3
-               OpDecorate %v_fragColor Location 0
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
        %bool = OpTypeBool
@@ -59,8 +57,6 @@
 %_ptr_Uniform_LightingObject = OpTypePointer Uniform %LightingObject
  %u_lighting = OpVariable %_ptr_Uniform_LightingObject Uniform
 %u_normalSampler = OpVariable %_ptr_UniformConstant_15 UniformConstant
-%_ptr_Input_v3float = OpTypePointer Input %v3float
-%v_fragColor = OpVariable %_ptr_Input_v3float Input
        %main = OpFunction %void None %3
           %5 = OpLabel
                OpSelectionMerge %9 None

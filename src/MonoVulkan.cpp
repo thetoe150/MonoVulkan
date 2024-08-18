@@ -90,7 +90,7 @@ struct VertexInstance {
 
 	static VkVertexInputBindingDescription getBindingDescription(){
 		VkVertexInputBindingDescription bindingDescription{};
-		bindingDescription.binding = 3;
+		bindingDescription.binding = 4;
 		bindingDescription.stride = sizeof(VertexInstance);
         bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
@@ -99,8 +99,8 @@ struct VertexInstance {
 
 	static std::array<VkVertexInputAttributeDescription, 1> getAttributeDescriptions(){
 		std::array<VkVertexInputAttributeDescription, 1> attributeDescriptions{};
-		attributeDescriptions[0].binding = 3;
-		attributeDescriptions[0].location = 3;
+		attributeDescriptions[0].binding = 4;
+		attributeDescriptions[0].location = 4;
 		attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 		// attributeDescriptions[0].offset = offsetof(VertexInstance, pos);
 		attributeDescriptions[0].offset = 0;
@@ -1206,7 +1206,7 @@ private:
 	}
 
     void createGraphicPipelines() {
-		for (unsigned int i = 0; i < Object::COUNT; i++){
+		for (unsigned int i = 0; i < Object::SNOWFLAKE; i++){
 			Object objIdx = static_cast<Object>(i);
 			tinygltf::Model& model = m_model[objIdx];
 
@@ -1224,10 +1224,10 @@ private:
 			// auto totalAttributeDescriptions = concat(attributeDescriptions, instanceAttributeDescription);
 			// std::array<VkVertexInputBindingDescription, 2> totalBindingDescription = {bindingDescription, instanceBindingDescription};
 
-			std::array<VkVertexInputBindingDescription, 4> totalBindingDescriptions = 
-				{vertexDef["POSITION"].first, vertexDef["NORMAL"].first, vertexDef["TEXCOORD_0"].first, instanceBindingDescription};
-			std::array<VkVertexInputAttributeDescription, 4> totalAttributeDescriptions = 
-				{vertexDef["POSITION"].second, vertexDef["NORMAL"].second, vertexDef["TEXCOORD_0"].second, instanceAttributeDescription[0]};
+			std::array<VkVertexInputBindingDescription, 5> totalBindingDescriptions = 
+				{vertexDef["POSITION"].first, vertexDef["NORMAL"].first, vertexDef["TEXCOORD_0"].first, vertexDef["TANGENT"].first, instanceBindingDescription};
+			std::array<VkVertexInputAttributeDescription, 5> totalAttributeDescriptions = 
+				{vertexDef["POSITION"].second, vertexDef["NORMAL"].second, vertexDef["TEXCOORD_0"].second, vertexDef["TANGENT"].second, instanceAttributeDescription[0]};
 
 			vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(totalBindingDescriptions.size());
 			vertexInputInfo.pVertexBindingDescriptions = totalBindingDescriptions.data();
@@ -1238,7 +1238,7 @@ private:
 			divisor.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
 
 			VkVertexInputBindingDivisorDescriptionEXT divisorDescription{};
-			divisorDescription.binding = 3;
+			divisorDescription.binding = 4;
 			divisorDescription.divisor = 1;
 
 			divisor.vertexBindingDivisorCount = 1;
@@ -1887,16 +1887,6 @@ private:
 		std::map<std::string, std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>> vertexDescription;
 		unsigned int idx = 0;
 		for (auto& attribute : model.meshes[0].primitives[0].attributes) {
-			if(attribute.first != "NORMAL" && attribute.first != "POSITION" && attribute.first != "TEXCOORD_0") {
-				continue;
-			}
-			if (attribute.first == "NORMAL")
-				std::cout << "normal attribute" << std::endl;
-			else if (attribute.first == "POSITION")
-				std::cout << "position attribute" << std::endl;
-			else if (attribute.first == "TEXCOORD_0")
-				std::cout << "texture attribute" << std::endl;
-
 			// WANRING: hardcode each buffer binding for each attribute
 			VkVertexInputBindingDescription bindingDescription{};
 			bindingDescription.binding = idx;
@@ -1910,6 +1900,7 @@ private:
 			if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC2) {
 				attributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
 				bindingDescription.stride = 8;
+				std::cout << "vec2 attribute: " << attribute.first << "\n";
 			}
 			else if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC3) {
 				attributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -2449,7 +2440,7 @@ private:
 	}
 
 	void createGraphicDescriptorSets(){
-		for (unsigned int o = 0; o < Object::COUNT; o++){
+		for (unsigned int o = 0; o < Object::SNOWFLAKE; o++){
 			Object objIdx = static_cast<Object>(o);
 			tinygltf::Model& model = m_model[objIdx];
 			m_graphicDescriptorSets.meshMaterial[objIdx].resize(model.meshes.size());
@@ -2767,6 +2758,11 @@ private:
 		tinygltf::Model& model = m_model[object];
 
 		int meshIdx = 0;
+		// factor out tangent
+		auto& attribute = model.meshes[0].primitives[0].attributes;
+		size_t tangentBufferOffset = model.accessors[attribute["TANGENT"]].byteOffset; 
+		VkBuffer tangentBuffer = m_vertexBuffer[object][model.accessors[attribute["TANGENT"]].bufferView]; 
+		
 		for (auto& mesh : model.meshes) {
 			// assume there is 1 primitive per mesh
 			auto& attributes = mesh.primitives[0].attributes;
@@ -2780,12 +2776,17 @@ private:
 			}
 
 			size_t normalBufferOffset = model.accessors[attributes["NORMAL"]].byteOffset;
-			size_t texCordBufferOffset = model.accessors[attributes["TEXCOORD_0"]].byteOffset;
-
 			VkBuffer normalBuffer = m_vertexBuffer[object][model.accessors[attributes["NORMAL"]].bufferView];
+
+			size_t texCordBufferOffset = model.accessors[attributes["TEXCOORD_0"]].byteOffset;
 			VkBuffer texCordBuffer = m_vertexBuffer[object][model.accessors[attributes["TEXCOORD_0"]].bufferView];
 
-			uint32_t DynamicOffset{};
+			// some mesh of the model don't have tangent attribute
+			// if(attribute.find("TANGENT") != attribute.end()) {
+			// 	tangentBuffer = m_vertexBuffer[object][model.accessors[attribute["TANGENT"]].bufferView];
+			// 	tangentBufferOffset = model.accessors[attribute["TANGENT"]].byteOffset;
+			// }
+
 			VkBuffer instanceBuffer;
 			uint32_t instanceCount{};
 			if (object == Object::SNOWFLAKE) {
@@ -2797,10 +2798,10 @@ private:
 				instanceCount = m_towerInstanceRaw.size();
 			}
 
-			VkBuffer vertexBuffers[4] = {positionBuffer, normalBuffer, texCordBuffer, instanceBuffer};
-			VkDeviceSize vertexBufferOffsets[4] = {positionBufferOffset, normalBufferOffset, texCordBufferOffset, 0};
+			VkBuffer vertexBuffers[5] = {positionBuffer, normalBuffer, texCordBuffer, tangentBuffer, instanceBuffer};
+			VkDeviceSize vertexBufferOffsets[5] = {positionBufferOffset, normalBufferOffset, texCordBufferOffset, tangentBufferOffset, 0};
 
-			vkCmdBindVertexBuffers(commandBuffer, 0, 4, vertexBuffers, vertexBufferOffsets);
+			vkCmdBindVertexBuffers(commandBuffer, 0, 5, vertexBuffers, vertexBufferOffsets);
 
 			auto& indexAccessoridx = mesh.primitives[0].indices;
 			VkBuffer indexBuffer = m_indexBuffer[object][model.accessors[indexAccessoridx].bufferView];
@@ -2811,6 +2812,7 @@ private:
 			TransformUniform* uniformMapped = (TransformUniform*)m_graphicUniformBuffersMapped.transform[object][m_currentFrame];
 			uniformMapped[meshIdx].model = uniformMapped[meshIdx].model * m_modelMeshTransforms[object][meshIdx];
 
+			uint32_t DynamicOffset{};
 			// this offset have to be 256 byte aligned
 			DynamicOffset = sizeof(TransformUniform) * meshIdx;
 
@@ -2921,8 +2923,9 @@ private:
 					TracyVkZone(tracyContext, commandBuffer, "Draw Model");
 					Object objIdx = static_cast<Object>(i);
 
-					drawModel(commandBuffer, objIdx);
 				}
+				drawModel(commandBuffer, Object::CANDLE);
+
 				{
 					TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
 					ImGui::Render();
