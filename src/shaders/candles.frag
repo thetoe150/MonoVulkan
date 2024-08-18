@@ -1,5 +1,10 @@
 #version 450
 
+layout(set = 0, binding = 1) uniform UniformLighting {
+    vec3 lightPos;
+    vec3 camPos;
+} u_lighting;
+
 layout(set = 1, binding = 2) uniform sampler2D u_texSampler;
 layout(set = 1, binding = 3) uniform sampler2D u_normalSampler;
 
@@ -7,18 +12,29 @@ layout(location = 0) in vec2 v_fragTexCoord;
 layout(location = 1) in vec3 v_tangentFragPos;
 layout(location = 2) in vec3 v_tangentLightPos;
 layout(location = 3) in vec3 v_tangentCamPos;
+layout(location = 4) in vec3 v_fragPos;
+layout(location = 5) in vec3 v_normal;
 
 layout(location = 0) out vec4 outColor;
 
-layout (constant_id = 0) const bool useTexture = true;
+layout (push_constant) uniform DataPushConstant{
+	bool isNormalMapping;
+} p_const;
 
 void main() {
-	vec3 normal = texture(u_normalSampler, v_fragTexCoord).rgb;
-	vec3 n = normalize(normal * 2 - 1.0);
 	vec3 color = texture(u_texSampler, v_fragTexCoord).rgb;
 
-	vec3 l = normalize(v_tangentLightPos - v_tangentFragPos);
-	vec3 c = normalize(v_tangentCamPos - v_tangentFragPos);
+	vec3 n = v_normal;
+	vec3 l = normalize(u_lighting.lightPos - v_fragPos);
+	vec3 c = normalize(u_lighting.camPos - v_fragPos);
+
+	if (p_const.isNormalMapping) {
+		vec3 normal = texture(u_normalSampler, v_fragTexCoord).rgb;
+		n = normalize(normal * 2 - 1.0);
+		l = normalize(v_tangentLightPos - v_tangentFragPos);
+		c = normalize(v_tangentCamPos - v_tangentFragPos);
+	}
+
 	vec3 r = reflect(-l, n);
 	vec3 h = normalize(l + c);
 

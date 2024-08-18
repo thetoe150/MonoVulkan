@@ -1,27 +1,36 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 100
+; Bound: 130
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Fragment %main "main" %v_fragTexCoord %v_tangentLightPos %v_tangentFragPos %v_tangentCamPos %outColor
+               OpEntryPoint Fragment %main "main" %v_fragTexCoord %v_normal %v_fragPos %v_tangentLightPos %v_tangentFragPos %v_tangentCamPos %outColor
                OpExecutionMode %main OriginUpperLeft
                OpSource GLSL 450
                OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
                OpSourceExtension "GL_GOOGLE_include_directive"
                OpName %main "main"
-               OpName %normal "normal"
-               OpName %u_normalSampler "u_normalSampler"
-               OpName %v_fragTexCoord "v_fragTexCoord"
-               OpName %n "n"
                OpName %color "color"
                OpName %u_texSampler "u_texSampler"
+               OpName %v_fragTexCoord "v_fragTexCoord"
+               OpName %n "n"
+               OpName %v_normal "v_normal"
                OpName %l "l"
+               OpName %UniformLighting "UniformLighting"
+               OpMemberName %UniformLighting 0 "lightPos"
+               OpMemberName %UniformLighting 1 "camPos"
+               OpName %u_lighting "u_lighting"
+               OpName %v_fragPos "v_fragPos"
+               OpName %c "c"
+               OpName %DataPushConstant "DataPushConstant"
+               OpMemberName %DataPushConstant 0 "isNormalMapping"
+               OpName %p_const "p_const"
+               OpName %normal "normal"
+               OpName %u_normalSampler "u_normalSampler"
                OpName %v_tangentLightPos "v_tangentLightPos"
                OpName %v_tangentFragPos "v_tangentFragPos"
-               OpName %c "c"
                OpName %v_tangentCamPos "v_tangentCamPos"
                OpName %r "r"
                OpName %h "h"
@@ -31,17 +40,24 @@
                OpName %spec "spec"
                OpName %specular "specular"
                OpName %outColor "outColor"
-               OpName %useTexture "useTexture"
-               OpDecorate %u_normalSampler DescriptorSet 1
-               OpDecorate %u_normalSampler Binding 3
-               OpDecorate %v_fragTexCoord Location 0
                OpDecorate %u_texSampler DescriptorSet 1
                OpDecorate %u_texSampler Binding 2
+               OpDecorate %v_fragTexCoord Location 0
+               OpDecorate %v_normal Location 5
+               OpMemberDecorate %UniformLighting 0 Offset 0
+               OpMemberDecorate %UniformLighting 1 Offset 16
+               OpDecorate %UniformLighting Block
+               OpDecorate %u_lighting DescriptorSet 0
+               OpDecorate %u_lighting Binding 1
+               OpDecorate %v_fragPos Location 4
+               OpMemberDecorate %DataPushConstant 0 Offset 0
+               OpDecorate %DataPushConstant Block
+               OpDecorate %u_normalSampler DescriptorSet 1
+               OpDecorate %u_normalSampler Binding 3
                OpDecorate %v_tangentLightPos Location 2
                OpDecorate %v_tangentFragPos Location 1
                OpDecorate %v_tangentCamPos Location 3
                OpDecorate %outColor Location 0
-               OpDecorate %useTexture SpecId 0
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
       %float = OpTypeFloat 32
@@ -50,15 +66,31 @@
          %10 = OpTypeImage %float 2D 0 0 0 1 Unknown
          %11 = OpTypeSampledImage %10
 %_ptr_UniformConstant_11 = OpTypePointer UniformConstant %11
-%u_normalSampler = OpVariable %_ptr_UniformConstant_11 UniformConstant
+%u_texSampler = OpVariable %_ptr_UniformConstant_11 UniformConstant
     %v2float = OpTypeVector %float 2
 %_ptr_Input_v2float = OpTypePointer Input %v2float
 %v_fragTexCoord = OpVariable %_ptr_Input_v2float Input
     %v4float = OpTypeVector %float 4
+%_ptr_Input_v3float = OpTypePointer Input %v3float
+   %v_normal = OpVariable %_ptr_Input_v3float Input
+%UniformLighting = OpTypeStruct %v3float %v3float
+%_ptr_Uniform_UniformLighting = OpTypePointer Uniform %UniformLighting
+ %u_lighting = OpVariable %_ptr_Uniform_UniformLighting Uniform
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+%_ptr_Uniform_v3float = OpTypePointer Uniform %v3float
+  %v_fragPos = OpVariable %_ptr_Input_v3float Input
+      %int_1 = OpConstant %int 1
+       %uint = OpTypeInt 32 0
+%DataPushConstant = OpTypeStruct %uint
+%_ptr_PushConstant_DataPushConstant = OpTypePointer PushConstant %DataPushConstant
+    %p_const = OpVariable %_ptr_PushConstant_DataPushConstant PushConstant
+%_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
+       %bool = OpTypeBool
+     %uint_0 = OpConstant %uint 0
+%u_normalSampler = OpVariable %_ptr_UniformConstant_11 UniformConstant
     %float_2 = OpConstant %float 2
     %float_1 = OpConstant %float 1
-%u_texSampler = OpVariable %_ptr_UniformConstant_11 UniformConstant
-%_ptr_Input_v3float = OpTypePointer Input %v3float
 %v_tangentLightPos = OpVariable %_ptr_Input_v3float Input
 %v_tangentFragPos = OpVariable %_ptr_Input_v3float Input
 %v_tangentCamPos = OpVariable %_ptr_Input_v3float Input
@@ -67,18 +99,16 @@
     %float_0 = OpConstant %float 0
    %float_32 = OpConstant %float 32
 %float_0_100000001 = OpConstant %float 0.100000001
-         %84 = OpConstantComposite %v3float %float_0_100000001 %float_0_100000001 %float_0_100000001
+        %116 = OpConstantComposite %v3float %float_0_100000001 %float_0_100000001 %float_0_100000001
 %_ptr_Output_v4float = OpTypePointer Output %v4float
    %outColor = OpVariable %_ptr_Output_v4float Output
-       %bool = OpTypeBool
- %useTexture = OpSpecConstantTrue %bool
        %main = OpFunction %void None %3
           %5 = OpLabel
-     %normal = OpVariable %_ptr_Function_v3float Function
-          %n = OpVariable %_ptr_Function_v3float Function
       %color = OpVariable %_ptr_Function_v3float Function
+          %n = OpVariable %_ptr_Function_v3float Function
           %l = OpVariable %_ptr_Function_v3float Function
           %c = OpVariable %_ptr_Function_v3float Function
+     %normal = OpVariable %_ptr_Function_v3float Function
           %r = OpVariable %_ptr_Function_v3float Function
           %h = OpVariable %_ptr_Function_v3float Function
     %ambient = OpVariable %_ptr_Function_v3float Function
@@ -86,72 +116,94 @@
     %diffuse = OpVariable %_ptr_Function_v3float Function
        %spec = OpVariable %_ptr_Function_float Function
    %specular = OpVariable %_ptr_Function_v3float Function
-         %14 = OpLoad %11 %u_normalSampler
+         %14 = OpLoad %11 %u_texSampler
          %18 = OpLoad %v2float %v_fragTexCoord
          %20 = OpImageSampleImplicitLod %v4float %14 %18
          %21 = OpVectorShuffle %v3float %20 %20 0 1 2
-               OpStore %normal %21
-         %23 = OpLoad %v3float %normal
-         %25 = OpVectorTimesScalar %v3float %23 %float_2
-         %27 = OpCompositeConstruct %v3float %float_1 %float_1 %float_1
-         %28 = OpFSub %v3float %25 %27
-         %29 = OpExtInst %v3float %1 Normalize %28
-               OpStore %n %29
-         %32 = OpLoad %11 %u_texSampler
-         %33 = OpLoad %v2float %v_fragTexCoord
-         %34 = OpImageSampleImplicitLod %v4float %32 %33
-         %35 = OpVectorShuffle %v3float %34 %34 0 1 2
-               OpStore %color %35
-         %39 = OpLoad %v3float %v_tangentLightPos
-         %41 = OpLoad %v3float %v_tangentFragPos
-         %42 = OpFSub %v3float %39 %41
-         %43 = OpExtInst %v3float %1 Normalize %42
-               OpStore %l %43
-         %46 = OpLoad %v3float %v_tangentCamPos
-         %47 = OpLoad %v3float %v_tangentFragPos
-         %48 = OpFSub %v3float %46 %47
-         %49 = OpExtInst %v3float %1 Normalize %48
-               OpStore %c %49
-         %51 = OpLoad %v3float %l
-         %52 = OpFNegate %v3float %51
-         %53 = OpLoad %v3float %n
-         %54 = OpExtInst %v3float %1 Reflect %52 %53
-               OpStore %r %54
-         %56 = OpLoad %v3float %l
-         %57 = OpLoad %v3float %c
-         %58 = OpFAdd %v3float %56 %57
-         %59 = OpExtInst %v3float %1 Normalize %58
-               OpStore %h %59
-         %62 = OpLoad %v3float %color
-         %63 = OpVectorTimesScalar %v3float %62 %float_0_200000003
-               OpStore %ambient %63
-         %66 = OpLoad %v3float %l
-         %67 = OpLoad %v3float %n
-         %68 = OpDot %float %66 %67
-         %70 = OpExtInst %float %1 FMax %68 %float_0
-               OpStore %diff %70
-         %72 = OpLoad %float %diff
-         %73 = OpLoad %v3float %color
-         %74 = OpVectorTimesScalar %v3float %73 %72
-               OpStore %diffuse %74
-         %76 = OpLoad %v3float %n
-         %77 = OpLoad %v3float %h
-         %78 = OpDot %float %76 %77
-         %79 = OpExtInst %float %1 FMax %78 %float_0
-         %81 = OpExtInst %float %1 Pow %79 %float_32
-               OpStore %spec %81
-         %85 = OpLoad %float %spec
-         %86 = OpVectorTimesScalar %v3float %84 %85
-               OpStore %specular %86
-         %89 = OpLoad %v3float %ambient
-         %90 = OpLoad %v3float %diffuse
-         %91 = OpFAdd %v3float %89 %90
-         %92 = OpLoad %v3float %specular
-         %93 = OpFAdd %v3float %91 %92
-         %94 = OpCompositeExtract %float %93 0
-         %95 = OpCompositeExtract %float %93 1
-         %96 = OpCompositeExtract %float %93 2
-         %97 = OpCompositeConstruct %v4float %94 %95 %96 %float_1
-               OpStore %outColor %97
+               OpStore %color %21
+         %25 = OpLoad %v3float %v_normal
+               OpStore %n %25
+         %33 = OpAccessChain %_ptr_Uniform_v3float %u_lighting %int_0
+         %34 = OpLoad %v3float %33
+         %36 = OpLoad %v3float %v_fragPos
+         %37 = OpFSub %v3float %34 %36
+         %38 = OpExtInst %v3float %1 Normalize %37
+               OpStore %l %38
+         %41 = OpAccessChain %_ptr_Uniform_v3float %u_lighting %int_1
+         %42 = OpLoad %v3float %41
+         %43 = OpLoad %v3float %v_fragPos
+         %44 = OpFSub %v3float %42 %43
+         %45 = OpExtInst %v3float %1 Normalize %44
+               OpStore %c %45
+         %51 = OpAccessChain %_ptr_PushConstant_uint %p_const %int_0
+         %52 = OpLoad %uint %51
+         %55 = OpINotEqual %bool %52 %uint_0
+               OpSelectionMerge %57 None
+               OpBranchConditional %55 %56 %57
+         %56 = OpLabel
+         %60 = OpLoad %11 %u_normalSampler
+         %61 = OpLoad %v2float %v_fragTexCoord
+         %62 = OpImageSampleImplicitLod %v4float %60 %61
+         %63 = OpVectorShuffle %v3float %62 %62 0 1 2
+               OpStore %normal %63
+         %64 = OpLoad %v3float %normal
+         %66 = OpVectorTimesScalar %v3float %64 %float_2
+         %68 = OpCompositeConstruct %v3float %float_1 %float_1 %float_1
+         %69 = OpFSub %v3float %66 %68
+         %70 = OpExtInst %v3float %1 Normalize %69
+               OpStore %n %70
+         %72 = OpLoad %v3float %v_tangentLightPos
+         %74 = OpLoad %v3float %v_tangentFragPos
+         %75 = OpFSub %v3float %72 %74
+         %76 = OpExtInst %v3float %1 Normalize %75
+               OpStore %l %76
+         %78 = OpLoad %v3float %v_tangentCamPos
+         %79 = OpLoad %v3float %v_tangentFragPos
+         %80 = OpFSub %v3float %78 %79
+         %81 = OpExtInst %v3float %1 Normalize %80
+               OpStore %c %81
+               OpBranch %57
+         %57 = OpLabel
+         %83 = OpLoad %v3float %l
+         %84 = OpFNegate %v3float %83
+         %85 = OpLoad %v3float %n
+         %86 = OpExtInst %v3float %1 Reflect %84 %85
+               OpStore %r %86
+         %88 = OpLoad %v3float %l
+         %89 = OpLoad %v3float %c
+         %90 = OpFAdd %v3float %88 %89
+         %91 = OpExtInst %v3float %1 Normalize %90
+               OpStore %h %91
+         %94 = OpLoad %v3float %color
+         %95 = OpVectorTimesScalar %v3float %94 %float_0_200000003
+               OpStore %ambient %95
+         %98 = OpLoad %v3float %l
+         %99 = OpLoad %v3float %n
+        %100 = OpDot %float %98 %99
+        %102 = OpExtInst %float %1 FMax %100 %float_0
+               OpStore %diff %102
+        %104 = OpLoad %float %diff
+        %105 = OpLoad %v3float %color
+        %106 = OpVectorTimesScalar %v3float %105 %104
+               OpStore %diffuse %106
+        %108 = OpLoad %v3float %n
+        %109 = OpLoad %v3float %h
+        %110 = OpDot %float %108 %109
+        %111 = OpExtInst %float %1 FMax %110 %float_0
+        %113 = OpExtInst %float %1 Pow %111 %float_32
+               OpStore %spec %113
+        %117 = OpLoad %float %spec
+        %118 = OpVectorTimesScalar %v3float %116 %117
+               OpStore %specular %118
+        %121 = OpLoad %v3float %ambient
+        %122 = OpLoad %v3float %diffuse
+        %123 = OpFAdd %v3float %121 %122
+        %124 = OpLoad %v3float %specular
+        %125 = OpFAdd %v3float %123 %124
+        %126 = OpCompositeExtract %float %125 0
+        %127 = OpCompositeExtract %float %125 1
+        %128 = OpCompositeExtract %float %125 2
+        %129 = OpCompositeConstruct %v4float %126 %127 %128 %float_1
+               OpStore %outColor %129
                OpReturn
                OpFunctionEnd

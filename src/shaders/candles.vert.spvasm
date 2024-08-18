@@ -1,12 +1,12 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 160
+; Bound: 164
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Vertex %main "main" %instancePos %a_position %a_normal %a_tangent %v_tangentFragPos %v_tangentLightPos %v_tangentCamPos %v_texCoord %a_texCoord %_
+               OpEntryPoint Vertex %main "main" %instancePos %a_position %a_normal %a_tangent %v_tangentFragPos %v_tangentLightPos %v_tangentCamPos %v_texCoord %a_texCoord %v_fragPosition %v_normal %_
                OpSource GLSL 450
                OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
                OpSourceExtension "GL_GOOGLE_include_directive"
@@ -37,6 +37,8 @@
                OpName %v_tangentCamPos "v_tangentCamPos"
                OpName %v_texCoord "v_texCoord"
                OpName %a_texCoord "a_texCoord"
+               OpName %v_fragPosition "v_fragPosition"
+               OpName %v_normal "v_normal"
                OpName %gl_PerVertex "gl_PerVertex"
                OpMemberName %gl_PerVertex 0 "gl_Position"
                OpMemberName %gl_PerVertex 1 "gl_PointSize"
@@ -69,6 +71,8 @@
                OpDecorate %v_tangentCamPos Location 3
                OpDecorate %v_texCoord Location 0
                OpDecorate %a_texCoord Location 3
+               OpDecorate %v_fragPosition Location 4
+               OpDecorate %v_normal Location 5
                OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
                OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
                OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
@@ -123,6 +127,8 @@
  %v_texCoord = OpVariable %_ptr_Output_v2float Output
 %_ptr_Input_v2float = OpTypePointer Input %v2float
  %a_texCoord = OpVariable %_ptr_Input_v2float Input
+%v_fragPosition = OpVariable %_ptr_Output_v3float Output
+   %v_normal = OpVariable %_ptr_Output_v3float Output
 %_arr_float_uint_1 = OpTypeArray %float %uint_1
 %gl_PerVertex = OpTypeStruct %v4float %float %_arr_float_uint_1 %_arr_float_uint_1
 %_ptr_Output_gl_PerVertex = OpTypePointer Output %gl_PerVertex
@@ -233,20 +239,24 @@
                OpStore %v_tangentCamPos %134
         %140 = OpLoad %v2float %a_texCoord
                OpStore %v_texCoord %140
-        %145 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_2
-        %146 = OpLoad %mat4v4float %145
-        %147 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_1
-        %148 = OpLoad %mat4v4float %147
-        %149 = OpMatrixTimesMatrix %mat4v4float %146 %148
-        %150 = OpLoad %mat4v4float %model
-        %151 = OpMatrixTimesMatrix %mat4v4float %149 %150
-        %152 = OpLoad %v3float %a_position
-        %153 = OpCompositeExtract %float %152 0
-        %154 = OpCompositeExtract %float %152 1
-        %155 = OpCompositeExtract %float %152 2
-        %156 = OpCompositeConstruct %v4float %153 %154 %155 %float_1
-        %157 = OpMatrixTimesVector %v4float %151 %156
-        %159 = OpAccessChain %_ptr_Output_v4float %_ %int_0
-               OpStore %159 %157
+        %142 = OpLoad %v3float %fragPos
+               OpStore %v_fragPosition %142
+        %144 = OpLoad %v3float %a_normal
+               OpStore %v_normal %144
+        %149 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_2
+        %150 = OpLoad %mat4v4float %149
+        %151 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_1
+        %152 = OpLoad %mat4v4float %151
+        %153 = OpMatrixTimesMatrix %mat4v4float %150 %152
+        %154 = OpLoad %mat4v4float %model
+        %155 = OpMatrixTimesMatrix %mat4v4float %153 %154
+        %156 = OpLoad %v3float %a_position
+        %157 = OpCompositeExtract %float %156 0
+        %158 = OpCompositeExtract %float %156 1
+        %159 = OpCompositeExtract %float %156 2
+        %160 = OpCompositeConstruct %v4float %157 %158 %159 %float_1
+        %161 = OpMatrixTimesVector %v4float %155 %160
+        %163 = OpAccessChain %_ptr_Output_v4float %_ %int_0
+               OpStore %163 %161
                OpReturn
                OpFunctionEnd

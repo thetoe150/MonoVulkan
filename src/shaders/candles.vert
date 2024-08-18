@@ -23,6 +23,10 @@ layout(location = 1) out vec3 v_tangentFragPos;
 layout(location = 2) out vec3 v_tangentLightPos;
 layout(location = 3) out vec3 v_tangentCamPos;
 
+// in case not using normal mapping
+layout(location = 4) out vec3 v_fragPosition;
+layout(location = 5) out vec3 v_normal;
+
 void main() {
 	mat4 instanceModel;
 	instanceModel[0] = vec4(1.0f, 0.0f, 0.0f, 0.0f);
@@ -51,5 +55,7 @@ void main() {
 	v_tangentCamPos = TBN * u_lighting.camPos;
 
     v_texCoord = a_texCoord;
+    v_fragPosition = fragPos;
+    v_normal = a_normal;
     gl_Position = u_transform.proj * u_transform.view * model * vec4(a_position, 1.0);
 }

@@ -277,6 +277,8 @@ private:
 	VmaAllocation m_storageBufferAlloc;
 
 	SpecializationConstant m_graphicSpecConstant;
+	GraphicPushConstant m_graphicPushConstant;
+
 	ComputePushConstant m_computePushConstant;
 
 	VkBuffer m_vortexUniformBuffer;
@@ -1094,7 +1096,7 @@ private:
 			lightBinding.descriptorCount = 1;
 			lightBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			lightBinding.pImmutableSamplers = nullptr;
-			lightBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+			lightBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, lightBinding};
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
@@ -2811,10 +2813,17 @@ private:
 			TransformUniform* uniformMapped = (TransformUniform*)m_graphicUniformBuffersMapped.transform[object][m_currentFrame];
 			uniformMapped[meshIdx].model = uniformMapped[meshIdx].model * m_modelMeshTransforms[object][meshIdx];
 
+			// some mesh in the model don't normal mapp
+			if(attributes.find("TANGENT") == attributes.end())
+				m_graphicPushConstant.isNormalMapping = false;
+			else
+				m_graphicPushConstant.isNormalMapping = true;
+
+			vkCmdPushConstants(commandBuffer, m_graphicPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), (void*)&m_graphicPushConstant);
+
 			uint32_t DynamicOffset{};
 			// this offset have to be 256 byte aligned
 			DynamicOffset = sizeof(TransformUniform) * meshIdx;
-
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 
 						   0, 1, &m_graphicDescriptorSets.tranformUniform[object][m_currentFrame], 1, &DynamicOffset);
 
