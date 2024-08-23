@@ -1,7 +1,6 @@
 /.cache/
 **/.exe
 /obj/
-/tracy/
 /build/
 /bin/debug/
 /res/cache/
