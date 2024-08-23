@@ -15,6 +15,9 @@ layout(location = 3) in vec3 v_tangentCamPos;
 layout(location = 4) in vec3 v_fragPos;
 layout(location = 5) in vec3 v_normal;
 
+// just for testing
+layout(location = 6) in vec3 v_tangent;
+
 layout(location = 0) out vec4 outColor;
 
 layout (push_constant) uniform DataPushConstant{
@@ -37,7 +40,7 @@ void main() {
 	vec3 r = reflect(-l, n);
 	vec3 h = normalize(l + c);
 
-	vec3 ambient = 1.5 * color;
+	vec3 ambient = 0.3 * color;
 
 	float diff = max(dot(l, n), 0.0);
 	vec3 diffuse = diff * color;
@@ -46,5 +49,5 @@ void main() {
 	vec3 specular = vec3(0.1) * spec;
 
 	outColor = vec4(ambient + diffuse + specular, 1.0);
-	outColor = vec4(ambient + n, 1.0);
+	outColor = vec4(v_tangent, 1.0);
 }

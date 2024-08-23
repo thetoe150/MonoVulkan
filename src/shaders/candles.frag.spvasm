@@ -1,12 +1,12 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 137
+; Bound: 136
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Fragment %main "main" %v_fragTexCoord %v_normal %v_fragPos %v_tangentLightPos %v_tangentFragPos %v_tangentCamPos %outColor
+               OpEntryPoint Fragment %main "main" %v_fragTexCoord %v_normal %v_fragPos %v_tangentLightPos %v_tangentFragPos %v_tangentCamPos %outColor %v_tangent
                OpExecutionMode %main OriginUpperLeft
                OpSource GLSL 450
                OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
@@ -40,6 +40,7 @@
                OpName %spec "spec"
                OpName %specular "specular"
                OpName %outColor "outColor"
+               OpName %v_tangent "v_tangent"
                OpDecorate %u_texSampler DescriptorSet 1
                OpDecorate %u_texSampler Binding 2
                OpDecorate %v_fragTexCoord Location 0
@@ -58,6 +59,7 @@
                OpDecorate %v_tangentFragPos Location 1
                OpDecorate %v_tangentCamPos Location 3
                OpDecorate %outColor Location 0
+               OpDecorate %v_tangent Location 6
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
       %float = OpTypeFloat 32
@@ -94,7 +96,7 @@
 %v_tangentLightPos = OpVariable %_ptr_Input_v3float Input
 %v_tangentFragPos = OpVariable %_ptr_Input_v3float Input
 %v_tangentCamPos = OpVariable %_ptr_Input_v3float Input
-  %float_1_5 = OpConstant %float 1.5
+%float_0_300000012 = OpConstant %float 0.300000012
 %_ptr_Function_float = OpTypePointer Function %float
     %float_0 = OpConstant %float 0
    %float_32 = OpConstant %float 32
@@ -102,6 +104,7 @@
         %116 = OpConstantComposite %v3float %float_0_100000001 %float_0_100000001 %float_0_100000001
 %_ptr_Output_v4float = OpTypePointer Output %v4float
    %outColor = OpVariable %_ptr_Output_v4float Output
+  %v_tangent = OpVariable %_ptr_Input_v3float Input
        %main = OpFunction %void None %3
           %5 = OpLabel
       %color = OpVariable %_ptr_Function_v3float Function
@@ -175,7 +178,7 @@
          %91 = OpExtInst %v3float %1 Normalize %90
                OpStore %h %91
          %94 = OpLoad %v3float %color
-         %95 = OpVectorTimesScalar %v3float %94 %float_1_5
+         %95 = OpVectorTimesScalar %v3float %94 %float_0_300000012
                OpStore %ambient %95
          %98 = OpLoad %v3float %l
          %99 = OpLoad %v3float %n
@@ -205,13 +208,11 @@
         %128 = OpCompositeExtract %float %125 2
         %129 = OpCompositeConstruct %v4float %126 %127 %128 %float_1
                OpStore %outColor %129
-        %130 = OpLoad %v3float %ambient
-        %131 = OpLoad %v3float %n
-        %132 = OpFAdd %v3float %130 %131
-        %133 = OpCompositeExtract %float %132 0
-        %134 = OpCompositeExtract %float %132 1
-        %135 = OpCompositeExtract %float %132 2
-        %136 = OpCompositeConstruct %v4float %133 %134 %135 %float_1
-               OpStore %outColor %136
+        %131 = OpLoad %v3float %v_tangent
+        %132 = OpCompositeExtract %float %131 0
+        %133 = OpCompositeExtract %float %131 1
+        %134 = OpCompositeExtract %float %131 2
+        %135 = OpCompositeConstruct %v4float %132 %133 %134 %float_1
+               OpStore %outColor %135
                OpReturn
                OpFunctionEnd

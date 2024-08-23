@@ -1,12 +1,12 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 172
+; Bound: 178
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Vertex %main "main" %instancePos %a_position %a_normal %a_tangent %v_tangentFragPos %v_tangentLightPos %v_tangentCamPos %v_texCoord %a_texCoord %v_fragPosition %v_normal %_
+               OpEntryPoint Vertex %main "main" %instancePos %a_position %a_normal %a_tangent %v_tangentFragPos %v_tangentLightPos %v_tangentCamPos %v_texCoord %a_texCoord %v_fragPosition %v_normal %v_tangent %_
                OpSource GLSL 450
                OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
                OpSourceExtension "GL_GOOGLE_include_directive"
@@ -39,6 +39,7 @@
                OpName %a_texCoord "a_texCoord"
                OpName %v_fragPosition "v_fragPosition"
                OpName %v_normal "v_normal"
+               OpName %v_tangent "v_tangent"
                OpName %gl_PerVertex "gl_PerVertex"
                OpMemberName %gl_PerVertex 0 "gl_Position"
                OpMemberName %gl_PerVertex 1 "gl_PointSize"
@@ -73,6 +74,7 @@
                OpDecorate %a_texCoord Location 3
                OpDecorate %v_fragPosition Location 4
                OpDecorate %v_normal Location 5
+               OpDecorate %v_tangent Location 6
                OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
                OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
                OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
@@ -129,6 +131,7 @@
  %a_texCoord = OpVariable %_ptr_Input_v2float Input
 %v_fragPosition = OpVariable %_ptr_Output_v3float Output
    %v_normal = OpVariable %_ptr_Output_v3float Output
+  %v_tangent = OpVariable %_ptr_Output_v3float Output
 %_arr_float_uint_1 = OpTypeArray %float %uint_1
 %gl_PerVertex = OpTypeStruct %v4float %float %_arr_float_uint_1 %_arr_float_uint_1
 %_ptr_Output_gl_PerVertex = OpTypePointer Output %gl_PerVertex
@@ -252,20 +255,26 @@
                OpStore %v_fragPosition %150
         %152 = OpLoad %v3float %a_normal
                OpStore %v_normal %152
-        %157 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_2
-        %158 = OpLoad %mat4v4float %157
-        %159 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_1
-        %160 = OpLoad %mat4v4float %159
-        %161 = OpMatrixTimesMatrix %mat4v4float %158 %160
-        %162 = OpLoad %mat4v4float %model
-        %163 = OpMatrixTimesMatrix %mat4v4float %161 %162
-        %164 = OpLoad %v3float %a_position
-        %165 = OpCompositeExtract %float %164 0
-        %166 = OpCompositeExtract %float %164 1
-        %167 = OpCompositeExtract %float %164 2
-        %168 = OpCompositeConstruct %v4float %165 %166 %167 %float_1
-        %169 = OpMatrixTimesVector %v4float %163 %168
-        %171 = OpAccessChain %_ptr_Output_v4float %_ %int_0
-               OpStore %171 %169
+        %154 = OpLoad %v4float %a_tangent
+        %155 = OpCompositeExtract %float %154 0
+        %156 = OpCompositeExtract %float %154 1
+        %157 = OpCompositeExtract %float %154 2
+        %158 = OpCompositeConstruct %v3float %155 %156 %157
+               OpStore %v_tangent %158
+        %163 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_2
+        %164 = OpLoad %mat4v4float %163
+        %165 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_1
+        %166 = OpLoad %mat4v4float %165
+        %167 = OpMatrixTimesMatrix %mat4v4float %164 %166
+        %168 = OpLoad %mat4v4float %model
+        %169 = OpMatrixTimesMatrix %mat4v4float %167 %168
+        %170 = OpLoad %v3float %a_position
+        %171 = OpCompositeExtract %float %170 0
+        %172 = OpCompositeExtract %float %170 1
+        %173 = OpCompositeExtract %float %170 2
+        %174 = OpCompositeConstruct %v4float %171 %172 %173 %float_1
+        %175 = OpMatrixTimesVector %v4float %169 %174
+        %177 = OpAccessChain %_ptr_Output_v4float %_ %int_0
+               OpStore %177 %175
                OpReturn
                OpFunctionEnd

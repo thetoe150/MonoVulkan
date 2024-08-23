@@ -26,6 +26,9 @@ layout(location = 3) out vec3 v_tangentCamPos;
 layout(location = 4) out vec3 v_fragPosition;
 layout(location = 5) out vec3 v_normal;
 
+// just for testing
+layout(location = 6) out vec3 v_tangent;
+
 void main() {
 	mat4 instanceModel;
 	instanceModel[0] = vec4(1.0f, 0.0f, 0.0f, 0.0f);
@@ -51,5 +54,7 @@ void main() {
     v_texCoord = a_texCoord;
     v_fragPosition = fragPos;
     v_normal = a_normal;
+	// just for tessting
+	v_tangent = vec3(a_tangent);
     gl_Position = u_transform.proj * u_transform.view * model * vec4(a_position, 1.0);
 }

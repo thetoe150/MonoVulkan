@@ -1527,7 +1527,7 @@ private:
 					continue;
 				}
 				tinygltf::Texture normalTexture = model.textures[material.normalTexture.index];
-				auto normalImage = createModelImage(objIdx, normalTexture, false);
+				auto normalImage = createModelImage(objIdx, normalTexture, true);
 				m_images.normalImage[objIdx].push_back(normalImage.first);
 				m_imageAllocs.normalAlloc[objIdx].push_back(normalImage.second);
 			}
