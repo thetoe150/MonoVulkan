@@ -40,14 +40,14 @@ void main() {
 	vec3 r = reflect(-l, n);
 	vec3 h = normalize(l + c);
 
-	vec3 ambient = 0.3 * color;
+	vec3 ambient = 0.2 * color;
 
 	float diff = max(dot(l, n), 0.0);
 	vec3 diffuse = diff * color;
 
 	float spec = pow(max(dot(n, h), 0.0), 32.0);
-	vec3 specular = vec3(0.1) * spec;
+	vec3 specular = vec3(0.2) * spec;
 
 	outColor = vec4(ambient + diffuse + specular, 1.0);
-	outColor = vec4(v_tangent, 1.0);
+	// outColor = vec4(v_tangent, 1.0);
 }

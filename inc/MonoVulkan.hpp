@@ -237,7 +237,7 @@ constexpr glm::vec3 WORLD_UP{0.f, 1.f, 0.f};
 constexpr float YAW{90.f};
 constexpr float PITCH{0.f};
 
-constexpr float MOVE_SPEED{10.f};
+constexpr float MOVE_SPEED{5.f};
 constexpr float MOUSE_MOVE_SPEED{0.1f};
 constexpr float MOUSE_SCROLL_SPEED{1.f};
 constexpr float ZOOM{45.f};
@@ -343,6 +343,7 @@ private:
 
 inline Camera g_camera{};
 
+inline bool s_moveCam = true;
 inline bool firstMouse = true;
 inline float lastX = 0.f;
 inline float lastY = 0.f;

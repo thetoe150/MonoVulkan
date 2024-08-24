@@ -362,7 +362,8 @@ private:
 		lastX = xpos;
 		lastY = ypos;
 
-		g_camera.processMouseMovement(xoffset, yoffset);
+		if (s_moveCam)
+			g_camera.processMouseMovement(xoffset, yoffset);
 	}
 
 	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset){
@@ -483,10 +484,14 @@ private:
 		if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
 			g_camera.processKeyboard(MovementDirection::DOWN, m_currentDeltaTime);
 
-		if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS)
+		if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
+			s_moveCam = true;
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-		if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS)
+		}
+		if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
+			s_moveCam = false;
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		}
 
 		//// key for rotate object
 		//float rotateVelocity = deltaTime * 40.0f;
