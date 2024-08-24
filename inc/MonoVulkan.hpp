@@ -122,7 +122,7 @@ struct ComputePushConstant{
 };
 
 struct GraphicPushConstant{
-	alignas(4) bool isNormalMapping{true};
+	alignas(4) int isNormalMapping{1};
 };
 
 struct SpecializationConstant{

@@ -21,7 +21,7 @@ layout(location = 6) in vec3 v_tangent;
 layout(location = 0) out vec4 outColor;
 
 layout (push_constant) uniform DataPushConstant{
-	bool isNormalMapping;
+	int isNormalMapping;
 } p_const;
 
 void main() {
@@ -30,7 +30,7 @@ void main() {
 	vec3 l = normalize(u_lighting.lightPos - v_fragPos);
 	vec3 c = normalize(u_lighting.camPos - v_fragPos);
 
-	if (p_const.isNormalMapping) {
+	if (p_const.isNormalMapping == 1) {
 		vec3 normal = texture(u_normalSampler, v_fragTexCoord).rgb;
 		n = normalize(normal * 2 - 1.0);
 		l = normalize(v_tangentLightPos - v_tangentFragPos);
@@ -49,5 +49,5 @@ void main() {
 	vec3 specular = vec3(0.2) * spec;
 
 	outColor = vec4(ambient + diffuse + specular, 1.0);
-	// outColor = vec4(v_tangent, 1.0);
+	// outColor = vec4(color, 1.0);
 }

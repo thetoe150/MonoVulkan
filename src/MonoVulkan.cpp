@@ -2819,15 +2819,17 @@ private:
 			uniformMapped[meshIdx].model = uniformMapped[meshIdx].model * m_modelMeshTransforms[object][meshIdx];
 
 			// some mesh in the model don't normal mapp
-			if(attributes.find("TANGENT") == attributes.end())
-				m_graphicPushConstant.isNormalMapping = false;
-			else
-				m_graphicPushConstant.isNormalMapping = true;
+			if(attributes["TANGENT"] == 0) {
+				m_graphicPushConstant.isNormalMapping = 0;
+			}
+			else {
+				m_graphicPushConstant.isNormalMapping = 1;
+			}
 
 			vkCmdPushConstants(commandBuffer, m_graphicPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), (void*)&m_graphicPushConstant);
 
 			uint32_t DynamicOffset{};
-			// this offset have to be 256 byte aligned
+			// this dynamic offset have to be 256 byte aligned
 			DynamicOffset = sizeof(TransformUniform) * meshIdx;
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 
 						   0, 1, &m_graphicDescriptorSets.tranformUniform[object][m_currentFrame], 1, &DynamicOffset);
