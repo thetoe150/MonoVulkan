@@ -3034,10 +3034,14 @@ private:
 		// ImGui::SliderFloat3("Rotate", s_rotate, -10.f, 10.f, "%.2f");
 		// ImGui::SliderFloat3("Scale", s_scale, -10.f, 10.f, "%.2f");
 
-        ImGui::SeparatorText("Time: ");
+        ImGui::SeparatorText("Time");
 		ImGui::Text("Current time: (%f)", m_lastTime);
 		ImGui::Text("Delta time: (%f)", m_currentDeltaTime);
 		ImGui::Text("FPS: (%f)", 1 / m_currentDeltaTime);
+
+        ImGui::SeparatorText("Camera");
+		ImGui::Text("Camera front: (%f), (%f), (%f)", g_camera.getFront().x, g_camera.getFront().y, g_camera.getFront().z);
+		ImGui::Text("Camera position: (%f), (%f), (%f)", g_camera.getPostion().x, g_camera.getPostion().y, g_camera.getPostion().z);
 
 		ImGui::Spacing();
 

@@ -230,11 +230,11 @@ enum MovementDirection
 	DOWN
 };
 
-constexpr glm::vec3 POSITION{0.f, 0.f, 0.f};
-constexpr glm::vec3 FRONT{0.f, 0.f, 1.f};
+constexpr glm::vec3 POSITION{4.5f, 1.f, 0.5f};
+constexpr glm::vec3 FRONT{1.f, 0.f, -1.f};
 constexpr glm::vec3 WORLD_UP{0.f, 1.f, 0.f};
 
-constexpr float YAW{90.f};
+constexpr float YAW{-90.f};
 constexpr float PITCH{0.f};
 
 constexpr float MOVE_SPEED{5.f};
@@ -265,6 +265,10 @@ public:
 
 	glm::vec3 getPostion(){
 		return m_position;
+	}
+
+	glm::vec3 getFront(){
+		return m_front;
 	}
 
 	glm::mat4 getViewMatrix(){
