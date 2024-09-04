@@ -1,12 +1,12 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 135
+; Bound: 144
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Fragment %main "main" %v_fragTexCoord %v_normal %v_fragPos %v_tangentLightPos %v_tangentFragPos %v_tangentCamPos %outColor %v_tangent
+               OpEntryPoint Fragment %main "main" %v_fragTexCoord %v_normal %v_fragPos %v_tangentLightPos %v_tangentFragPos %v_tangentCamPos %outColor %bloomColor %v_tangent
                OpExecutionMode %main OriginUpperLeft
                OpSource GLSL 450
                OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
@@ -41,6 +41,7 @@
                OpName %spec "spec"
                OpName %specular "specular"
                OpName %outColor "outColor"
+               OpName %bloomColor "bloomColor"
                OpName %v_tangent "v_tangent"
                OpDecorate %u_texSampler DescriptorSet 1
                OpDecorate %u_texSampler Binding 2
@@ -60,6 +61,7 @@
                OpDecorate %v_tangentFragPos Location 1
                OpDecorate %v_tangentCamPos Location 3
                OpDecorate %outColor Location 0
+               OpDecorate %bloomColor Location 1
                OpDecorate %v_tangent Location 6
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
@@ -105,6 +107,8 @@
    %outColor = OpVariable %_ptr_Output_v4float Output
        %uint = OpTypeInt 32 0
      %uint_3 = OpConstant %uint 3
+ %bloomColor = OpVariable %_ptr_Output_v4float Output
+        %142 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_0
   %v_tangent = OpVariable %_ptr_Input_v3float Input
        %main = OpFunction %void None %3
           %5 = OpLabel
@@ -214,5 +218,18 @@
         %132 = OpCompositeExtract %float %125 2
         %133 = OpCompositeConstruct %v4float %130 %131 %132 %129
                OpStore %outColor %133
+        %134 = OpAccessChain %_ptr_Function_float %texColor %uint_3
+        %135 = OpLoad %float %134
+        %136 = OpFOrdLessThan %bool %135 %float_1
+               OpSelectionMerge %138 None
+               OpBranchConditional %136 %137 %141
+        %137 = OpLabel
+        %140 = OpLoad %v4float %outColor
+               OpStore %bloomColor %140
+               OpBranch %138
+        %141 = OpLabel
+               OpStore %bloomColor %142
+               OpBranch %138
+        %138 = OpLabel
                OpReturn
                OpFunctionEnd

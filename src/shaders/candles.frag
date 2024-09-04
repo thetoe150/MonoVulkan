@@ -19,6 +19,7 @@ layout(location = 5) in vec3 v_normal;
 layout(location = 6) in vec3 v_tangent;
 
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 bloomColor;
 
 layout (push_constant) uniform DataPushConstant{
 	int isNormalMapping;
@@ -52,4 +53,9 @@ void main() {
 	outColor = vec4(ambient + diffuse + specular, texColor.a);
 	// outColor = vec4(color, 1.0);
 	// outColor = vec4(texture(u_texSampler, v_fragTexCoord).a);
+
+	if (texColor.a < 1.0)
+		bloomColor = outColor;
+	else 
+		bloomColor = vec4(0.0);
 }

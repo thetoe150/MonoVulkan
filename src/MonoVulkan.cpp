@@ -183,9 +183,15 @@ private:
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
-    std::vector<VkFramebuffer> swapChainFramebuffers;
+	struct {
+		std::vector<VkFramebuffer> swapChain;
+	} m_frameBuffers;
 
-    VkRenderPass renderPass;
+	struct {
+		VkRenderPass normalPass;
+		VkRenderPass bloomPass;
+		VkRenderPass combinePass;
+	} m_renderPasses;
 
 	struct {
 		VkDescriptorSetLayout tranformUniform;
@@ -213,15 +219,18 @@ private:
 	std::map<Object, std::vector<std::vector< glm::vec3>>> m_modelMeshAnimPositions;
 	std::map<Object, std::vector<std::vector< float>>> m_modelMeshFrameWeights;
 
-    VkImage colorImage;
-	VmaAllocation colorImageAlloc;
-    // VkDeviceMemory colorImageMemory;
-    VkImageView colorImageView;
+	typedef struct {
+		VkImage image;
+		VmaAllocation allocation;
+		// VkDeviceMemory colorImageMemory;
+		VkImageView view;
+	} Image;
 
-    VkImage depthImage;
-	VmaAllocation depthImageAlloc;
-    // VkDeviceMemory depthImageMemory;
-    VkImageView depthImageView;
+	Image colorRenderTarget;
+	Image colorResRenderTarget;
+	Image bloomThresholdRenderTarget;
+	Image bloomThresholdResRenderTarget;
+	Image depthRenderTarget;
 
     uint32_t mipLevels;
 
@@ -417,7 +426,7 @@ private:
 		info.QueueFamily = findQueueFamilies(physicalDevice).graphicFamily.value();
 		info.Queue = m_graphicQueue;
 		info.DescriptorPool = imguiDescriptorPool;
-		info.RenderPass = renderPass;
+		info.RenderPass = m_renderPasses.normalPass;
 		info.MinImageCount = swapChainImages.size();
 		info.ImageCount = swapChainImages.size();
 		info.MSAASamples = getMaxUsableSampleCount();
@@ -433,15 +442,14 @@ private:
         createLogicalDevice();
 		createAllocator();
         createSwapChain();
-        createImageViews();
-        createRenderPass();
+        createSwapchainImageViews();
+        createRenderPasses();
         createDescriptorSetLayouts();
 		createPipelineCache();
 		createPipelineLayouts();
 		createPipelines();
         createCommandPools();
-        createColorResources();
-        createDepthResources();
+        createFramebuffersAttachments();
         createFramebuffers();
         createImages();
         createImageView();
@@ -629,7 +637,9 @@ private:
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayout, nullptr);
         vkDestroyPipelineLayout(device, m_computePipelineLayout, nullptr);
-        vkDestroyRenderPass(device, renderPass, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.normalPass, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.bloomPass, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.combinePass, nullptr);
 
 		vkDestroyBuffer(device, m_vortexUniformBuffer, nullptr);
 		vmaUnmapMemory(m_allocator, m_vortexUniformBufferAlloc);
@@ -727,15 +737,27 @@ private:
     }
 
     void cleanupSwapChain() {
-        vkDestroyImageView(device, depthImageView, nullptr);
-        vkDestroyImage(device, depthImage, nullptr);
-        vmaFreeMemory(m_allocator, depthImageAlloc);
+        vkDestroyImageView(device, depthRenderTarget.view, nullptr);
+        vkDestroyImage(device, depthRenderTarget.image, nullptr);
+        vmaFreeMemory(m_allocator, depthRenderTarget.allocation);
 
-        vkDestroyImageView(device, colorImageView, nullptr);
-        vkDestroyImage(device, colorImage, nullptr);
-        vmaFreeMemory(m_allocator, colorImageAlloc);
+        vkDestroyImageView(device, colorRenderTarget.view, nullptr);
+        vkDestroyImage(device, colorRenderTarget.image, nullptr);
+        vmaFreeMemory(m_allocator, colorRenderTarget.allocation);
 
-        for (auto framebuffer : swapChainFramebuffers) {
+        vkDestroyImageView(device, colorResRenderTarget.view, nullptr);
+        vkDestroyImage(device, colorResRenderTarget.image, nullptr);
+        vmaFreeMemory(m_allocator, colorResRenderTarget.allocation);
+
+        vkDestroyImageView(device, bloomThresholdRenderTarget.view, nullptr);
+        vkDestroyImage(device, bloomThresholdRenderTarget.image, nullptr);
+        vmaFreeMemory(m_allocator, bloomThresholdRenderTarget.allocation);
+
+        vkDestroyImageView(device, bloomThresholdResRenderTarget.view, nullptr);
+        vkDestroyImage(device, bloomThresholdResRenderTarget.image, nullptr);
+        vmaFreeMemory(m_allocator, bloomThresholdResRenderTarget.allocation);
+
+        for (auto framebuffer : m_frameBuffers.swapChain) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
 
@@ -759,9 +781,8 @@ private:
         cleanupSwapChain();
 
         createSwapChain();
-        createImageViews();
-        createColorResources();
-        createDepthResources();
+        createSwapchainImageViews();
+        createFramebuffersAttachments();
         createFramebuffers();
     }
 
@@ -1000,7 +1021,7 @@ private:
         swapChainExtent = extent;
     }
 
-    void createImageViews() {
+    void createSwapchainImageViews() {
         swapChainImageViews.resize(swapChainImages.size());
 
         for (uint32_t i = 0; i < swapChainImages.size(); i++) {
@@ -1008,7 +1029,7 @@ private:
         }
     }
 
-    void createRenderPass() {
+    void createRenderPasses() {
         VkAttachmentDescription colorAttachment{};
         colorAttachment.format = swapChainImageFormat;
         colorAttachment.samples = msaaSamples;
@@ -1018,6 +1039,16 @@ private:
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentDescription bloomThresholdAttachment{};
+        bloomThresholdAttachment.format = swapChainImageFormat;
+        bloomThresholdAttachment.samples = msaaSamples;
+        bloomThresholdAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        bloomThresholdAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        bloomThresholdAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        bloomThresholdAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        bloomThresholdAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        bloomThresholdAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = findDepthFormat();
@@ -1039,24 +1070,46 @@ private:
         colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+        VkAttachmentDescription bloomThresholdAttachmentResolve{};
+        bloomThresholdAttachmentResolve.format = swapChainImageFormat;
+        bloomThresholdAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+        bloomThresholdAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        bloomThresholdAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        bloomThresholdAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        bloomThresholdAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        bloomThresholdAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        bloomThresholdAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
         VkAttachmentReference colorAttachmentRef{};
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        VkAttachmentReference bloomThresholdAttachmentRef{};
+        bloomThresholdAttachmentRef.attachment = 1;
+        bloomThresholdAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		std::array<VkAttachmentReference, 2> colorRefs = {colorAttachmentRef, bloomThresholdAttachmentRef};
+
         VkAttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.attachment = 2;
         depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference colorAttachmentResolveRef{};
-        colorAttachmentResolveRef.attachment = 2;
+        colorAttachmentResolveRef.attachment = 3;
         colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference bloomThresholdAttachmentResolveRef{};
+        bloomThresholdAttachmentResolveRef.attachment = 4;
+        bloomThresholdAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		std::array<VkAttachmentReference, 2> colorResolveRefs = {colorAttachmentResolveRef, bloomThresholdAttachmentResolveRef};
 
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.colorAttachmentCount = colorRefs.size();
+        subpass.pColorAttachments = colorRefs.data();
         subpass.pDepthStencilAttachment = &depthAttachmentRef;
-        subpass.pResolveAttachments = &colorAttachmentResolveRef;
+        subpass.pResolveAttachments = colorResolveRefs.data();
 
         VkSubpassDependency dependency{};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -1066,7 +1119,8 @@ private:
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-        std::array<VkAttachmentDescription, 3> attachments = {colorAttachment, depthAttachment, colorAttachmentResolve };
+        std::array<VkAttachmentDescription, 5> attachments = {colorAttachment, bloomThresholdAttachment, 
+			depthAttachment, colorAttachmentResolve, bloomThresholdAttachmentResolve};
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1076,7 +1130,7 @@ private:
         renderPassInfo.dependencyCount = 1;
         renderPassInfo.pDependencies = &dependency;
 
-        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_renderPasses.normalPass) != VK_SUCCESS) {
             throw std::runtime_error("failed to create render pass!");
         }
     }
@@ -1296,12 +1350,15 @@ private:
 			colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 			colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 
+			// 2 attachments for 2 framebuffer attachments
+			std::array<VkPipelineColorBlendAttachmentState, 2> blendAttachments{colorBlendAttachment, colorBlendAttachment};
+
 			VkPipelineColorBlendStateCreateInfo colorBlending{};
 			colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 			colorBlending.logicOpEnable = VK_FALSE;
 			colorBlending.logicOp = VK_LOGIC_OP_COPY;
-			colorBlending.attachmentCount = 1;
-			colorBlending.pAttachments = &colorBlendAttachment;
+			colorBlending.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
+			colorBlending.pAttachments = blendAttachments.data();
 			// colorBlending.blendConstants[0] = 0.0f;
 			// colorBlending.blendConstants[1] = 0.0f;
 			// colorBlending.blendConstants[2] = 0.0f;
@@ -1365,7 +1422,7 @@ private:
 			pipelineInfo.pColorBlendState = &colorBlending;
 			pipelineInfo.pDynamicState = &dynamicState;
 			pipelineInfo.layout = m_graphicPipelineLayout;
-			pipelineInfo.renderPass = renderPass;
+			pipelineInfo.renderPass = m_renderPasses.normalPass;
 			pipelineInfo.subpass = 0;
 			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
@@ -1421,25 +1478,28 @@ private:
 	}
 
     void createFramebuffers() {
-        swapChainFramebuffers.resize(swapChainImageViews.size());
+        m_frameBuffers.swapChain.resize(swapChainImageViews.size());
 
         for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-            std::array<VkImageView, 3> attachments = {
-                colorImageView,
-                depthImageView,
+            std::array<VkImageView, 5> attachments = {
+                colorRenderTarget.view,
+				bloomThresholdRenderTarget.view,
+                depthRenderTarget.view,
+                // swapChainImageViews[i],
+				bloomThresholdResRenderTarget.view,
                 swapChainImageViews[i]
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.renderPass = m_renderPasses.normalPass;
             framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
             framebufferInfo.width = swapChainExtent.width;
             framebufferInfo.height = swapChainExtent.height;
             framebufferInfo.layers = 1;
 
-            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_frameBuffers.swapChain[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create framebuffer!");
             }
         }
@@ -1467,18 +1527,35 @@ private:
 		}
     }
 
-    void createColorResources() {
+    void createFramebuffersAttachments() {
         VkFormat colorFormat = swapChainImageFormat;
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageAlloc);
-        colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-    }
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, 
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorRenderTarget.image, colorRenderTarget.allocation);
+        colorRenderTarget.view = createImageView(colorRenderTarget.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-    void createDepthResources() {
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, 
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bloomThresholdRenderTarget.image, bloomThresholdRenderTarget.allocation);
+        bloomThresholdRenderTarget.view = createImageView(bloomThresholdRenderTarget.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
         VkFormat depthFormat = findDepthFormat();
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageAlloc);
-        depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat,
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthRenderTarget.image, depthRenderTarget.allocation);
+        depthRenderTarget.view = createImageView(depthRenderTarget.image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorResRenderTarget.image, colorResRenderTarget.allocation);
+        colorResRenderTarget.view = createImageView(colorResRenderTarget.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bloomThresholdResRenderTarget.image, bloomThresholdResRenderTarget.allocation);
+        bloomThresholdResRenderTarget.view = createImageView(bloomThresholdResRenderTarget.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -2070,7 +2147,7 @@ private:
 		if (node.children.empty()) {
 			if (node.mesh != -1) {
 				m_modelMeshTransforms[obj][node.mesh] = mat;
-				std::cout << "m_modelMeshTransforms at mesh " << node.mesh << " is:" << glm::to_string(mat) << "\n";
+				// std::cout << "m_modelMeshTransforms at mesh " << node.mesh << " is:" << glm::to_string(mat) << "\n";
 				return;
 			}
 		}
@@ -2925,14 +3002,15 @@ private:
 		{
 			VkRenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			renderPassInfo.renderPass = renderPass;
-			renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+			renderPassInfo.renderPass = m_renderPasses.normalPass;
+			renderPassInfo.framebuffer = m_frameBuffers.swapChain[imageIndex];
 			renderPassInfo.renderArea.offset = {0, 0};
 			renderPassInfo.renderArea.extent = swapChainExtent;
 
-			std::array<VkClearValue, 2> clearValues{};
+			std::array<VkClearValue, 3> clearValues{};
 			clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-			clearValues[1].depthStencil = {1.0f, 0};
+			clearValues[1].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+			clearValues[2].depthStencil = {1.0f, 0};
 
 			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			renderPassInfo.pClearValues = clearValues.data();
