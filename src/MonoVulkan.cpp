@@ -1173,7 +1173,14 @@ private:
 			normalBinding.pImmutableSamplers = nullptr;
 			normalBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {samplerLayoutBinding, normalBinding};
+			VkDescriptorSetLayoutBinding emissiveBinding{};
+			emissiveBinding.binding = 4;
+			emissiveBinding.descriptorCount = 1;
+			emissiveBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			emissiveBinding.pImmutableSamplers = nullptr;
+			emissiveBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			std::array<VkDescriptorSetLayoutBinding, 3> bindings = {samplerLayoutBinding, normalBinding, emissiveBinding};
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
 			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -1475,9 +1482,9 @@ private:
                 m_fbImages.colorRT.view,
 				m_fbImages.bloomThresholdRT.view,
                 m_fbImages.depthRT.view,
-                swapChainImageViews[i],
-				m_fbImages.bloomThresholdResRT.view
-                //swapChainImageViews[i]
+                // swapChainImageViews[i],
+				m_fbImages.bloomThresholdResRT.view,
+                swapChainImageViews[i]
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
@@ -1585,7 +1592,7 @@ private:
 				continue;
 			}
 
-			// WARNING: assume meshes order is the same with gltf images order (very sussy)
+			// WARNING: recreate vk handles even if resource is the same.
 			int meshIdx = 0;
 			for (auto& mesh : model.meshes) {
 				const tinygltf::Material& material = model.materials[mesh.primitives[0].material];
@@ -2494,29 +2501,28 @@ private:
 			materialCount += model.meshes.size();
 		}
 
-			std::array<VkDescriptorPoolSize, 3> poolSizes{};
-			poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			// +1 for compute uniform
-			poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) * 2 + 1; // for mesh transform + light uniform
-			poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount) * 2; // for texture and normal map
-			poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-			poolSizes[2].descriptorCount = static_cast<uint32_t>(1);
+		std::array<VkDescriptorPoolSize, 3> poolSizes{};
+		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) * 2 + 1; // for mesh transform + light uniform +1 for compute uniform
+		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount) * 3; // for base, normal and emissive texture
+		poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		poolSizes[2].descriptorCount = static_cast<uint32_t>(1);
 
-			VkDescriptorPoolCreateInfo poolInfo{};
-			poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-			poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-			poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-			poolInfo.pPoolSizes = poolSizes.data();
-			// Object::COUNT for the number of uniform buffer
-			// materialCount for the number of mesh material
-			// 1 for compute descriptor set
-			// 1 for imgui descriptor set
-			poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 2) + 3; // for graphics and compute
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolInfo.pPoolSizes = poolSizes.data();
+		// Object::COUNT for the number of uniform buffer
+		// materialCount for the number of mesh material
+		// 1 for compute descriptor set
+		// 1 for imgui descriptor set
+		poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 2) + 3; // for graphics and compute
 
-			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create descriptor pool!");
-			}
+		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create descriptor pool!");
+		}
     }
 
     void createDescriptorSets() {
@@ -2550,7 +2556,7 @@ private:
 
 				// can it write to the 2 frame descirptor set at once??
 				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-					std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+					std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
 					VkDescriptorImageInfo imageInfo{};
 					imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -2572,9 +2578,6 @@ private:
 					// assume 1 sampler per object type
 					normalImageInfo.sampler = m_samplers[objIdx];
 
-					// if (m_imageViews.normalView[objIdx][meshIdx] == VK_NULL_HANDLE)
-					// 	normalImageInfo.sampler = VK_NULL_HANDLE;
-
 					descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 					descriptorWrites[1].dstSet = m_graphicDescriptorSets.meshMaterial[objIdx][meshIdx][i];
 					descriptorWrites[1].dstBinding = 3;
@@ -2582,6 +2585,20 @@ private:
 					descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 					descriptorWrites[1].descriptorCount = 1;
 					descriptorWrites[1].pImageInfo = &normalImageInfo;
+
+					VkDescriptorImageInfo emissiveImageInfo{};
+					emissiveImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					emissiveImageInfo.imageView = m_modelImages[objIdx][meshIdx].emissiveImage.view;
+					// assume 1 sampler per object type
+					emissiveImageInfo.sampler = m_samplers[objIdx];
+
+					descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					descriptorWrites[2].dstSet = m_graphicDescriptorSets.meshMaterial[objIdx][meshIdx][i];
+					descriptorWrites[2].dstBinding = 4;
+					descriptorWrites[2].dstArrayElement = 0;
+					descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+					descriptorWrites[2].descriptorCount = 1;
+					descriptorWrites[2].pImageInfo = &emissiveImageInfo;
 
 					vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 				}

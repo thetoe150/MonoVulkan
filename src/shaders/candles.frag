@@ -7,6 +7,7 @@ layout(set = 0, binding = 1) uniform UniformLighting {
 
 layout(set = 1, binding = 2) uniform sampler2D u_texSampler;
 layout(set = 1, binding = 3) uniform sampler2D u_normalSampler;
+layout(set = 1, binding = 4) uniform sampler2D u_emissiveSampler;
 
 layout(location = 0) in vec2 v_fragTexCoord;
 layout(location = 1) in vec3 v_tangentFragPos;
@@ -53,8 +54,8 @@ void main() {
 	outColor = vec4(ambient + diffuse + specular, texColor.a);
 	// outColor = vec4(color, 1.0);
 	// outColor = vec4(texture(u_texSampler, v_fragTexCoord).a);
-
-	if (texColor.a < 1.0)
+	vec3 emit = texture(u_emissiveSampler, v_fragTexCoord).rgb;
+	if (dot(emit, vec3(1.0)) != 0.0)
 		bloomColor = outColor;
 	else 
 		bloomColor = vec4(0.0);
