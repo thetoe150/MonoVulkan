@@ -226,28 +226,25 @@ private:
 		VkImageView view;
 	} Image;
 
-	Image colorRenderTarget;
-	Image colorResRenderTarget;
-	Image bloomThresholdRenderTarget;
-	Image bloomThresholdResRenderTarget;
-	Image depthRenderTarget;
+	typedef struct {
+		Image baseImage;
+		Image normalImage;
+		Image emissiveImage;
+	} MeshImages;
+
+	std::map<Object, std::vector<MeshImages>> m_modelImages;
+
+	typedef struct {
+		Image colorRT;
+		Image colorResRT;
+		Image bloomThresholdRT;
+		Image bloomThresholdResRT;
+		Image depthRT;
+	} FramebufferImages;
+
+	FramebufferImages m_fbImages;
 
     uint32_t mipLevels;
-
-	struct {
-		std::map<Object, std::vector<VkImage>> baseImage;
-		std::map<Object, std::vector<VkImage>> normalImage;
-	} m_images;
-
-	struct {
-		std::map<Object, std::vector<VmaAllocation>> baseAlloc;
-		std::map<Object, std::vector<VmaAllocation>> normalAlloc;
-	} m_imageAllocs;
-
-	struct {
-		std::map<Object, std::vector<VkImageView>> baseView;
-		std::map<Object, std::vector<VkImageView>> normalView;
-	} m_imageViews;
 
 	std::map<Object, VkSampler> m_samplers;
 
@@ -449,10 +446,9 @@ private:
 		createPipelineLayouts();
 		createPipelines();
         createCommandPools();
-        createFramebuffersAttachments();
+        createModelImages();
+        createFramebuffersImages();
         createFramebuffers();
-        createImages();
-        createImageView();
         createSampler();
 		loadInstanceData();
         createVertexBuffers();
@@ -686,24 +682,18 @@ private:
 				vmaFreeMemory(m_allocator, m_uniformBuffersAlloc.lighting[objIdx][i]);
 			}
 
-			for (auto& image : m_images.baseImage[objIdx]) {
-				vkDestroyImage(device, image, nullptr);
-			}
-			for (auto& imageAlloc : m_imageAllocs.baseAlloc[objIdx]) {
-				vmaFreeMemory(m_allocator, imageAlloc);
-			}
-			for (auto& textureImageView : m_imageViews.baseView[objIdx]) {
-				vkDestroyImageView(device, textureImageView, nullptr);
-			}
+			for (auto& meshImage : m_modelImages[objIdx]) {
+				vkDestroyImage(device, meshImage.baseImage.image, nullptr);
+				vkDestroyImage(device, meshImage.normalImage.image, nullptr);
+				vkDestroyImage(device, meshImage.emissiveImage.image, nullptr);
 
-			for (auto& image : m_images.normalImage[objIdx]) {
-				vkDestroyImage(device, image, nullptr);
-			}
-			for (auto& imageAlloc : m_imageAllocs.normalAlloc[objIdx]) {
-				vmaFreeMemory(m_allocator, imageAlloc);
-			}
-			for (auto& textureImageView : m_imageViews.normalView[objIdx]) {
-				vkDestroyImageView(device, textureImageView, nullptr);
+				vmaFreeMemory(m_allocator, meshImage.baseImage.allocation);
+				vmaFreeMemory(m_allocator, meshImage.normalImage.allocation);
+				vmaFreeMemory(m_allocator, meshImage.emissiveImage.allocation);
+
+				vkDestroyImageView(device, meshImage.baseImage.view, nullptr);
+				vkDestroyImageView(device, meshImage.normalImage.view, nullptr);
+				vkDestroyImageView(device, meshImage.emissiveImage.view, nullptr);
 			}
 
 			vkDestroySampler(device, m_samplers[objIdx], nullptr);
@@ -737,25 +727,25 @@ private:
     }
 
     void cleanupSwapChain() {
-        vkDestroyImageView(device, depthRenderTarget.view, nullptr);
-        vkDestroyImage(device, depthRenderTarget.image, nullptr);
-        vmaFreeMemory(m_allocator, depthRenderTarget.allocation);
+        vkDestroyImageView(device, m_fbImages.colorRT.view, nullptr);
+        vkDestroyImage(device, m_fbImages.colorRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_fbImages.colorRT.allocation);
 
-        vkDestroyImageView(device, colorRenderTarget.view, nullptr);
-        vkDestroyImage(device, colorRenderTarget.image, nullptr);
-        vmaFreeMemory(m_allocator, colorRenderTarget.allocation);
+        vkDestroyImageView(device, m_fbImages.colorResRT.view, nullptr);
+        vkDestroyImage(device, m_fbImages.colorResRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_fbImages.colorResRT.allocation);
 
-        vkDestroyImageView(device, colorResRenderTarget.view, nullptr);
-        vkDestroyImage(device, colorResRenderTarget.image, nullptr);
-        vmaFreeMemory(m_allocator, colorResRenderTarget.allocation);
+        vkDestroyImageView(device, m_fbImages.depthRT.view, nullptr);
+        vkDestroyImage(device, m_fbImages.depthRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_fbImages.depthRT.allocation);
 
-        vkDestroyImageView(device, bloomThresholdRenderTarget.view, nullptr);
-        vkDestroyImage(device, bloomThresholdRenderTarget.image, nullptr);
-        vmaFreeMemory(m_allocator, bloomThresholdRenderTarget.allocation);
+        vkDestroyImageView(device, m_fbImages.bloomThresholdRT.view, nullptr);
+        vkDestroyImage(device, m_fbImages.bloomThresholdRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_fbImages.bloomThresholdRT.allocation);
 
-        vkDestroyImageView(device, bloomThresholdResRenderTarget.view, nullptr);
-        vkDestroyImage(device, bloomThresholdResRenderTarget.image, nullptr);
-        vmaFreeMemory(m_allocator, bloomThresholdResRenderTarget.allocation);
+        vkDestroyImageView(device, m_fbImages.bloomThresholdResRT.view, nullptr);
+        vkDestroyImage(device, m_fbImages.bloomThresholdResRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_fbImages.bloomThresholdResRT.allocation);
 
         for (auto framebuffer : m_frameBuffers.swapChain) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -782,7 +772,7 @@ private:
 
         createSwapChain();
         createSwapchainImageViews();
-        createFramebuffersAttachments();
+        createFramebuffersImages();
         createFramebuffers();
     }
 
@@ -1482,12 +1472,12 @@ private:
 
         for (size_t i = 0; i < swapChainImageViews.size(); i++) {
             std::array<VkImageView, 5> attachments = {
-                colorRenderTarget.view,
-				bloomThresholdRenderTarget.view,
-                depthRenderTarget.view,
-                // swapChainImageViews[i],
-				bloomThresholdResRenderTarget.view,
-                swapChainImageViews[i]
+                m_fbImages.colorRT.view,
+				m_fbImages.bloomThresholdRT.view,
+                m_fbImages.depthRT.view,
+                swapChainImageViews[i],
+				m_fbImages.bloomThresholdResRT.view
+                //swapChainImageViews[i]
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
@@ -1527,35 +1517,35 @@ private:
 		}
     }
 
-    void createFramebuffersAttachments() {
+    void createFramebuffersImages() {
         VkFormat colorFormat = swapChainImageFormat;
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorRenderTarget.image, colorRenderTarget.allocation);
-        colorRenderTarget.view = createImageView(colorRenderTarget.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.colorRT.image, m_fbImages.colorRT.allocation);
+        m_fbImages.colorRT.view = createImageView(m_fbImages.colorRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bloomThresholdRenderTarget.image, bloomThresholdRenderTarget.allocation);
-        bloomThresholdRenderTarget.view = createImageView(bloomThresholdRenderTarget.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.bloomThresholdRT.image, m_fbImages.bloomThresholdRT.allocation);
+        m_fbImages.bloomThresholdRT.view = createImageView(m_fbImages.bloomThresholdRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         VkFormat depthFormat = findDepthFormat();
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat,
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthRenderTarget.image, depthRenderTarget.allocation);
-        depthRenderTarget.view = createImageView(depthRenderTarget.image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.depthRT.image, m_fbImages.depthRT.allocation);
+        m_fbImages.depthRT.view = createImageView(m_fbImages.depthRT.image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorResRenderTarget.image, colorResRenderTarget.allocation);
-        colorResRenderTarget.view = createImageView(colorResRenderTarget.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.colorResRT.image, m_fbImages.colorResRT.allocation);
+        m_fbImages.colorResRT.view = createImageView(m_fbImages.colorResRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bloomThresholdResRenderTarget.image, bloomThresholdResRenderTarget.allocation);
-        bloomThresholdResRenderTarget.view = createImageView(bloomThresholdResRenderTarget.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.bloomThresholdResRT.image, m_fbImages.bloomThresholdResRT.allocation);
+        m_fbImages.bloomThresholdResRT.view = createImageView(m_fbImages.bloomThresholdResRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -1585,44 +1575,50 @@ private:
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    void createImages() {
+    void createModelImages() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 			tinygltf::Model& model = m_model[objIdx];
-			if (model.images.empty()) {
-				m_images.baseImage[objIdx].push_back(VK_NULL_HANDLE);
-				m_imageAllocs.baseAlloc[objIdx].push_back(VK_NULL_HANDLE);
 
-				m_images.normalImage[objIdx].push_back(VK_NULL_HANDLE);
-				m_imageAllocs.normalAlloc[objIdx].push_back(VK_NULL_HANDLE);
-				std::cout << "No image for this model type" << std::endl;
+			MeshImages meshImages{};
+			if (model.images.empty()) {
 				continue;
 			}
 
+			// WARNING: assume meshes order is the same with gltf images order (very sussy)
 			int meshIdx = 0;
 			for (auto& mesh : model.meshes) {
-				tinygltf::Material material = model.materials[mesh.primitives[0].material];
+				const tinygltf::Material& material = model.materials[mesh.primitives[0].material];
 
-				tinygltf::Texture baseTexture = model.textures[material.pbrMetallicRoughness.baseColorTexture.index];
-				auto baseImage = createModelImage(objIdx, baseTexture, true);
-				m_images.baseImage[objIdx].push_back(baseImage.first);
-				m_imageAllocs.baseAlloc[objIdx].push_back(baseImage.second);
+				const tinygltf::Texture& baseTexture = model.textures[material.pbrMetallicRoughness.baseColorTexture.index];
+				 meshImages.baseImage = createModelImageFromGltf(objIdx, baseTexture, true);
 
 				if (material.normalTexture.index == -1) {
-					m_images.normalImage[objIdx].push_back(VK_NULL_HANDLE);
-					m_imageAllocs.normalAlloc[objIdx].push_back(VK_NULL_HANDLE);
+					// add a dummy image
+					meshImages.normalImage = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
 					std::cout << "No normal mapping image for this mesh of model" << std::endl;
-					continue;
 				}
-				tinygltf::Texture normalTexture = model.textures[material.normalTexture.index];
-				auto normalImage = createModelImage(objIdx, normalTexture, true);
-				m_images.normalImage[objIdx].push_back(normalImage.first);
-				m_imageAllocs.normalAlloc[objIdx].push_back(normalImage.second);
+				else {
+					const tinygltf::Texture& normalTexture = model.textures[material.normalTexture.index];
+					meshImages.normalImage = createModelImageFromGltf(objIdx, normalTexture, true);
+				}
+
+				if (material.emissiveTexture.index == -1) {
+					// add a dummy image
+					meshImages.emissiveImage = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+					std::cout << "No emissive mapping image for this mesh of model" << std::endl;
+				}
+				else {
+					const tinygltf::Texture& emissiveTexture = model.textures[material.emissiveTexture.index];
+					meshImages.emissiveImage = createModelImageFromGltf(objIdx, emissiveTexture, true);
+				}
+
+				m_modelImages[objIdx].push_back(meshImages);
 			}
 		}
     }
 
-	std::pair<VkImage, VmaAllocation> createModelImage(Object objIdx, const tinygltf::Texture& tex, bool isMipmap) {
+	Image createModelImageFromGltf(Object objIdx, const tinygltf::Texture& tex, bool isMipmap) {
 		tinygltf::Image image = m_model[objIdx].images[tex.source];
 
 		int texWidth = image.width;
@@ -1667,8 +1663,8 @@ private:
 		//vkFreeMemory(device, stagingBufferMemory, nullptr);
 		vmaFreeMemory(m_allocator, stagingBufferAlloc);
 
-
-		return {textureImage, textureImageAlloc};
+		VkImageView textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+		return Image{textureImage, textureImageAlloc, textureImageView};
 	}
 
     void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
@@ -1773,29 +1769,29 @@ private:
         return VK_SAMPLE_COUNT_1_BIT;
     }
 
-    void createImageView() {
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
-			tinygltf::Model& model = m_model[objIdx];
-			for (auto& textureImage : m_images.baseImage[objIdx]) {
-				if(textureImage != VK_NULL_HANDLE){
-					m_imageViews.baseView[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
-				}
-				else {
-					m_imageViews.baseView[objIdx].push_back(VK_NULL_HANDLE);
-				}
-			}
+    // void createImageView() {
+	// 	for (unsigned int i = 0; i < Object::COUNT; i++){
+	// 		Object objIdx = static_cast<Object>(i);
+	// 		tinygltf::Model& model = m_model[objIdx];
+	// 		for (auto& textureImage : m_images.baseImage[objIdx]) {
+	// 			if(textureImage != VK_NULL_HANDLE){
+	// 				m_imageViews.baseView[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
+	// 			}
+	// 			else {
+	// 				m_imageViews.baseView[objIdx].push_back(VK_NULL_HANDLE);
+	// 			}
+	// 		}
 
-			for (auto& textureImage : m_images.normalImage[objIdx]) {
-				if(textureImage != VK_NULL_HANDLE){
-					m_imageViews.normalView[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
-				}
-				else {
-					m_imageViews.normalView[objIdx].push_back(VK_NULL_HANDLE);
-				}
-			}
-		}
-    }
+	// 		for (auto& textureImage : m_images.normalImage[objIdx]) {
+	// 			if(textureImage != VK_NULL_HANDLE){
+	// 				m_imageViews.normalView[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
+	// 			}
+	// 			else {
+	// 				m_imageViews.normalView[objIdx].push_back(VK_NULL_HANDLE);
+	// 			}
+	// 		}
+	// 	}
+    // }
 
     void createSampler() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
@@ -2531,6 +2527,10 @@ private:
 	void createGraphicDescriptorSets(){
 		for (unsigned int o = 0; o < Object::SNOWFLAKE; o++){
 			Object objIdx = static_cast<Object>(o);
+			if (m_modelImages.find(objIdx) == m_modelImages.end()) {
+				continue;
+			}
+
 			tinygltf::Model& model = m_model[objIdx];
 			m_graphicDescriptorSets.meshMaterial[objIdx].resize(model.meshes.size());
 			int meshIdx = 0;
@@ -2554,7 +2554,7 @@ private:
 
 					VkDescriptorImageInfo imageInfo{};
 					imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					imageInfo.imageView = m_imageViews.baseView[objIdx][meshIdx];
+					imageInfo.imageView = m_modelImages[objIdx][meshIdx].baseImage.view;
 					// assume 1 sampler per object type
 					imageInfo.sampler = m_samplers[objIdx];
 
@@ -2568,7 +2568,7 @@ private:
 					
 					VkDescriptorImageInfo normalImageInfo{};
 					normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					normalImageInfo.imageView = m_imageViews.normalView[objIdx][meshIdx];
+					normalImageInfo.imageView = m_modelImages[objIdx][meshIdx].normalImage.view;
 					// assume 1 sampler per object type
 					normalImageInfo.sampler = m_samplers[objIdx];
 
