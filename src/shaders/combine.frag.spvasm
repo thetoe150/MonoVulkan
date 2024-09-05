@@ -1,0 +1,85 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Google Shaderc over Glslang; 11
+; Bound: 49
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %vTexCoords %outColor
+               OpExecutionMode %main OriginUpperLeft
+               OpSource GLSL 450
+               OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
+               OpSourceExtension "GL_GOOGLE_include_directive"
+               OpName %main "main"
+               OpName %baseColor "baseColor"
+               OpName %baseSampler "baseSampler"
+               OpName %vTexCoords "vTexCoords"
+               OpName %DataPushConstant "DataPushConstant"
+               OpMemberName %DataPushConstant 0 "useBloom"
+               OpName %p_const "p_const"
+               OpName %bloomSampler "bloomSampler"
+               OpName %outColor "outColor"
+               OpDecorate %baseSampler DescriptorSet 0
+               OpDecorate %baseSampler Binding 0
+               OpDecorate %vTexCoords Location 0
+               OpMemberDecorate %DataPushConstant 0 Offset 0
+               OpDecorate %DataPushConstant Block
+               OpDecorate %bloomSampler DescriptorSet 0
+               OpDecorate %bloomSampler Binding 1
+               OpDecorate %outColor Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v3float = OpTypeVector %float 3
+%_ptr_Function_v3float = OpTypePointer Function %v3float
+         %10 = OpTypeImage %float 2D 0 0 0 1 Unknown
+         %11 = OpTypeSampledImage %10
+%_ptr_UniformConstant_11 = OpTypePointer UniformConstant %11
+%baseSampler = OpVariable %_ptr_UniformConstant_11 UniformConstant
+    %v2float = OpTypeVector %float 2
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+ %vTexCoords = OpVariable %_ptr_Input_v2float Input
+    %v4float = OpTypeVector %float 4
+        %int = OpTypeInt 32 1
+%DataPushConstant = OpTypeStruct %int
+%_ptr_PushConstant_DataPushConstant = OpTypePointer PushConstant %DataPushConstant
+    %p_const = OpVariable %_ptr_PushConstant_DataPushConstant PushConstant
+      %int_0 = OpConstant %int 0
+%_ptr_PushConstant_int = OpTypePointer PushConstant %int
+       %bool = OpTypeBool
+%bloomSampler = OpVariable %_ptr_UniformConstant_11 UniformConstant
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+   %outColor = OpVariable %_ptr_Output_v4float Output
+    %float_1 = OpConstant %float 1
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+  %baseColor = OpVariable %_ptr_Function_v3float Function
+         %14 = OpLoad %11 %baseSampler
+         %18 = OpLoad %v2float %vTexCoords
+         %20 = OpImageSampleImplicitLod %v4float %14 %18
+         %21 = OpVectorShuffle %v3float %20 %20 0 1 2
+               OpStore %baseColor %21
+         %28 = OpAccessChain %_ptr_PushConstant_int %p_const %int_0
+         %29 = OpLoad %int %28
+         %31 = OpINotEqual %bool %29 %int_0
+               OpSelectionMerge %33 None
+               OpBranchConditional %31 %32 %33
+         %32 = OpLabel
+         %35 = OpLoad %11 %bloomSampler
+         %36 = OpLoad %v2float %vTexCoords
+         %37 = OpImageSampleImplicitLod %v4float %35 %36
+         %38 = OpVectorShuffle %v3float %37 %37 0 1 2
+         %39 = OpLoad %v3float %baseColor
+         %40 = OpFAdd %v3float %39 %38
+               OpStore %baseColor %40
+               OpBranch %33
+         %33 = OpLabel
+         %43 = OpLoad %v3float %baseColor
+         %45 = OpCompositeExtract %float %43 0
+         %46 = OpCompositeExtract %float %43 1
+         %47 = OpCompositeExtract %float %43 2
+         %48 = OpCompositeConstruct %v4float %45 %46 %47 %float_1
+               OpStore %outColor %48
+               OpReturn
+               OpFunctionEnd

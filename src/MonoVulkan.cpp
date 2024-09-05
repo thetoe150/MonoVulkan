@@ -188,7 +188,7 @@ private:
 	} m_frameBuffers;
 
 	struct {
-		VkRenderPass normalPass;
+		VkRenderPass basePass;
 		VkRenderPass bloomPass;
 		VkRenderPass combinePass;
 	} m_renderPasses;
@@ -205,9 +205,10 @@ private:
 	VkPipelineCache m_pipelineCache;
 	std::vector<char> pipelineCacheBlob;
 
-	std::map<Object, VkPipeline> m_graphicPipelines;
-
     VkPipeline m_computePipeline;
+	std::map<Object, VkPipeline> m_graphicPipelines;
+    VkPipeline m_bloomPipeline;
+    VkPipeline m_combinePipeline;
 
     VkCommandPool m_graphicCommandPool;
     VkCommandPool m_computeCommandPool;
@@ -423,7 +424,7 @@ private:
 		info.QueueFamily = findQueueFamilies(physicalDevice).graphicFamily.value();
 		info.Queue = m_graphicQueue;
 		info.DescriptorPool = imguiDescriptorPool;
-		info.RenderPass = m_renderPasses.normalPass;
+		info.RenderPass = m_renderPasses.basePass;
 		info.MinImageCount = swapChainImages.size();
 		info.ImageCount = swapChainImages.size();
 		info.MSAASamples = getMaxUsableSampleCount();
@@ -633,7 +634,7 @@ private:
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayout, nullptr);
         vkDestroyPipelineLayout(device, m_computePipelineLayout, nullptr);
-        vkDestroyRenderPass(device, m_renderPasses.normalPass, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.basePass, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.bloomPass, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.combinePass, nullptr);
 
@@ -1020,109 +1021,197 @@ private:
     }
 
     void createRenderPasses() {
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChainImageFormat;
-        colorAttachment.samples = msaaSamples;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		// base render pass
+		{
+			VkAttachmentDescription colorAttachment{};
+			colorAttachment.format = swapChainImageFormat;
+			colorAttachment.samples = msaaSamples;
+			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentDescription bloomThresholdAttachment{};
-        bloomThresholdAttachment.format = swapChainImageFormat;
-        bloomThresholdAttachment.samples = msaaSamples;
-        bloomThresholdAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        bloomThresholdAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        bloomThresholdAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        bloomThresholdAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        bloomThresholdAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        bloomThresholdAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			VkAttachmentDescription bloomThresholdAttachment{};
+			bloomThresholdAttachment.format = swapChainImageFormat;
+			bloomThresholdAttachment.samples = msaaSamples;
+			bloomThresholdAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			bloomThresholdAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			bloomThresholdAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			bloomThresholdAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			bloomThresholdAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			bloomThresholdAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentDescription depthAttachment{};
-        depthAttachment.format = findDepthFormat();
-        depthAttachment.samples = msaaSamples;
-        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			VkAttachmentDescription depthAttachment{};
+			depthAttachment.format = findDepthFormat();
+			depthAttachment.samples = msaaSamples;
+			depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentDescription colorAttachmentResolve{};
-        colorAttachmentResolve.format = swapChainImageFormat;
-        colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			VkAttachmentDescription colorAttachmentResolve{};
+			colorAttachmentResolve.format = swapChainImageFormat;
+			colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+			colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-        VkAttachmentDescription bloomThresholdAttachmentResolve{};
-        bloomThresholdAttachmentResolve.format = swapChainImageFormat;
-        bloomThresholdAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-        bloomThresholdAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        bloomThresholdAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        bloomThresholdAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        bloomThresholdAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        bloomThresholdAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        bloomThresholdAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			VkAttachmentDescription bloomThresholdAttachmentResolve{};
+			bloomThresholdAttachmentResolve.format = swapChainImageFormat;
+			bloomThresholdAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+			bloomThresholdAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			bloomThresholdAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			bloomThresholdAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			bloomThresholdAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			bloomThresholdAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			bloomThresholdAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-        VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			VkAttachmentReference colorAttachmentRef{};
+			colorAttachmentRef.attachment = 0;
+			colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentReference bloomThresholdAttachmentRef{};
-        bloomThresholdAttachmentRef.attachment = 1;
-        bloomThresholdAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			VkAttachmentReference bloomThresholdAttachmentRef{};
+			bloomThresholdAttachmentRef.attachment = 1;
+			bloomThresholdAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-		std::array<VkAttachmentReference, 2> colorRefs = {colorAttachmentRef, bloomThresholdAttachmentRef};
+			std::array<VkAttachmentReference, 2> colorRefs = {colorAttachmentRef, bloomThresholdAttachmentRef};
 
-        VkAttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 2;
-        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			VkAttachmentReference depthAttachmentRef{};
+			depthAttachmentRef.attachment = 2;
+			depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentReference colorAttachmentResolveRef{};
-        colorAttachmentResolveRef.attachment = 3;
-        colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			VkAttachmentReference colorAttachmentResolveRef{};
+			colorAttachmentResolveRef.attachment = 3;
+			colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentReference bloomThresholdAttachmentResolveRef{};
-        bloomThresholdAttachmentResolveRef.attachment = 4;
-        bloomThresholdAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			VkAttachmentReference bloomThresholdAttachmentResolveRef{};
+			bloomThresholdAttachmentResolveRef.attachment = 4;
+			bloomThresholdAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-		std::array<VkAttachmentReference, 2> colorResolveRefs = {colorAttachmentResolveRef, bloomThresholdAttachmentResolveRef};
+			std::array<VkAttachmentReference, 2> colorResolveRefs = {colorAttachmentResolveRef, bloomThresholdAttachmentResolveRef};
 
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = colorRefs.size();
-        subpass.pColorAttachments = colorRefs.data();
-        subpass.pDepthStencilAttachment = &depthAttachmentRef;
-        subpass.pResolveAttachments = colorResolveRefs.data();
+			VkSubpassDescription subpass{};
+			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpass.colorAttachmentCount = colorRefs.size();
+			subpass.pColorAttachments = colorRefs.data();
+			subpass.pDepthStencilAttachment = &depthAttachmentRef;
+			subpass.pResolveAttachments = colorResolveRefs.data();
 
-        VkSubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			VkSubpassDependency dependency{};
+			dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+			dependency.dstSubpass = 0;
+			dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+			dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-        std::array<VkAttachmentDescription, 5> attachments = {colorAttachment, bloomThresholdAttachment, 
-			depthAttachment, colorAttachmentResolve, bloomThresholdAttachmentResolve};
-        VkRenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 1;
-        renderPassInfo.pDependencies = &dependency;
+			std::array<VkAttachmentDescription, 5> attachments = {colorAttachment, bloomThresholdAttachment, 
+				depthAttachment, colorAttachmentResolve, bloomThresholdAttachmentResolve};
+			VkRenderPassCreateInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+			renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+			renderPassInfo.pAttachments = attachments.data();
+			renderPassInfo.subpassCount = 1;
+			renderPassInfo.pSubpasses = &subpass;
+			renderPassInfo.dependencyCount = 1;
+			renderPassInfo.pDependencies = &dependency;
 
-        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_renderPasses.normalPass) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create render pass!");
-        }
+			if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_renderPasses.basePass) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create render pass!");
+			}
+		}
+
+		{
+			VkAttachmentDescription blurAttachment{};
+			blurAttachment.format = swapChainImageFormat;
+			blurAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+			blurAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			blurAttachment.storeOp = VK_ATTACHMENT_STORE_OP_NONE;
+			blurAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			blurAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			blurAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			blurAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+			VkAttachmentReference blurRef{};
+			blurRef.attachment = 0;
+			blurRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+			VkSubpassDescription blurSubpass{};
+			blurSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			blurSubpass.colorAttachmentCount = 1;
+			blurSubpass.pColorAttachments = &blurRef;
+
+			// WARNING: seem wrong
+			VkSubpassDependency blurDeps{};
+			blurDeps.srcSubpass = VK_SUBPASS_EXTERNAL;
+			blurDeps.dstSubpass = 0;
+			blurDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			blurDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			blurDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+			blurDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+			VkRenderPassCreateInfo bloomPassInfo{};
+			bloomPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO; 
+			bloomPassInfo.subpassCount = 1;
+			bloomPassInfo.pSubpasses = &blurSubpass;
+			bloomPassInfo.attachmentCount = 1;
+			bloomPassInfo.pAttachments = &blurAttachment;
+			bloomPassInfo.dependencyCount = 1;
+			bloomPassInfo.pDependencies = &blurDeps;
+
+			if (vkCreateRenderPass(device, &bloomPassInfo, nullptr, &m_renderPasses.bloomPass) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create render pass!");
+			}
+		}
+
+		{
+			VkAttachmentDescription combineAttachment{};
+			combineAttachment.format = swapChainImageFormat;
+			combineAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+			combineAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			combineAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			combineAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			combineAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			combineAttachment.initialLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+			combineAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+			VkAttachmentReference combineRef{};
+			combineRef.attachment = 0;
+			combineRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+			VkSubpassDescription combineSubpass{};
+			combineSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			combineSubpass.colorAttachmentCount = 1;
+			combineSubpass.pColorAttachments = &combineRef;
+
+			// WARNING: seem wrong
+			VkSubpassDependency combineDeps{};
+			combineDeps.srcSubpass = VK_SUBPASS_EXTERNAL;
+			combineDeps.dstSubpass = 0;
+			combineDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			combineDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			combineDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+			combineDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+			VkRenderPassCreateInfo combinePassInfo{};
+			combinePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO; 
+			combinePassInfo.subpassCount = 1;
+			combinePassInfo.pSubpasses = &combineSubpass;
+			combinePassInfo.attachmentCount = 1;
+			combinePassInfo.pAttachments = &combineAttachment;
+			combinePassInfo.dependencyCount = 1;
+			combinePassInfo.pDependencies = &combineDeps;
+			if (vkCreateRenderPass(device, &combinePassInfo, nullptr, &m_renderPasses.combinePass) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create render pass!");
+			}
+		}
     }
 
     void createDescriptorSetLayouts() {
@@ -1264,16 +1353,15 @@ private:
 	}
 
     void createGraphicPipelines() {
-		for (unsigned int i = 0; i < Object::SNOWFLAKE; i++){
-			Object objIdx = static_cast<Object>(i);
-			tinygltf::Model& model = m_model[objIdx];
-
+			// candles - base pass
+		{
+			tinygltf::Model& model = m_model[Object::CANDLE];
 			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
 			// auto bindingDescription = Vertex::getBindingDescription();
 			// auto attributeDescriptions = Vertex::getAttributeDescriptions();
-			auto vertexDef = getModelVertexDescriptions(objIdx);
+			auto vertexDef = getModelVertexDescriptions(Object::CANDLE);
 
 			// instance attribute is the same for snowflake and candle
 			auto instanceBindingDescription = VertexInstance::getBindingDescription();
@@ -1419,14 +1507,14 @@ private:
 			pipelineInfo.pColorBlendState = &colorBlending;
 			pipelineInfo.pDynamicState = &dynamicState;
 			pipelineInfo.layout = m_graphicPipelineLayout;
-			pipelineInfo.renderPass = m_renderPasses.normalPass;
+			pipelineInfo.renderPass = m_renderPasses.basePass;
 			pipelineInfo.subpass = 0;
 			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-			if(objIdx == Object::SNOWFLAKE)
+			if(Object::CANDLE == Object::SNOWFLAKE)
 				specConstant.useTexture = false;
 
-			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines[objIdx]) != VK_SUCCESS) {
+			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines[Object::CANDLE]) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create graphics pipeline!");
 			}
 
@@ -1482,14 +1570,14 @@ private:
                 m_fbImages.colorRT.view,
 				m_fbImages.bloomThresholdRT.view,
                 m_fbImages.depthRT.view,
-                // swapChainImageViews[i],
-				m_fbImages.bloomThresholdResRT.view,
-                swapChainImageViews[i]
+                swapChainImageViews[i],
+				m_fbImages.bloomThresholdResRT.view
+                // swapChainImageViews[i]
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = m_renderPasses.normalPass;
+            framebufferInfo.renderPass = m_renderPasses.basePass;
             framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
             framebufferInfo.width = swapChainExtent.width;
@@ -3019,7 +3107,7 @@ private:
 		{
 			VkRenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			renderPassInfo.renderPass = m_renderPasses.normalPass;
+			renderPassInfo.renderPass = m_renderPasses.basePass;
 			renderPassInfo.framebuffer = m_frameBuffers.swapChain[imageIndex];
 			renderPassInfo.renderArea.offset = {0, 0};
 			renderPassInfo.renderArea.extent = swapChainExtent;
