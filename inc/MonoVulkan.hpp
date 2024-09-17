@@ -95,6 +95,13 @@ enum Object{
 	COUNT
 };
 
+inline float quadVertices[] = {
+	// positions        // texture Coords
+	-1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+	-1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+	 1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+	 1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+};
 
 struct Vortex {
 	alignas(16) glm::vec3 pos;

@@ -194,21 +194,37 @@ private:
 	} m_renderPasses;
 
 	struct {
-		VkDescriptorSetLayout tranformUniform;
-		VkDescriptorSetLayout meshMaterial;
+		VkDescriptorSetLayout snowflake;
+		struct {
+			VkDescriptorSetLayout tranformUniform;
+			VkDescriptorSetLayout meshMaterial;
+		} candles;
+
+		VkDescriptorSetLayout bloom;
+		VkDescriptorSetLayout combine;
 	} m_graphicDescriptorSetLayouts;
 
+	struct {
+		VkPipelineLayout snowflake;
+		VkPipelineLayout candles;
+		VkPipelineLayout bloom;
+		VkPipelineLayout combine;
+	}
+    m_graphicPipelineLayouts;
+
 	VkDescriptorSetLayout m_computeDescriptorSetLayout;
-    VkPipelineLayout m_graphicPipelineLayout;
     VkPipelineLayout m_computePipelineLayout;
 
 	VkPipelineCache m_pipelineCache;
 	std::vector<char> pipelineCacheBlob;
 
     VkPipeline m_computePipeline;
-	std::map<Object, VkPipeline> m_graphicPipelines;
-    VkPipeline m_bloomPipeline;
-    VkPipeline m_combinePipeline;
+	struct {
+		VkPipeline snowflake;
+		VkPipeline candles;
+		VkPipeline bloom;
+		VkPipeline combine;
+	}m_graphicPipelines;
 
     VkCommandPool m_graphicCommandPool;
     VkCommandPool m_computeCommandPool;
@@ -223,7 +239,6 @@ private:
 	typedef struct {
 		VkImage image;
 		VmaAllocation allocation;
-		// VkDeviceMemory colorImageMemory;
 		VkImageView view;
 	} Image;
 
@@ -249,12 +264,23 @@ private:
 
 	std::map<Object, VkSampler> m_samplers;
 
-	std::map<Object, std::vector<Vertex>> m_vertexRaw;
-	std::map<Object, std::vector<uint32_t>> m_indexRaw;
-	std::map<Object, std::map<int, VkBuffer>> m_vertexBuffer;
-	std::map<Object, std::map<int, VkBuffer>> m_indexBuffer;
-	std::map<Object, std::map<int, VmaAllocation>> m_vertexBufferAlloc;
-	std::map<Object, std::map<int, VmaAllocation>> m_indexBufferAlloc;
+	typedef struct {
+		void* raw;
+		VkBuffer buffer;
+		VmaAllocation allocation;
+	} Buffer;
+
+	struct {
+		std::vector<Buffer> snowflake;
+		std::vector<Buffer> candles;
+		std::vector<Buffer> quad;
+	} m_vertexBuffers;
+
+	struct {
+		std::vector<Buffer> snowflake;
+		std::vector<Buffer> candles;
+		std::vector<Buffer> quad;
+	} m_indexBuffers;
 
 	std::map<Object, std::map<int, VkBuffer>> m_animBuffer;
 	std::map<Object, std::map<int, VmaAllocation>> m_animBufferAlloc;
@@ -295,8 +321,13 @@ private:
     VkDescriptorPool m_descriptorPool;
 
 	struct {
-		std::map<Object, std::vector<std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>>> meshMaterial;
-		std::map<Object, std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> tranformUniform;
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> snowflake;
+		struct {
+			std::vector<std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> meshMaterial; // per mesh of candles model
+			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> tranformUniform; // 1 for candles model, update every frame
+		} candles;
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> bloom;
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> combine;
 	} m_graphicDescriptorSets;
 
     VkDescriptorSet m_computeDescriptorSets;
@@ -628,11 +659,16 @@ private:
         cleanupSwapChain();
 
 		savePipelineCache();
-        vkDestroyPipeline(device, m_graphicPipelines[Object::SNOWFLAKE], nullptr);
-        vkDestroyPipeline(device, m_graphicPipelines[Object::CANDLE], nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.candles, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.bloom, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
         vkDestroyPipeline(device, m_computePipeline, nullptr);
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
-        vkDestroyPipelineLayout(device, m_graphicPipelineLayout, nullptr);
+        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
+        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.candles, nullptr);
+        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.bloom, nullptr);
+        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.combine, nullptr);
         vkDestroyPipelineLayout(device, m_computePipelineLayout, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.basePass, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.bloomPass, nullptr);
@@ -648,24 +684,14 @@ private:
         vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
 
-        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.tranformUniform, nullptr);
-        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.meshMaterial, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.snowflake, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.tranformUniform, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.meshMaterial, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.bloom, nullptr);
         vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayout, nullptr);
 
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
-			for (auto& bufferIdx : m_indexBuffer[objIdx]) {
-				vkDestroyBuffer(device, bufferIdx.second, nullptr);
-			}
-			for (auto& bufferAllocIdx : m_indexBufferAlloc[objIdx]) {
-				vmaFreeMemory(m_allocator, bufferAllocIdx.second);
-			}
-			for (auto& bufferIdx : m_vertexBuffer[objIdx]) {
-				vkDestroyBuffer(device, bufferIdx.second, nullptr);
-			}
-			for (auto& bufferAllocIdx : m_vertexBufferAlloc[objIdx]) {
-				vmaFreeMemory(m_allocator, bufferAllocIdx.second);
-			}
 			for (auto& bufferIdx : m_animBuffer[objIdx]) {
 				vkDestroyBuffer(device, bufferIdx.second, nullptr);
 			}
@@ -1128,6 +1154,7 @@ private:
 			}
 		}
 
+		// bloom pass
 		{
 			VkAttachmentDescription blurAttachment{};
 			blurAttachment.format = swapChainImageFormat;
@@ -1171,6 +1198,7 @@ private:
 			}
 		}
 
+		// combine pass
 		{
 			VkAttachmentDescription combineAttachment{};
 			combineAttachment.format = swapChainImageFormat;
@@ -1220,67 +1248,114 @@ private:
     }
 
 	void createGraphicDescriptorSetLayouts() {
-		// 2 descriptor set layouts, 1 for texture+sampler(change for each mesh), 1 for uniform buffer (change each frame)
 		{
-			VkDescriptorSetLayoutBinding uboLayoutBinding{};
-			uboLayoutBinding.binding = 0;
-			uboLayoutBinding.descriptorCount = 1;
-			uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-			uboLayoutBinding.pImmutableSamplers = nullptr;
-			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+			// for candles: 2 descriptor set layouts, 1 for texture+sampler(change for each mesh), 1 for uniform buffer (change each frame)
+			{
+				VkDescriptorSetLayoutBinding uboLayoutBinding{};
+				uboLayoutBinding.binding = 0;
+				uboLayoutBinding.descriptorCount = 1;
+				uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+				uboLayoutBinding.pImmutableSamplers = nullptr;
+				uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-			VkDescriptorSetLayoutBinding lightBinding{};
-			lightBinding.binding = 1;
-			lightBinding.descriptorCount = 1;
-			lightBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			lightBinding.pImmutableSamplers = nullptr;
-			lightBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+				VkDescriptorSetLayoutBinding lightBinding{};
+				lightBinding.binding = 1;
+				lightBinding.descriptorCount = 1;
+				lightBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				lightBinding.pImmutableSamplers = nullptr;
+				lightBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
-			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, lightBinding};
-			VkDescriptorSetLayoutCreateInfo layoutInfo{};
-			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-			layoutInfo.pBindings = bindings.data();
+				std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, lightBinding};
+				VkDescriptorSetLayoutCreateInfo layoutInfo{};
+				layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+				layoutInfo.pBindings = bindings.data();
 
-			if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.tranformUniform) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create descriptor set layout!");
+				if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.candles.tranformUniform) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create descriptor set layout!");
+				}
+			}
+
+			{
+				VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+				samplerLayoutBinding.binding = 2;
+				samplerLayoutBinding.descriptorCount = 1;
+				samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				samplerLayoutBinding.pImmutableSamplers = nullptr;
+				samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+				VkDescriptorSetLayoutBinding normalBinding{};
+				normalBinding.binding = 3;
+				normalBinding.descriptorCount = 1;
+				normalBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				normalBinding.pImmutableSamplers = nullptr;
+				normalBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+				VkDescriptorSetLayoutBinding emissiveBinding{};
+				emissiveBinding.binding = 4;
+				emissiveBinding.descriptorCount = 1;
+				emissiveBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				emissiveBinding.pImmutableSamplers = nullptr;
+				emissiveBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+				std::array<VkDescriptorSetLayoutBinding, 3> bindings = {samplerLayoutBinding, normalBinding, emissiveBinding};
+				VkDescriptorSetLayoutCreateInfo layoutInfo{};
+				layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+				layoutInfo.pBindings = bindings.data();
+
+				if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.candles.meshMaterial) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create descriptor set layout!");
+				}
 			}
 		}
 
+		// for bloom
 		{
-			VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-			samplerLayoutBinding.binding = 2;
-			samplerLayoutBinding.descriptorCount = 1;
-			samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			samplerLayoutBinding.pImmutableSamplers = nullptr;
-			samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+			VkDescriptorSetLayoutBinding baseBinding{};
+			baseBinding.binding = 0;
+			baseBinding.descriptorCount = 1;
+			baseBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			baseBinding.pImmutableSamplers = nullptr;
+			baseBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-			VkDescriptorSetLayoutBinding normalBinding{};
-			normalBinding.binding = 3;
-			normalBinding.descriptorCount = 1;
-			normalBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			normalBinding.pImmutableSamplers = nullptr;
-			normalBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-			VkDescriptorSetLayoutBinding emissiveBinding{};
-			emissiveBinding.binding = 4;
-			emissiveBinding.descriptorCount = 1;
-			emissiveBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			emissiveBinding.pImmutableSamplers = nullptr;
-			emissiveBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-			std::array<VkDescriptorSetLayoutBinding, 3> bindings = {samplerLayoutBinding, normalBinding, emissiveBinding};
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
 			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+			layoutInfo.bindingCount = 1;
+			layoutInfo.pBindings = &baseBinding;
+
+			CHECK_VK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.bloom)
+				, "fail to create bloom descriptor set layout");
+		}
+
+		// for combine
+		{
+			VkDescriptorSetLayoutBinding baseBinding{};
+			baseBinding.binding = 0;
+			baseBinding.descriptorCount = 1;
+			baseBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			baseBinding.pImmutableSamplers = nullptr;
+			baseBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			VkDescriptorSetLayoutBinding bloomBinding{};
+			bloomBinding.binding = 1;
+			bloomBinding.descriptorCount = 1;
+			bloomBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			bloomBinding.pImmutableSamplers = nullptr;
+			bloomBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			std::array<VkDescriptorSetLayoutBinding, 2> bindings{baseBinding, bloomBinding};
+
+			VkDescriptorSetLayoutCreateInfo layoutInfo{};
+			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layoutInfo.bindingCount = bindings.size();
 			layoutInfo.pBindings = bindings.data();
 
-			if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.meshMaterial) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create descriptor set layout!");
-			}
+			CHECK_VK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.combine)
+				, "fail to create bloom descriptor set layout");
 		}
+	}
 
-		}
 	void createComputeDescriptorSetLayouts() {
 		VkDescriptorSetLayoutBinding storageBinding{};
 		storageBinding.binding = 0;
@@ -1333,42 +1408,186 @@ private:
 	}
 
 	void createGraphicPipelineLayouts() {
-		VkPushConstantRange pushConstant{};
-		pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-		pushConstant.size = sizeof(GraphicPushConstant);
-		pushConstant.offset = 0;
+		{
+			// candles
+			VkPushConstantRange pushConstant{};
+			pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+			pushConstant.size = sizeof(GraphicPushConstant);
+			pushConstant.offset = 0;
 
-		VkDescriptorSetLayout layouts[2] = {m_graphicDescriptorSetLayouts.tranformUniform, m_graphicDescriptorSetLayouts.meshMaterial};
+			VkDescriptorSetLayout layouts[2] = {m_graphicDescriptorSetLayouts.candles.tranformUniform, m_graphicDescriptorSetLayouts.candles.meshMaterial};
 
-		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 2;
-		pipelineLayoutInfo.pSetLayouts = layouts;
-		pipelineLayoutInfo.pushConstantRangeCount = 1;
-		pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
+			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			pipelineLayoutInfo.setLayoutCount = 2;
+			pipelineLayoutInfo.pSetLayouts = layouts;
+			pipelineLayoutInfo.pushConstantRangeCount = 1;
+			pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 
-		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create graphic pipeline layout!");
+			if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayouts.candles) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create graphic pipeline layout!");
+			}
+		}
+
+		{
 		}
 	}
 
     void createGraphicPipelines() {
-			// candles - base pass
+		// snowflake pipeline
+		// {
+		// 	VkPipelineVertexInputDivisorStateCreateInfoEXT divisor{};
+		// 	divisor.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
+
+		// 	VkVertexInputBindingDivisorDescriptionEXT divisorDescription{};
+		// 	divisorDescription.binding = 4;
+		// 	divisorDescription.divisor = 1;
+
+		// 	divisor.vertexBindingDivisorCount = 1;
+		// 	divisor.pVertexBindingDivisors = &divisorDescription;
+
+		// 	vertexInputInfo.pNext = &divisor;
+
+		// 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+		// 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+		// 	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		// 	inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+		// 	VkPipelineViewportStateCreateInfo viewportState{};
+		// 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		// 	viewportState.viewportCount = 1;
+		// 	viewportState.scissorCount = 1;
+
+		// 	VkPipelineRasterizationStateCreateInfo rasterizer{};
+		// 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		// 	rasterizer.depthClampEnable = VK_FALSE;
+		// 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
+		// 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		// 	rasterizer.lineWidth = 1.0f;
+		// 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+		// 	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		// 	rasterizer.depthBiasEnable = VK_FALSE;
+
+		// 	VkPipelineMultisampleStateCreateInfo multisampling{};
+		// 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		// 	multisampling.sampleShadingEnable = VK_FALSE;
+		// 	multisampling.rasterizationSamples = msaaSamples;
+
+		// 	VkPipelineDepthStencilStateCreateInfo depthStencil{};
+		// 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		// 	depthStencil.depthTestEnable = VK_TRUE;
+		// 	depthStencil.depthWriteEnable = VK_TRUE;
+		// 	depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+		// 	depthStencil.depthBoundsTestEnable = VK_FALSE;
+		// 	depthStencil.stencilTestEnable = VK_FALSE;
+
+		// 	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+		// 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		// 	colorBlendAttachment.blendEnable = VK_TRUE;
+		// 	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+		// 	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+		// 	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		// 	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_MIN;
+		// 	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		// 	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+
+		// 	// 2 attachments for 2 framebuffer attachments
+		// 	std::array<VkPipelineColorBlendAttachmentState, 2> blendAttachments{colorBlendAttachment, colorBlendAttachment};
+
+		// 	VkPipelineColorBlendStateCreateInfo colorBlending{};
+		// 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		// 	colorBlending.logicOpEnable = VK_FALSE;
+		// 	colorBlending.logicOp = VK_LOGIC_OP_COPY;
+		// 	colorBlending.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
+		// 	colorBlending.pAttachments = blendAttachments.data();
+		// 	// colorBlending.blendConstants[0] = 0.0f;
+		// 	// colorBlending.blendConstants[1] = 0.0f;
+		// 	// colorBlending.blendConstants[2] = 0.0f;
+		// 	// colorBlending.blendConstants[3] = 0.0f;
+
+		// 	std::vector<VkDynamicState> dynamicStates = {
+		// 		VK_DYNAMIC_STATE_VIEWPORT,
+		// 		VK_DYNAMIC_STATE_SCISSOR
+		// 	};
+		// 	VkPipelineDynamicStateCreateInfo dynamicState{};
+		// 	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		// 	dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+		// 	dynamicState.pDynamicStates = dynamicStates.data();
+
+		// 	auto vertShaderCode = readFile("../../src/shaders/candles.vert.spv");
+		// 	auto fragShaderCode = readFile("../../src/shaders/candles.frag.spv");
+
+		// 	VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+		// 	VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+		// 	struct SpecializationConstant{
+		// 		alignas(4) bool useTexture{true};
+		// 	}specConstant;
+
+		// 	std::array<VkSpecializationMapEntry, 1> specEntries;
+		// 	specEntries[0].constantID = 0;
+		// 	specEntries[0].offset = 0;
+		// 	specEntries[0].size = sizeof(SpecializationConstant);
+
+		// 	VkSpecializationInfo specInfo{};
+		// 	specInfo.dataSize = sizeof(SpecializationConstant);
+		// 	specInfo.mapEntryCount = static_cast<uint32_t>(specEntries.size());
+		// 	specInfo.pMapEntries = specEntries.data();
+		// 	specInfo.pData = &specConstant;
+
+		// 	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+		// 	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		// 	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		// 	vertShaderStageInfo.module = vertShaderModule;
+		// 	vertShaderStageInfo.pName = "main";
+
+		// 	VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+		// 	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		// 	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		// 	fragShaderStageInfo.module = fragShaderModule;
+		// 	fragShaderStageInfo.pName = "main";
+		// 	fragShaderStageInfo.pSpecializationInfo = &specInfo;
+
+		// 	VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+		// 	VkGraphicsPipelineCreateInfo pipelineInfo{};
+		// 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		// 	pipelineInfo.stageCount = 2;
+		// 	pipelineInfo.pStages = shaderStages;
+		// 	pipelineInfo.pVertexInputState = &vertexInputInfo;
+		// 	pipelineInfo.pInputAssemblyState = &inputAssembly;
+		// 	pipelineInfo.pViewportState = &viewportState;
+		// 	pipelineInfo.pRasterizationState = &rasterizer;
+		// 	pipelineInfo.pMultisampleState = &multisampling;
+		// 	pipelineInfo.pDepthStencilState = &depthStencil;
+		// 	pipelineInfo.pColorBlendState = &colorBlending;
+		// 	pipelineInfo.pDynamicState = &dynamicState;
+		// 	pipelineInfo.layout = m_graphicPipelineLayout;
+		// 	pipelineInfo.renderPass = m_renderPasses.basePass;
+		// 	pipelineInfo.subpass = 0;
+		// 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+		// 	if(Object::CANDLE == Object::SNOWFLAKE)
+		// 		specConstant.useTexture = false;
+
+		// 	if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.candles) != VK_SUCCESS) {
+		// 		throw std::runtime_error("failed to create graphics pipeline!");
+		// 	}
+
+		// 	vkDestroyShaderModule(device, fragShaderModule, nullptr);
+		// 	vkDestroyShaderModule(device, vertShaderModule, nullptr);
+		// }
+			// candles pipeline
 		{
 			tinygltf::Model& model = m_model[Object::CANDLE];
 			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-			// auto bindingDescription = Vertex::getBindingDescription();
-			// auto attributeDescriptions = Vertex::getAttributeDescriptions();
 			auto vertexDef = getModelVertexDescriptions(Object::CANDLE);
 
 			// instance attribute is the same for snowflake and candle
 			auto instanceBindingDescription = VertexInstance::getBindingDescription();
 			auto instanceAttributeDescription = VertexInstance::getAttributeDescriptions();
-
-			// auto totalAttributeDescriptions = concat(attributeDescriptions, instanceAttributeDescription);
-			// std::array<VkVertexInputBindingDescription, 2> totalBindingDescription = {bindingDescription, instanceBindingDescription};
 
 			std::array<VkVertexInputBindingDescription, 5> totalBindingDescriptions = 
 				{vertexDef["POSITION"].first, vertexDef["NORMAL"].first, vertexDef["TANGENT"].first, vertexDef["TEXCOORD_0"].first, instanceBindingDescription};
@@ -1506,7 +1725,7 @@ private:
 			pipelineInfo.pDepthStencilState = &depthStencil;
 			pipelineInfo.pColorBlendState = &colorBlending;
 			pipelineInfo.pDynamicState = &dynamicState;
-			pipelineInfo.layout = m_graphicPipelineLayout;
+			pipelineInfo.layout = m_graphicPipelineLayouts.candles;
 			pipelineInfo.renderPass = m_renderPasses.basePass;
 			pipelineInfo.subpass = 0;
 			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -1514,12 +1733,168 @@ private:
 			if(Object::CANDLE == Object::SNOWFLAKE)
 				specConstant.useTexture = false;
 
-			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines[Object::CANDLE]) != VK_SUCCESS) {
+			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.candles) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create graphics pipeline!");
 			}
 
 			vkDestroyShaderModule(device, fragShaderModule, nullptr);
 			vkDestroyShaderModule(device, vertShaderModule, nullptr);
+		}
+
+		// bloom pipeline
+		{ 
+			VkVertexInputBindingDescription vertexBindings{};
+			vertexBindings.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			vertexBindings.binding = 0;
+			vertexBindings.stride = 5 * sizeof(float);
+
+			VkVertexInputAttributeDescription vertexAttributePos{};
+			vertexAttributePos.binding = 0;
+			vertexAttributePos.location = 0;
+			vertexAttributePos.offset = 0;
+			vertexAttributePos.format = VK_FORMAT_R32G32B32_SFLOAT;
+
+			VkVertexInputAttributeDescription vertexAttributeTex{};
+			vertexAttributeTex.binding = 0;
+			vertexAttributeTex.location = 1;
+			vertexAttributeTex.offset = 12;
+			vertexAttributeTex.format = VK_FORMAT_R32G32_SFLOAT;
+
+			std::array<VkVertexInputAttributeDescription, 2> vertexAttribute{vertexAttributePos, vertexAttributeTex};
+
+			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			vertexInputInfo.vertexBindingDescriptionCount = 1;
+			vertexInputInfo.pVertexBindingDescriptions = &vertexBindings;
+			vertexInputInfo.vertexAttributeDescriptionCount = vertexAttribute.size();
+			vertexInputInfo.pVertexAttributeDescriptions = vertexAttribute.data();
+
+			VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
+			inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+			inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
+
+			VkPipelineViewportStateCreateInfo viewportInfo{};
+			viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			viewportInfo.scissorCount = 1;
+			viewportInfo.viewportCount = 1;
+			// ignore this since viewport state is dynamic
+			// viewportInfo.pScissors
+			// viewportInfo.pViewports
+
+			VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
+			rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+			rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
+			rasterizationInfo.lineWidth = 1.0f;
+			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
+			// rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
+			rasterizationInfo.depthBiasEnable = VK_FALSE;
+			rasterizationInfo.depthClampEnable = VK_FALSE;
+
+			VkPipelineMultisampleStateCreateInfo multisampleInfo{};
+			multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+			multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			multisampleInfo.sampleShadingEnable = VK_FALSE;
+
+			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
+			depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+			depthStencilInfo.depthTestEnable = VK_FALSE;
+			depthStencilInfo.depthWriteEnable = VK_FALSE;
+			depthStencilInfo.stencilTestEnable = VK_FALSE;
+			depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
+
+			VkPipelineColorBlendAttachmentState blendAttachmentInfo{};
+			blendAttachmentInfo.blendEnable = VK_FALSE;
+
+			VkPipelineColorBlendStateCreateInfo blendInfo{};
+			blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+			blendInfo.attachmentCount = 1;
+			blendInfo.pAttachments = &blendAttachmentInfo;
+
+			std::vector<VkDynamicState> dynamicStates{
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR
+			};
+
+			VkPipelineDynamicStateCreateInfo dynamicInfo{};
+			dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+			dynamicInfo.dynamicStateCount = dynamicStates.size();
+			dynamicInfo.pDynamicStates = dynamicStates.data();
+
+			auto vertShaderCode = readFile("../../src/shaders/bloom.vert.spv");
+			auto fragShaderCode = readFile("../../src/shaders/bloom.frag.spv");
+
+			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+			struct SpecializationConstant{
+				alignas(4) bool useTexture{true};
+			}specConstant;
+
+			std::array<VkSpecializationMapEntry, 1> specEntries;
+			specEntries[0].constantID = 0;
+			specEntries[0].offset = 0;
+			specEntries[0].size = sizeof(SpecializationConstant);
+
+			VkSpecializationInfo specInfo{};
+			specInfo.mapEntryCount = specEntries.size();
+			specInfo.pMapEntries = specEntries.data();
+			specInfo.pData = &specConstant;
+
+			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			fragShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+			VkGraphicsPipelineCreateInfo bloomPipelineInfo{};
+			bloomPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO; 
+			bloomPipelineInfo.pVertexInputState = &vertexInputInfo;
+			bloomPipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
+			bloomPipelineInfo.pViewportState = &viewportInfo;
+			bloomPipelineInfo.pColorBlendState = &blendInfo;
+			bloomPipelineInfo.pMultisampleState = &multisampleInfo;
+			bloomPipelineInfo.pDepthStencilState = &depthStencilInfo;
+			bloomPipelineInfo.pRasterizationState = &rasterizationInfo;
+			bloomPipelineInfo.stageCount = 2;
+			bloomPipelineInfo.pStages = shaderStages;
+			bloomPipelineInfo.pDynamicState = &dynamicInfo;
+			bloomPipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+			bloomPipelineInfo.renderPass = m_renderPasses.bloomPass;
+			bloomPipelineInfo.subpass = 0;
+			bloomPipelineInfo.layout = m_graphicPipelineLayouts.bloom;
+
+			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &bloomPipelineInfo, nullptr, &m_graphicPipelines.bloom)
+				   , "fail to create bloom pipeline");
+
+			VkGraphicsPipelineCreateInfo combinePipelineInfo{};
+			combinePipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO; 
+			combinePipelineInfo.pVertexInputState = &vertexInputInfo;
+			combinePipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
+			combinePipelineInfo.pViewportState = &viewportInfo;
+			combinePipelineInfo.pColorBlendState = &blendInfo;
+			combinePipelineInfo.pMultisampleState = &multisampleInfo;
+			combinePipelineInfo.pDepthStencilState = &depthStencilInfo;
+			combinePipelineInfo.pRasterizationState = &rasterizationInfo;
+			combinePipelineInfo.stageCount = 2;
+			combinePipelineInfo.pStages = shaderStages;
+			combinePipelineInfo.pDynamicState = &dynamicInfo;
+			combinePipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+			combinePipelineInfo.renderPass = m_renderPasses.combinePass;
+			combinePipelineInfo.subpass = 0;
+			combinePipelineInfo.layout = m_graphicPipelineLayouts.combine;
+
+			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &combinePipelineInfo, nullptr, &m_graphicPipelines.bloom)
+				   , "fail to create combine pipeline");
 		}
     }
 
@@ -2388,8 +2763,9 @@ private:
 	}
 
 	void createVertexBuffers() {
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
+		{
+			// Candles
+			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
 			auto bufferViews = findModelVertexBufferView(objIdx);
 
@@ -2409,42 +2785,64 @@ private:
 				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
 				copyBuffer(stagingBuffer, vertexBuffer, view.byteLength);
 
-				m_vertexBuffer[objIdx][viewIdx] = vertexBuffer;
-				m_vertexBufferAlloc[objIdx][viewIdx] = vertexBufferAlloc;
+				m_vertexBuffers.candles[viewIdx].buffer = vertexBuffer;
+				m_vertexBuffers.candles[viewIdx].allocation = vertexBufferAlloc;
 
 				vkDestroyBuffer(device, stagingBuffer, nullptr);
 				vmaFreeMemory(m_allocator, stagingBufferAlloc);
 			}
 		}
+
+		{
+			// Quad
+			VkBuffer stagingBuffer;
+			VmaAllocation stagingBufferAlloc{};
+
+			VkBuffer vertexBuffer;
+			VmaAllocation vertexBufferAlloc{};
+
+			int size = sizeof(quadVertices) / sizeof(float);
+			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+				memcpy(data, quadVertices, size);
+			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
+			copyBuffer(stagingBuffer, vertexBuffer, size);
+
+			m_vertexBuffers.quad[0].buffer = vertexBuffer;
+			m_vertexBuffers.quad[0].allocation = vertexBufferAlloc;
+
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vmaFreeMemory(m_allocator, stagingBufferAlloc);
+		}
 	}
 
 	void createIndexBuffers() {
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
-			tinygltf::Model& model = m_model[objIdx];
-			auto bufferViews = findModelIndexBufferView(objIdx);
+		Object objIdx = Object::CANDLE;
+		tinygltf::Model& model = m_model[objIdx];
+		auto bufferViews = findModelIndexBufferView(objIdx);
 
-			for (auto& viewIdx : bufferViews) {
-				tinygltf::BufferView view = model.bufferViews[viewIdx];
-				VkBuffer stagingBuffer;
-				VmaAllocation stagingBufferAloc{};
-				VkBuffer indexBuffer;
-				VmaAllocation indexBufferAloc{};
+		for (auto& viewIdx : bufferViews) {
+			tinygltf::BufferView view = model.bufferViews[viewIdx];
+			VkBuffer stagingBuffer;
+			VmaAllocation stagingBufferAloc{};
+			VkBuffer indexBuffer;
+			VmaAllocation indexBufferAloc{};
 
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
-				void* data;
-				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-					memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
-				vmaUnmapMemory(m_allocator, stagingBufferAloc);
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
-				copyBuffer(stagingBuffer, indexBuffer, view.byteLength);
+			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
+				memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
+			vmaUnmapMemory(m_allocator, stagingBufferAloc);
+			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
+			copyBuffer(stagingBuffer, indexBuffer, view.byteLength);
 
-				m_indexBuffer[objIdx][viewIdx] = indexBuffer;
-				m_indexBufferAlloc[objIdx][viewIdx] = indexBufferAloc;
+			m_indexBuffers.candles[viewIdx].buffer = indexBuffer;
+			m_indexBuffers.candles[viewIdx].allocation = indexBufferAloc;
 
-				vkDestroyBuffer(device, stagingBuffer, nullptr);
-				vmaFreeMemory(m_allocator, stagingBufferAloc);
-			}
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vmaFreeMemory(m_allocator, stagingBufferAloc);
 		}
 	}
 
@@ -2619,26 +3017,26 @@ private:
 	}
 
 	void createGraphicDescriptorSets(){
-		for (unsigned int o = 0; o < Object::SNOWFLAKE; o++){
-			Object objIdx = static_cast<Object>(o);
+		{
+			Object objIdx = Object::CANDLE;
 			if (m_modelImages.find(objIdx) == m_modelImages.end()) {
-				continue;
+				return;
 			}
 
 			tinygltf::Model& model = m_model[objIdx];
-			m_graphicDescriptorSets.meshMaterial[objIdx].resize(model.meshes.size());
+			m_graphicDescriptorSets.candles.meshMaterial.resize(model.meshes.size());
 			int meshIdx = 0;
 
 			for (auto& mesh : model.meshes) {
 				std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
-					layouts = {m_graphicDescriptorSetLayouts.meshMaterial, m_graphicDescriptorSetLayouts.meshMaterial};
+					layouts = {m_graphicDescriptorSetLayouts.candles.meshMaterial, m_graphicDescriptorSetLayouts.candles.meshMaterial};
 				VkDescriptorSetAllocateInfo allocInfo{};
 				allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 				allocInfo.descriptorPool = m_descriptorPool;
 				allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 				allocInfo.pSetLayouts = layouts.data();
 
-				if (vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.meshMaterial[objIdx][meshIdx].data()) != VK_SUCCESS) {
+				if (vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.candles.meshMaterial[meshIdx].data()) != VK_SUCCESS) {
 					throw std::runtime_error("failed to allocate graphic descriptor sets!");
 				}
 
@@ -2653,7 +3051,7 @@ private:
 					imageInfo.sampler = m_samplers[objIdx];
 
 					descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					descriptorWrites[0].dstSet = m_graphicDescriptorSets.meshMaterial[objIdx][meshIdx][i];
+					descriptorWrites[0].dstSet = m_graphicDescriptorSets.candles.meshMaterial[meshIdx][i];
 					descriptorWrites[0].dstBinding = 2;
 					descriptorWrites[0].dstArrayElement = 0;
 					descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2667,7 +3065,7 @@ private:
 					normalImageInfo.sampler = m_samplers[objIdx];
 
 					descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					descriptorWrites[1].dstSet = m_graphicDescriptorSets.meshMaterial[objIdx][meshIdx][i];
+					descriptorWrites[1].dstSet = m_graphicDescriptorSets.candles.meshMaterial[meshIdx][i];
 					descriptorWrites[1].dstBinding = 3;
 					descriptorWrites[1].dstArrayElement = 0;
 					descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2681,7 +3079,7 @@ private:
 					emissiveImageInfo.sampler = m_samplers[objIdx];
 
 					descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					descriptorWrites[2].dstSet = m_graphicDescriptorSets.meshMaterial[objIdx][meshIdx][i];
+					descriptorWrites[2].dstSet = m_graphicDescriptorSets.candles.meshMaterial[meshIdx][i];
 					descriptorWrites[2].dstBinding = 4;
 					descriptorWrites[2].dstArrayElement = 0;
 					descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2695,14 +3093,14 @@ private:
 
 			// allocate and update data for OBJECT UNIFORM tranform
 			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
-				layouts = {m_graphicDescriptorSetLayouts.tranformUniform, m_graphicDescriptorSetLayouts.tranformUniform};
+				layouts = {m_graphicDescriptorSetLayouts.candles.tranformUniform, m_graphicDescriptorSetLayouts.candles.tranformUniform};
 			VkDescriptorSetAllocateInfo allocInfo{};
 			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 			allocInfo.descriptorPool = m_descriptorPool;
 			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 			allocInfo.pSetLayouts = layouts.data();
 
-			if (vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.tranformUniform[objIdx].data()) != VK_SUCCESS) {
+			if (vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.candles.tranformUniform.data()) != VK_SUCCESS) {
 				throw std::runtime_error("failed to allocate graphic descriptor sets!");
 			}
 
@@ -2715,7 +3113,7 @@ private:
 				bufferInfo.range = sizeof(TransformUniform);
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[0].dstSet = m_graphicDescriptorSets.tranformUniform[objIdx][i];
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.candles.tranformUniform[i];
 				descriptorWrites[0].dstBinding = 0;
 				descriptorWrites[0].dstArrayElement = 0;
 				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -2728,7 +3126,7 @@ private:
 				lightBufferInfo.range = sizeof(LightingUniform);
 
 				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[1].dstSet = m_graphicDescriptorSets.tranformUniform[objIdx][i];
+				descriptorWrites[1].dstSet = m_graphicDescriptorSets.candles.tranformUniform[i];
 				descriptorWrites[1].dstBinding = 1;
 				descriptorWrites[1].dstArrayElement = 0;
 				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2737,6 +3135,18 @@ private:
 
 				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 			}
+		}
+
+		// bloom
+		{
+			VkDescriptorSetAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			allocInfo.pSetLayouts = &m_graphicDescriptorSetLayouts.bloom;
+			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+			allocInfo.descriptorPool = m_descriptorPool;
+
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.bloom.data())
+				, "failed to allocate graphic descriptor sets!");
 		}
 	}
 
@@ -2933,7 +3343,7 @@ private:
 
 	void drawModel(VkCommandBuffer commandBuffer, Object object) {
 
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines[object]);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles);
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
@@ -2954,13 +3364,13 @@ private:
 		int meshIdx = 0;
 		// factor out tangent
 		auto& attribute = model.meshes[0].primitives[0].attributes;
-		VkBuffer tangentBuffer = m_vertexBuffer[object][model.accessors[attribute["TANGENT"]].bufferView]; 
+		VkBuffer tangentBuffer = m_vertexBuffers.candles[model.accessors[attribute["TANGENT"]].bufferView].buffer; 
 		
 		for (auto& mesh : model.meshes) {
 			// assume there is 1 primitive per mesh
 			auto& attributes = mesh.primitives[0].attributes;
 
-			VkBuffer positionBuffer = m_vertexBuffer[object][model.accessors[attributes["POSITION"]].bufferView];
+			VkBuffer positionBuffer = m_vertexBuffers.candles[model.accessors[attributes["POSITION"]].bufferView].buffer;
 			size_t positionBufferOffset = model.accessors[attributes["POSITION"]].byteOffset;
 			bool hasAnimation = m_modelMeshAnimPositions.find(object) !=  m_modelMeshAnimPositions.end();
 			if (hasAnimation && !m_modelMeshAnimPositions[object][meshIdx].empty()) {
@@ -2969,10 +3379,10 @@ private:
 			}
 
 			size_t normalBufferOffset = model.accessors[attributes["NORMAL"]].byteOffset;
-			VkBuffer normalBuffer = m_vertexBuffer[object][model.accessors[attributes["NORMAL"]].bufferView];
+			VkBuffer normalBuffer = m_vertexBuffers.candles[model.accessors[attributes["NORMAL"]].bufferView].buffer;
 
 			size_t texCordBufferOffset = model.accessors[attributes["TEXCOORD_0"]].byteOffset;
-			VkBuffer texCordBuffer = m_vertexBuffer[object][model.accessors[attributes["TEXCOORD_0"]].bufferView];
+			VkBuffer texCordBuffer = m_vertexBuffers.candles[model.accessors[attributes["TEXCOORD_0"]].bufferView].buffer;
 
 			size_t tangentBufferOffset = model.accessors[attributes["TANGENT"]].byteOffset; 
 			// some mesh of the model don't have tangent attribute
@@ -2998,7 +3408,7 @@ private:
 			vkCmdBindVertexBuffers(commandBuffer, 0, sizeof(vertexBuffers) / sizeof(VkBuffer), vertexBuffers, vertexBufferOffsets);
 
 			auto& indexAccessoridx = mesh.primitives[0].indices;
-			VkBuffer indexBuffer = m_indexBuffer[object][model.accessors[indexAccessoridx].bufferView];
+			VkBuffer indexBuffer = m_indexBuffers.candles[model.accessors[indexAccessoridx].bufferView].buffer;
 			uint64_t indexBufferOffsets = model.accessors[indexAccessoridx].byteOffset;
 			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
 
@@ -3014,16 +3424,16 @@ private:
 				m_graphicPushConstant.isNormalMapping = 1;
 			}
 
-			vkCmdPushConstants(commandBuffer, m_graphicPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), (void*)&m_graphicPushConstant);
+			vkCmdPushConstants(commandBuffer, m_graphicPipelineLayouts.candles, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), (void*)&m_graphicPushConstant);
 
 			uint32_t DynamicOffset{};
 			// this dynamic offset have to be 256 byte aligned
 			DynamicOffset = sizeof(TransformUniform) * meshIdx;
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 
-						   0, 1, &m_graphicDescriptorSets.tranformUniform[object][m_currentFrame], 1, &DynamicOffset);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.candles, 
+						   0, 1, &m_graphicDescriptorSets.candles.tranformUniform[m_currentFrame], 1, &DynamicOffset);
 
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayout, 
-						   1, 1, &m_graphicDescriptorSets.meshMaterial[object][meshIdx][m_currentFrame], 0, 0);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.candles, 
+						   1, 1, &m_graphicDescriptorSets.candles.meshMaterial[meshIdx][m_currentFrame], 0, 0);
 
 			// is this count right?
 			vkCmdDrawIndexed(commandBuffer, model.accessors[indexAccessoridx].count, instanceCount, 0, 0, 0);
