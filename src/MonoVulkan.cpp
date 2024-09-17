@@ -184,13 +184,15 @@ private:
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
 	struct {
-		std::vector<VkFramebuffer> swapChain;
+		std::vector<VkFramebuffer> base;
+		std::vector<VkFramebuffer> bloom;
+		std::vector<VkFramebuffer> combine;
 	} m_frameBuffers;
 
 	struct {
-		VkRenderPass basePass;
-		VkRenderPass bloomPass;
-		VkRenderPass combinePass;
+		VkRenderPass base;
+		VkRenderPass bloom;
+		VkRenderPass combine;
 	} m_renderPasses;
 
 	struct {
@@ -250,15 +252,17 @@ private:
 
 	std::map<Object, std::vector<MeshImages>> m_modelImages;
 
-	typedef struct {
-		Image colorRT;
-		Image colorResRT;
-		Image bloomThresholdRT;
-		Image bloomThresholdResRT;
-		Image depthRT;
-	} FramebufferImages;
-
-	FramebufferImages m_fbImages;
+	struct {
+		struct {
+			Image colorRT;
+			Image colorResRT;
+			Image bloomThresholdRT;
+			Image bloomThresholdResRT;
+			Image depthRT;
+		} base;
+		Image bloom;
+		Image combine;
+	} m_renderTargets;
 
     uint32_t mipLevels;
 
@@ -455,7 +459,7 @@ private:
 		info.QueueFamily = findQueueFamilies(physicalDevice).graphicFamily.value();
 		info.Queue = m_graphicQueue;
 		info.DescriptorPool = imguiDescriptorPool;
-		info.RenderPass = m_renderPasses.basePass;
+		info.RenderPass = m_renderPasses.base;
 		info.MinImageCount = swapChainImages.size();
 		info.ImageCount = swapChainImages.size();
 		info.MSAASamples = getMaxUsableSampleCount();
@@ -479,7 +483,7 @@ private:
 		createPipelines();
         createCommandPools();
         createModelImages();
-        createFramebuffersImages();
+        createRenderTargets();
         createFramebuffers();
         createSampler();
 		loadInstanceData();
@@ -670,9 +674,9 @@ private:
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.bloom, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.combine, nullptr);
         vkDestroyPipelineLayout(device, m_computePipelineLayout, nullptr);
-        vkDestroyRenderPass(device, m_renderPasses.basePass, nullptr);
-        vkDestroyRenderPass(device, m_renderPasses.bloomPass, nullptr);
-        vkDestroyRenderPass(device, m_renderPasses.combinePass, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.base, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.bloom, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.combine, nullptr);
 
 		vkDestroyBuffer(device, m_vortexUniformBuffer, nullptr);
 		vmaUnmapMemory(m_allocator, m_vortexUniformBufferAlloc);
@@ -754,27 +758,35 @@ private:
     }
 
     void cleanupSwapChain() {
-        vkDestroyImageView(device, m_fbImages.colorRT.view, nullptr);
-        vkDestroyImage(device, m_fbImages.colorRT.image, nullptr);
-        vmaFreeMemory(m_allocator, m_fbImages.colorRT.allocation);
+        vkDestroyImageView(device, m_renderTargets.base.colorRT.view, nullptr);
+        vkDestroyImage(device, m_renderTargets.base.colorRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_renderTargets.base.colorRT.allocation);
 
-        vkDestroyImageView(device, m_fbImages.colorResRT.view, nullptr);
-        vkDestroyImage(device, m_fbImages.colorResRT.image, nullptr);
-        vmaFreeMemory(m_allocator, m_fbImages.colorResRT.allocation);
+        vkDestroyImageView(device, m_renderTargets.base.colorResRT.view, nullptr);
+        vkDestroyImage(device, m_renderTargets.base.colorResRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_renderTargets.base.colorResRT.allocation);
 
-        vkDestroyImageView(device, m_fbImages.depthRT.view, nullptr);
-        vkDestroyImage(device, m_fbImages.depthRT.image, nullptr);
-        vmaFreeMemory(m_allocator, m_fbImages.depthRT.allocation);
+        vkDestroyImageView(device, m_renderTargets.base.depthRT.view, nullptr);
+        vkDestroyImage(device, m_renderTargets.base.depthRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_renderTargets.base.depthRT.allocation);
 
-        vkDestroyImageView(device, m_fbImages.bloomThresholdRT.view, nullptr);
-        vkDestroyImage(device, m_fbImages.bloomThresholdRT.image, nullptr);
-        vmaFreeMemory(m_allocator, m_fbImages.bloomThresholdRT.allocation);
+        vkDestroyImageView(device, m_renderTargets.base.bloomThresholdRT.view, nullptr);
+        vkDestroyImage(device, m_renderTargets.base.bloomThresholdRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_renderTargets.base.bloomThresholdRT.allocation);
 
-        vkDestroyImageView(device, m_fbImages.bloomThresholdResRT.view, nullptr);
-        vkDestroyImage(device, m_fbImages.bloomThresholdResRT.image, nullptr);
-        vmaFreeMemory(m_allocator, m_fbImages.bloomThresholdResRT.allocation);
+        vkDestroyImageView(device, m_renderTargets.base.bloomThresholdResRT.view, nullptr);
+        vkDestroyImage(device, m_renderTargets.base.bloomThresholdResRT.image, nullptr);
+        vmaFreeMemory(m_allocator, m_renderTargets.base.bloomThresholdResRT.allocation);
 
-        for (auto framebuffer : m_frameBuffers.swapChain) {
+        for (auto framebuffer : m_frameBuffers.base) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
+        for (auto framebuffer : m_frameBuffers.bloom) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
+        for (auto framebuffer : m_frameBuffers.combine) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
 
@@ -799,7 +811,7 @@ private:
 
         createSwapChain();
         createSwapchainImageViews();
-        createFramebuffersImages();
+        createRenderTargets();
         createFramebuffers();
     }
 
@@ -1149,7 +1161,7 @@ private:
 			renderPassInfo.dependencyCount = 1;
 			renderPassInfo.pDependencies = &dependency;
 
-			if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_renderPasses.basePass) != VK_SUCCESS) {
+			if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_renderPasses.base) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create render pass!");
 			}
 		}
@@ -1160,7 +1172,7 @@ private:
 			blurAttachment.format = swapChainImageFormat;
 			blurAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 			blurAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			blurAttachment.storeOp = VK_ATTACHMENT_STORE_OP_NONE;
+			blurAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			blurAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			blurAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			blurAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1179,10 +1191,10 @@ private:
 			VkSubpassDependency blurDeps{};
 			blurDeps.srcSubpass = VK_SUBPASS_EXTERNAL;
 			blurDeps.dstSubpass = 0;
-			blurDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-			blurDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			blurDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-			blurDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			blurDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			blurDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			blurDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			blurDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 			VkRenderPassCreateInfo bloomPassInfo{};
 			bloomPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO; 
@@ -1193,7 +1205,7 @@ private:
 			bloomPassInfo.dependencyCount = 1;
 			bloomPassInfo.pDependencies = &blurDeps;
 
-			if (vkCreateRenderPass(device, &bloomPassInfo, nullptr, &m_renderPasses.bloomPass) != VK_SUCCESS) {
+			if (vkCreateRenderPass(device, &bloomPassInfo, nullptr, &m_renderPasses.bloom) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create render pass!");
 			}
 		}
@@ -1207,7 +1219,7 @@ private:
 			combineAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			combineAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			combineAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			combineAttachment.initialLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+			combineAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			combineAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 			VkAttachmentReference combineRef{};
@@ -1223,10 +1235,10 @@ private:
 			VkSubpassDependency combineDeps{};
 			combineDeps.srcSubpass = VK_SUBPASS_EXTERNAL;
 			combineDeps.dstSubpass = 0;
-			combineDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-			combineDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			combineDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-			combineDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			combineDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			combineDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			combineDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			combineDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 			VkRenderPassCreateInfo combinePassInfo{};
 			combinePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO; 
@@ -1236,7 +1248,7 @@ private:
 			combinePassInfo.pAttachments = &combineAttachment;
 			combinePassInfo.dependencyCount = 1;
 			combinePassInfo.pDependencies = &combineDeps;
-			if (vkCreateRenderPass(device, &combinePassInfo, nullptr, &m_renderPasses.combinePass) != VK_SUCCESS) {
+			if (vkCreateRenderPass(device, &combinePassInfo, nullptr, &m_renderPasses.combine) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create render pass!");
 			}
 		}
@@ -1429,7 +1441,39 @@ private:
 			}
 		}
 
+		// bloom
 		{
+			VkDescriptorSetLayout layouts[] = {m_graphicDescriptorSetLayouts.bloom};
+
+			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			pipelineLayoutInfo.setLayoutCount = 1;
+			pipelineLayoutInfo.pSetLayouts = layouts;
+			pipelineLayoutInfo.pushConstantRangeCount = 0;
+			pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+			CHECK_VK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayouts.bloom)
+				, "fail to create bloom pipeline layout");
+		}
+
+		// combine
+		{
+			VkPushConstantRange pushConstant{};
+			pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+			pushConstant.size = sizeof(GraphicPushConstant);
+			pushConstant.offset = 0;
+
+			VkDescriptorSetLayout layouts[] = {m_graphicDescriptorSetLayouts.combine};
+
+			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			pipelineLayoutInfo.setLayoutCount = 1;
+			pipelineLayoutInfo.pSetLayouts = layouts;
+			pipelineLayoutInfo.pushConstantRangeCount = 1;
+			pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
+
+			CHECK_VK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayouts.combine)
+				, "fail to create bloom pipeline layout");
 		}
 	}
 
@@ -1563,7 +1607,7 @@ private:
 		// 	pipelineInfo.pColorBlendState = &colorBlending;
 		// 	pipelineInfo.pDynamicState = &dynamicState;
 		// 	pipelineInfo.layout = m_graphicPipelineLayout;
-		// 	pipelineInfo.renderPass = m_renderPasses.basePass;
+		// 	pipelineInfo.renderPass = m_renderPasses.base;
 		// 	pipelineInfo.subpass = 0;
 		// 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
@@ -1726,7 +1770,7 @@ private:
 			pipelineInfo.pColorBlendState = &colorBlending;
 			pipelineInfo.pDynamicState = &dynamicState;
 			pipelineInfo.layout = m_graphicPipelineLayouts.candles;
-			pipelineInfo.renderPass = m_renderPasses.basePass;
+			pipelineInfo.renderPass = m_renderPasses.base;
 			pipelineInfo.subpass = 0;
 			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
@@ -1850,7 +1894,7 @@ private:
 
 			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			fragShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
 			fragShaderStageInfo.module = fragShaderModule;
 			fragShaderStageInfo.pName = "main";
 
@@ -1869,7 +1913,7 @@ private:
 			bloomPipelineInfo.pStages = shaderStages;
 			bloomPipelineInfo.pDynamicState = &dynamicInfo;
 			bloomPipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-			bloomPipelineInfo.renderPass = m_renderPasses.bloomPass;
+			bloomPipelineInfo.renderPass = m_renderPasses.bloom;
 			bloomPipelineInfo.subpass = 0;
 			bloomPipelineInfo.layout = m_graphicPipelineLayouts.bloom;
 
@@ -1889,11 +1933,11 @@ private:
 			combinePipelineInfo.pStages = shaderStages;
 			combinePipelineInfo.pDynamicState = &dynamicInfo;
 			combinePipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-			combinePipelineInfo.renderPass = m_renderPasses.combinePass;
+			combinePipelineInfo.renderPass = m_renderPasses.combine;
 			combinePipelineInfo.subpass = 0;
 			combinePipelineInfo.layout = m_graphicPipelineLayouts.combine;
 
-			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &combinePipelineInfo, nullptr, &m_graphicPipelines.bloom)
+			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &combinePipelineInfo, nullptr, &m_graphicPipelines.combine)
 				   , "fail to create combine pipeline");
 		}
     }
@@ -1938,31 +1982,81 @@ private:
 	}
 
     void createFramebuffers() {
-        m_frameBuffers.swapChain.resize(swapChainImageViews.size());
+		// base
+		{
+			m_frameBuffers.base.resize(swapChainImageViews.size());
 
-        for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-            std::array<VkImageView, 5> attachments = {
-                m_fbImages.colorRT.view,
-				m_fbImages.bloomThresholdRT.view,
-                m_fbImages.depthRT.view,
-                swapChainImageViews[i],
-				m_fbImages.bloomThresholdResRT.view
-                // swapChainImageViews[i]
-            };
+			for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+				std::array<VkImageView, 5> attachments = {
+					m_renderTargets.base.colorRT.view,
+					m_renderTargets.base.bloomThresholdRT.view,
+					m_renderTargets.base.depthRT.view,
+					swapChainImageViews[i],
+					// m_renderTargets.base.colorResRT.view,
+					m_renderTargets.base.bloomThresholdResRT.view
+				};
 
-            VkFramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = m_renderPasses.basePass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapChainExtent.width;
-            framebufferInfo.height = swapChainExtent.height;
-            framebufferInfo.layers = 1;
+				VkFramebufferCreateInfo framebufferInfo{};
+				framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+				framebufferInfo.renderPass = m_renderPasses.base;
+				framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+				framebufferInfo.pAttachments = attachments.data();
+				framebufferInfo.width = swapChainExtent.width;
+				framebufferInfo.height = swapChainExtent.height;
+				framebufferInfo.layers = 1;
 
-            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_frameBuffers.swapChain[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create framebuffer!");
-            }
-        }
+				if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_frameBuffers.base[i]) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create framebuffer!");
+				}
+			}
+		}
+
+		// bloom
+		{
+			m_frameBuffers.bloom.resize(swapChainImageViews.size());
+
+			for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+				std::array<VkImageView, 1> attachments = {
+					m_renderTargets.bloom.view,
+				};
+
+				VkFramebufferCreateInfo framebufferInfo{};
+				framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+				framebufferInfo.renderPass = m_renderPasses.bloom;
+				framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+				framebufferInfo.pAttachments = attachments.data();
+				framebufferInfo.width = swapChainExtent.width;
+				framebufferInfo.height = swapChainExtent.height;
+				framebufferInfo.layers = 1;
+
+				if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_frameBuffers.bloom[i]) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create framebuffer!");
+				}
+			}
+		}
+
+		{
+			m_frameBuffers.combine.resize(swapChainImageViews.size());
+
+			for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+				std::array<VkImageView, 1> attachments = {
+					swapChainImageViews[i]
+				};
+
+				VkFramebufferCreateInfo framebufferInfo{};
+				framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+				framebufferInfo.renderPass = m_renderPasses.combine;
+				framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+				framebufferInfo.pAttachments = attachments.data();
+				framebufferInfo.width = swapChainExtent.width;
+				framebufferInfo.height = swapChainExtent.height;
+				framebufferInfo.layers = 1;
+
+				if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_frameBuffers.combine[i]) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create framebuffer!");
+				}
+			}
+		}
     }
 
     void createCommandPools() {
@@ -1987,35 +2081,48 @@ private:
 		}
     }
 
-    void createFramebuffersImages() {
+    void createRenderTargets() {
         VkFormat colorFormat = swapChainImageFormat;
 
+		// for base framebuffer
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.colorRT.image, m_fbImages.colorRT.allocation);
-        m_fbImages.colorRT.view = createImageView(m_fbImages.colorRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.colorRT.image, m_renderTargets.base.colorRT.allocation);
+        m_renderTargets.base.colorRT.view = createImageView(m_renderTargets.base.colorRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.bloomThresholdRT.image, m_fbImages.bloomThresholdRT.allocation);
-        m_fbImages.bloomThresholdRT.view = createImageView(m_fbImages.bloomThresholdRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.bloomThresholdRT.image, m_renderTargets.base.bloomThresholdRT.allocation);
+        m_renderTargets.base.bloomThresholdRT.view = createImageView(m_renderTargets.base.bloomThresholdRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         VkFormat depthFormat = findDepthFormat();
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat,
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.depthRT.image, m_fbImages.depthRT.allocation);
-        m_fbImages.depthRT.view = createImageView(m_fbImages.depthRT.image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.depthRT.image, m_renderTargets.base.depthRT.allocation);
+        m_renderTargets.base.depthRT.view = createImageView(m_renderTargets.base.depthRT.image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
-					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.colorResRT.image, m_fbImages.colorResRT.allocation);
-        m_fbImages.colorResRT.view = createImageView(m_fbImages.colorResRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.colorResRT.image, m_renderTargets.base.colorResRT.allocation);
+        m_renderTargets.base.colorResRT.view = createImageView(m_renderTargets.base.colorResRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
-					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_fbImages.bloomThresholdResRT.image, m_fbImages.bloomThresholdResRT.allocation);
-        m_fbImages.bloomThresholdResRT.view = createImageView(m_fbImages.bloomThresholdResRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.bloomThresholdResRT.image, m_renderTargets.base.bloomThresholdResRT.allocation);
+        m_renderTargets.base.bloomThresholdResRT.view = createImageView(m_renderTargets.base.bloomThresholdResRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+		// for bloom framebuffer
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.bloom.image, m_renderTargets.bloom.allocation);
+        m_renderTargets.bloom.view = createImageView(m_renderTargets.bloom.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+		// for combine framebuffer
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.combine.image, m_renderTargets.combine.allocation);
+        m_renderTargets.combine.view = createImageView(m_renderTargets.combine.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -2238,30 +2345,6 @@ private:
 
         return VK_SAMPLE_COUNT_1_BIT;
     }
-
-    // void createImageView() {
-	// 	for (unsigned int i = 0; i < Object::COUNT; i++){
-	// 		Object objIdx = static_cast<Object>(i);
-	// 		tinygltf::Model& model = m_model[objIdx];
-	// 		for (auto& textureImage : m_images.baseImage[objIdx]) {
-	// 			if(textureImage != VK_NULL_HANDLE){
-	// 				m_imageViews.baseView[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
-	// 			}
-	// 			else {
-	// 				m_imageViews.baseView[objIdx].push_back(VK_NULL_HANDLE);
-	// 			}
-	// 		}
-
-	// 		for (auto& textureImage : m_images.normalImage[objIdx]) {
-	// 			if(textureImage != VK_NULL_HANDLE){
-	// 				m_imageViews.normalView[objIdx].push_back(createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels));
-	// 			}
-	// 			else {
-	// 				m_imageViews.normalView[objIdx].push_back(VK_NULL_HANDLE);
-	// 			}
-	// 		}
-	// 	}
-    // }
 
     void createSampler() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
@@ -2768,9 +2851,13 @@ private:
 			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
 			auto bufferViews = findModelVertexBufferView(objIdx);
+			// use gltf buffer view index value as m_vertexBuffer index
+			int maxVal = *std::max_element(bufferViews.begin(), bufferViews.end());
+			m_vertexBuffers.candles.resize(maxVal + 1);
 
-			for (auto& viewIdx : bufferViews) {
+			for (auto viewIdx : bufferViews) {
 				tinygltf::BufferView view = model.bufferViews[viewIdx];
+				Buffer newBuffer{};
 				VkBuffer stagingBuffer;
 				VmaAllocation stagingBufferAlloc{};
 
@@ -2785,11 +2872,13 @@ private:
 				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
 				copyBuffer(stagingBuffer, vertexBuffer, view.byteLength);
 
-				m_vertexBuffers.candles[viewIdx].buffer = vertexBuffer;
-				m_vertexBuffers.candles[viewIdx].allocation = vertexBufferAlloc;
+				newBuffer.buffer = vertexBuffer;
+				newBuffer.allocation = vertexBufferAlloc;
 
 				vkDestroyBuffer(device, stagingBuffer, nullptr);
 				vmaFreeMemory(m_allocator, stagingBufferAlloc);
+
+				m_vertexBuffers.candles[viewIdx] = newBuffer;
 			}
 		}
 
@@ -2800,6 +2889,8 @@ private:
 
 			VkBuffer vertexBuffer;
 			VmaAllocation vertexBufferAlloc{};
+
+			m_vertexBuffers.quad.resize(1);
 
 			int size = sizeof(quadVertices) / sizeof(float);
 			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
@@ -2823,8 +2914,13 @@ private:
 		tinygltf::Model& model = m_model[objIdx];
 		auto bufferViews = findModelIndexBufferView(objIdx);
 
-		for (auto& viewIdx : bufferViews) {
+		// use gltf buffer view index value as m_vertexBuffer index
+		int maxVal = *std::max_element(bufferViews.begin(), bufferViews.end());
+		m_indexBuffers.candles.resize(maxVal + 1);
+
+		for (auto viewIdx : bufferViews) {
 			tinygltf::BufferView view = model.bufferViews[viewIdx];
+			Buffer newBuffer{};
 			VkBuffer stagingBuffer;
 			VmaAllocation stagingBufferAloc{};
 			VkBuffer indexBuffer;
@@ -2838,11 +2934,12 @@ private:
 			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
 			copyBuffer(stagingBuffer, indexBuffer, view.byteLength);
 
-			m_indexBuffers.candles[viewIdx].buffer = indexBuffer;
-			m_indexBuffers.candles[viewIdx].allocation = indexBufferAloc;
+			newBuffer.buffer = indexBuffer;
+			newBuffer.allocation = indexBufferAloc;
 
 			vkDestroyBuffer(device, stagingBuffer, nullptr);
 			vmaFreeMemory(m_allocator, stagingBufferAloc);
+			m_indexBuffers.candles[viewIdx] = newBuffer;
 		}
 	}
 
@@ -2991,7 +3088,7 @@ private:
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) * 2 + 1; // for mesh transform + light uniform +1 for compute uniform
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount) * 3; // for base, normal and emissive texture
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount) * 3 + /*for bloom */(1 + 2) * 2; // for base, normal and emissive texture + bloom texture
 		poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		poolSizes[2].descriptorCount = static_cast<uint32_t>(1);
 
@@ -3004,7 +3101,8 @@ private:
 		// materialCount for the number of mesh material
 		// 1 for compute descriptor set
 		// 1 for imgui descriptor set
-		poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 2) + 3; // for graphics and compute
+		// 4 for other passes with each frame in flight
+		poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 2) + 3 + 4; // for graphics and compute
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
@@ -3040,7 +3138,7 @@ private:
 					throw std::runtime_error("failed to allocate graphic descriptor sets!");
 				}
 
-				// can it write to the 2 frame descirptor set at once??
+				// TODO: does it need 2 descriptor here since we only read image?
 				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 					std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
@@ -3141,12 +3239,79 @@ private:
 		{
 			VkDescriptorSetAllocateInfo allocInfo{};
 			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			allocInfo.pSetLayouts = &m_graphicDescriptorSetLayouts.bloom;
+			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
+				layouts = {m_graphicDescriptorSetLayouts.bloom, m_graphicDescriptorSetLayouts.bloom};
+			allocInfo.pSetLayouts = layouts.data();
 			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 			allocInfo.descriptorPool = m_descriptorPool;
 
 			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.bloom.data())
 				, "failed to allocate graphic descriptor sets!");
+
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+				VkDescriptorImageInfo imageInfo{};
+				imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				imageInfo.imageView = m_renderTargets.base.bloomThresholdResRT.view;
+				imageInfo.sampler = m_samplers[Object::CANDLE];
+
+				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.bloom[i];
+				descriptorWrites[0].dstBinding = 0;
+				descriptorWrites[0].dstArrayElement = 0;
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				descriptorWrites[0].descriptorCount = 1;
+				descriptorWrites[0].pImageInfo = &imageInfo;
+
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+			}
+		}
+
+		// combine
+		{
+			VkDescriptorSetAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
+				layouts = {m_graphicDescriptorSetLayouts.combine, m_graphicDescriptorSetLayouts.combine};
+			allocInfo.pSetLayouts = layouts.data();
+			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+			allocInfo.descriptorPool = m_descriptorPool;
+
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.combine.data())
+				, "failed to allocate graphic descriptor sets!");
+
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+				VkDescriptorImageInfo baseImageInfo{};
+				baseImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				baseImageInfo.imageView = m_renderTargets.base.colorResRT.view;
+				baseImageInfo.sampler = m_samplers[Object::CANDLE];
+
+				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.combine[i];
+				descriptorWrites[0].dstBinding = 0;
+				descriptorWrites[0].dstArrayElement = 0;
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				descriptorWrites[0].descriptorCount = 1;
+				descriptorWrites[0].pImageInfo = &baseImageInfo;
+                                 
+				VkDescriptorImageInfo bloomImageInfo{};
+				bloomImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				bloomImageInfo.imageView = m_renderTargets.bloom.view;
+				bloomImageInfo.sampler = m_samplers[Object::CANDLE];
+
+				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[1].dstSet = m_graphicDescriptorSets.combine[i]; 
+				descriptorWrites[1].dstBinding = 1;
+				descriptorWrites[1].dstArrayElement = 0;
+				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				descriptorWrites[1].descriptorCount = 1;
+				descriptorWrites[1].pImageInfo = &bloomImageInfo;
+
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+			}
 		}
 	}
 
@@ -3517,8 +3682,8 @@ private:
 		{
 			VkRenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			renderPassInfo.renderPass = m_renderPasses.basePass;
-			renderPassInfo.framebuffer = m_frameBuffers.swapChain[imageIndex];
+			renderPassInfo.renderPass = m_renderPasses.base;
+			renderPassInfo.framebuffer = m_frameBuffers.base[imageIndex];
 			renderPassInfo.renderArea.offset = {0, 0};
 			renderPassInfo.renderArea.extent = swapChainExtent;
 
