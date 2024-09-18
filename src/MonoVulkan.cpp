@@ -459,10 +459,13 @@ private:
 		info.QueueFamily = findQueueFamilies(physicalDevice).graphicFamily.value();
 		info.Queue = m_graphicQueue;
 		info.DescriptorPool = imguiDescriptorPool;
-		info.RenderPass = m_renderPasses.base;
 		info.MinImageCount = swapChainImages.size();
 		info.ImageCount = swapChainImages.size();
-		info.MSAASamples = getMaxUsableSampleCount();
+		// info.RenderPass = m_renderPasses.base;
+		// info.MSAASamples = getMaxUsableSampleCount();
+		info.RenderPass = m_renderPasses.combine;
+		info.MSAASamples = VK_SAMPLE_COUNT_1_BIT; 
+		
 		// info.CheckVkResultFn = CheckImGuiResult;
 		ImGui_ImplVulkan_Init(&info);
 	}
@@ -624,6 +627,7 @@ private:
 
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
+			std::cout << std::endl << ">>>>>>> New Frame Start <<<<<<<<" << std::endl;
 			processInput();
 			updateContext();
             drawFrame();
@@ -1099,7 +1103,7 @@ private:
 			colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 			VkAttachmentDescription bloomThresholdAttachmentResolve{};
 			bloomThresholdAttachmentResolve.format = swapChainImageFormat;
@@ -1109,7 +1113,7 @@ private:
 			bloomThresholdAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			bloomThresholdAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			bloomThresholdAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			bloomThresholdAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			bloomThresholdAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 			VkAttachmentReference colorAttachmentRef{};
 			colorAttachmentRef.attachment = 0;
@@ -1171,12 +1175,12 @@ private:
 			VkAttachmentDescription blurAttachment{};
 			blurAttachment.format = swapChainImageFormat;
 			blurAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-			blurAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			blurAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			blurAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			blurAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			blurAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			blurAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			blurAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			blurAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			blurAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 			VkAttachmentReference blurRef{};
 			blurRef.attachment = 0;
@@ -1193,7 +1197,7 @@ private:
 			blurDeps.dstSubpass = 0;
 			blurDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			blurDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			blurDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			blurDeps.dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			blurDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 			VkRenderPassCreateInfo bloomPassInfo{};
@@ -1215,11 +1219,11 @@ private:
 			VkAttachmentDescription combineAttachment{};
 			combineAttachment.format = swapChainImageFormat;
 			combineAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-			combineAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			combineAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			combineAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			combineAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			combineAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			combineAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			combineAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			combineAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 			VkAttachmentReference combineRef{};
@@ -1237,7 +1241,7 @@ private:
 			combineDeps.dstSubpass = 0;
 			combineDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			combineDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			combineDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			combineDeps.dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			combineDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 			VkRenderPassCreateInfo combinePassInfo{};
@@ -1920,6 +1924,25 @@ private:
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &bloomPipelineInfo, nullptr, &m_graphicPipelines.bloom)
 				   , "fail to create bloom pipeline");
 
+			vertShaderCode = readFile("../../src/shaders/combine.vert.spv");
+			fragShaderCode = readFile("../../src/shaders/combine.frag.spv");
+
+			vertShaderModule = createShaderModule(vertShaderCode);
+			fragShaderModule = createShaderModule(fragShaderCode);
+
+			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.pName = "main";
+
+			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.pName = "main";
+
+			shaderStages[0] = vertShaderStageInfo; 
+			shaderStages[1] = fragShaderStageInfo; 
+
 			VkGraphicsPipelineCreateInfo combinePipelineInfo{};
 			combinePipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO; 
 			combinePipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -1991,8 +2014,8 @@ private:
 					m_renderTargets.base.colorRT.view,
 					m_renderTargets.base.bloomThresholdRT.view,
 					m_renderTargets.base.depthRT.view,
-					swapChainImageViews[i],
-					// m_renderTargets.base.colorResRT.view,
+					// swapChainImageViews[i],
+					m_renderTargets.base.colorResRT.view,
 					m_renderTargets.base.bloomThresholdResRT.view
 				};
 
@@ -3506,7 +3529,7 @@ private:
         
     }
 
-	void drawModel(VkCommandBuffer commandBuffer, Object object) {
+	void renderModel(VkCommandBuffer commandBuffer, Object object) {
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles);
 
@@ -3606,6 +3629,26 @@ private:
 		}
 	}
 
+	void renderBloom(VkCommandBuffer commandBuffer) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom);
+
+		VkDeviceSize offsets{0};
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom,
+						0, 1, &m_graphicDescriptorSets.bloom[m_currentFrame], 0, 0);
+		vkCmdDraw(commandBuffer, 4, 0, 0, 0);
+	}
+
+	void renderCombine(VkCommandBuffer commandBuffer) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.combine);
+
+		VkDeviceSize offsets{0};
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.combine,
+						0, 1, &m_graphicDescriptorSets.combine[m_currentFrame], 0, 0);
+		vkCmdDraw(commandBuffer, 4, 0, 0, 0);
+	}
+
 	void transferBuffers(VkCommandBuffer commandBuffer) {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
@@ -3680,36 +3723,69 @@ private:
 		}
 
 		{
-			VkRenderPassBeginInfo renderPassInfo{};
-			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			renderPassInfo.renderPass = m_renderPasses.base;
-			renderPassInfo.framebuffer = m_frameBuffers.base[imageIndex];
-			renderPassInfo.renderArea.offset = {0, 0};
-			renderPassInfo.renderArea.extent = swapChainExtent;
+			VkRenderPassBeginInfo basePassInfo{};
+			basePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			basePassInfo.renderPass = m_renderPasses.base;
+			basePassInfo.framebuffer = m_frameBuffers.base[imageIndex];
+			basePassInfo.renderArea.offset = {0, 0};
+			basePassInfo.renderArea.extent = swapChainExtent;
 
 			std::array<VkClearValue, 3> clearValues{};
 			clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 			clearValues[1].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 			clearValues[2].depthStencil = {1.0f, 0};
 
-			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-			renderPassInfo.pClearValues = clearValues.data();
+			basePassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+			basePassInfo.pClearValues = clearValues.data();
 
-			vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdBeginRenderPass(commandBuffer, &basePassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				// draw models	
-				for (unsigned int i = 0; i < Object::COUNT; i++){
-					TracyVkZone(tracyContext, commandBuffer, "Draw Model");
-					Object objIdx = static_cast<Object>(i);
+				renderModel(commandBuffer, Object::CANDLE);
 
-				}
-				drawModel(commandBuffer, Object::CANDLE);
+			vkCmdEndRenderPass(commandBuffer);
+
+			VkRenderPassBeginInfo bloomPassInfo{};
+			bloomPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			bloomPassInfo.renderPass = m_renderPasses.bloom;
+			bloomPassInfo.framebuffer = m_frameBuffers.bloom[imageIndex];
+			bloomPassInfo.renderArea.offset = {0, 0};
+			bloomPassInfo.renderArea.extent = swapChainExtent;
+
+			std::array<VkClearValue, 1> bloomClearValues{};
+			bloomClearValues[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
+
+			bloomPassInfo.clearValueCount = static_cast<uint32_t>(bloomClearValues.size());
+			bloomPassInfo.pClearValues = bloomClearValues.data();
+
+			vkCmdBeginRenderPass(commandBuffer, &bloomPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				renderBloom(commandBuffer);
+
+			vkCmdEndRenderPass(commandBuffer);
+
+			VkRenderPassBeginInfo combinePassInfo{};
+			combinePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			combinePassInfo.renderPass = m_renderPasses.combine;
+			combinePassInfo.framebuffer = m_frameBuffers.combine[imageIndex];
+			combinePassInfo.renderArea.offset = {0, 0};
+			combinePassInfo.renderArea.extent = swapChainExtent;
+
+			std::array<VkClearValue, 1> combineClearValues{};
+			combineClearValues[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
+
+			combinePassInfo.clearValueCount = static_cast<uint32_t>(combineClearValues.size());
+			combinePassInfo.pClearValues = combineClearValues.data();
+
+			vkCmdBeginRenderPass(commandBuffer, &combinePassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				renderCombine(commandBuffer);
 
 				{
 					TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
 					ImGui::Render();
 					ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, VK_NULL_HANDLE);
 				}
+
 
 			vkCmdEndRenderPass(commandBuffer);
 		

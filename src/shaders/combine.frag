@@ -13,9 +13,11 @@ layout (push_constant) uniform DataPushConstant{
 
 void main() {
 	vec3 baseColor = texture(baseSampler, vTexCoords).rgb;
-	if (p_const.useBloom != 0) {
-		baseColor += texture(bloomSampler, vTexCoords).rgb;
-	}
+	outColor = vec4(baseColor, 1.0);
+	return;
+
+	baseColor += texture(bloomSampler, vTexCoords).rgb;
+
     // tone mapping
     // vec3 result = vec3(1.0) - exp(-hdrColor * exposure);
     // also gamma correct while we're at it       

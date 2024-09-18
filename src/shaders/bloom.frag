@@ -10,6 +10,9 @@ layout (constant_id = 0) const bool isHorizontal = true;
 float weight[5] = float[] (0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
 
 void main() {
+	outColor = vec4(texture(u_texSampler, vTexCoords).rgb, 1.0);
+	return;
+
 	vec2 texOffset = 1 / textureSize(u_texSampler, 0);
 	vec3 res = texture(u_texSampler, vTexCoords).rgb * weight[0];
 	if (isHorizontal) {
