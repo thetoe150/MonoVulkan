@@ -261,7 +261,6 @@ private:
 			Image depthRT;
 		} base;
 		Image bloom;
-		Image combine;
 	} m_renderTargets;
 
     uint32_t mipLevels;
@@ -413,7 +412,6 @@ private:
 	}
 
 	void initTracy(){
-		// tracyContext = TracyVkContextCalibrated(instance, physicalDevice, device, graphicsQueue, tracyCommandBuffer, vkGetInstanceProcAddr, vkGetDeviceProcAddr);
 		tracyContext = TracyVkContextCalibrated(instance, physicalDevice, device, m_graphicQueue, tracyCommandBuffer, vkGetInstanceProcAddr, vkGetDeviceProcAddr);
 		
 		// VkQueryPoolCreateInfo poolInfo;
@@ -501,10 +499,10 @@ private:
         createCommandBuffers();
         createSyncObjects();
 
-		printPhysicalDeviceProperties();
-		printMemoryStatistics();
-		printQueueFamilyProperties();
+		// printPhysicalDeviceProperties();
+		// printMemoryStatistics();
 		// printMemoryBudget();
+		// printQueueFamilyProperties();
     }
 
 	void processInput(){
@@ -826,9 +824,9 @@ private:
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "Hello Triangle";
+        appInfo.pApplicationName = "MonoVulkan";
         appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 1, 3, 0);
-        appInfo.pEngineName = "No Engine";
+        appInfo.pEngineName = "MonoVulkan";
         appInfo.engineVersion = VK_MAKE_API_VERSION(0, 1, 3, 0);
         appInfo.apiVersion = VK_API_VERSION_1_3;
 
@@ -1069,7 +1067,7 @@ private:
 			colorAttachment.format = swapChainImageFormat;
 			colorAttachment.samples = msaaSamples;
 			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1079,7 +1077,7 @@ private:
 			bloomThresholdAttachment.format = swapChainImageFormat;
 			bloomThresholdAttachment.samples = msaaSamples;
 			bloomThresholdAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			bloomThresholdAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			bloomThresholdAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			bloomThresholdAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			bloomThresholdAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			bloomThresholdAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1197,7 +1195,7 @@ private:
 			blurDeps.dstSubpass = 0;
 			blurDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			blurDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			blurDeps.dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			blurDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			blurDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 			VkRenderPassCreateInfo bloomPassInfo{};
@@ -1241,7 +1239,7 @@ private:
 			combineDeps.dstSubpass = 0;
 			combineDeps.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			combineDeps.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			combineDeps.dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			combineDeps.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			combineDeps.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 			VkRenderPassCreateInfo combinePassInfo{};
@@ -1924,24 +1922,25 @@ private:
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &bloomPipelineInfo, nullptr, &m_graphicPipelines.bloom)
 				   , "fail to create bloom pipeline");
 
-			vertShaderCode = readFile("../../src/shaders/combine.vert.spv");
-			fragShaderCode = readFile("../../src/shaders/combine.frag.spv");
+			auto combineVertShaderCode = readFile("../../src/shaders/combine.vert.spv");
+			auto combineFragShaderCode = readFile("../../src/shaders/combine.frag.spv");
 
-			vertShaderModule = createShaderModule(vertShaderCode);
-			fragShaderModule = createShaderModule(fragShaderCode);
+			VkShaderModule combineVertShaderModule = createShaderModule(combineVertShaderCode);
+			VkShaderModule combineFragShaderModule = createShaderModule(combineFragShaderCode);
 
-			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			vertShaderStageInfo.module = vertShaderModule;
-			vertShaderStageInfo.pName = "main";
+			VkPipelineShaderStageCreateInfo combineVertShaderStageInfo{};
+			combineVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			combineVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			combineVertShaderStageInfo.module = combineVertShaderModule;
+			combineVertShaderStageInfo.pName = "main";
 
-			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
-			fragShaderStageInfo.pName = "main";
+			VkPipelineShaderStageCreateInfo combineFragShaderStageInfo{};
+			combineFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			combineFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			combineFragShaderStageInfo.module = combineFragShaderModule;
+			combineFragShaderStageInfo.pName = "main";
 
-			shaderStages[0] = vertShaderStageInfo; 
-			shaderStages[1] = fragShaderStageInfo; 
+			VkPipelineShaderStageCreateInfo combineShaderStages[] = {combineVertShaderStageInfo, combineFragShaderStageInfo};
 
 			VkGraphicsPipelineCreateInfo combinePipelineInfo{};
 			combinePipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO; 
@@ -1953,7 +1952,7 @@ private:
 			combinePipelineInfo.pDepthStencilState = &depthStencilInfo;
 			combinePipelineInfo.pRasterizationState = &rasterizationInfo;
 			combinePipelineInfo.stageCount = 2;
-			combinePipelineInfo.pStages = shaderStages;
+			combinePipelineInfo.pStages = combineShaderStages;
 			combinePipelineInfo.pDynamicState = &dynamicInfo;
 			combinePipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 			combinePipelineInfo.renderPass = m_renderPasses.combine;
@@ -2140,12 +2139,6 @@ private:
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.bloom.image, m_renderTargets.bloom.allocation);
         m_renderTargets.bloom.view = createImageView(m_renderTargets.bloom.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-
-		// for combine framebuffer
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
-					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.combine.image, m_renderTargets.combine.allocation);
-        m_renderTargets.combine.view = createImageView(m_renderTargets.combine.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -2915,7 +2908,7 @@ private:
 
 			m_vertexBuffers.quad.resize(1);
 
-			int size = sizeof(quadVertices) / sizeof(float);
+			int size = sizeof(quadVertices);
 			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
 			void* data;
 			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
@@ -3636,7 +3629,7 @@ private:
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom,
 						0, 1, &m_graphicDescriptorSets.bloom[m_currentFrame], 0, 0);
-		vkCmdDraw(commandBuffer, 4, 0, 0, 0);
+		vkCmdDraw(commandBuffer, 4, 1, 0, 0);
 	}
 
 	void renderCombine(VkCommandBuffer commandBuffer) {
@@ -3646,7 +3639,7 @@ private:
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.combine,
 						0, 1, &m_graphicDescriptorSets.combine[m_currentFrame], 0, 0);
-		vkCmdDraw(commandBuffer, 4, 0, 0, 0);
+		vkCmdDraw(commandBuffer, 4, 1, 0, 0);
 	}
 
 	void transferBuffers(VkCommandBuffer commandBuffer) {
@@ -4468,7 +4461,9 @@ private:
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-        std::cerr << "\n##### " << pCallbackData->pMessage << std::endl;
+		if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT || messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+			std::cerr << "\n##### " << pCallbackData->pMessage << std::endl;
+		}
 
         return VK_FALSE;
     }

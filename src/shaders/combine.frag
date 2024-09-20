@@ -12,6 +12,9 @@ layout (push_constant) uniform DataPushConstant{
 } p_const;
 
 void main() {
+
+	outColor = vec4(1.0, 1.0, 0.0, 1.0);
+	return;
 	vec3 baseColor = texture(baseSampler, vTexCoords).rgb;
 	outColor = vec4(baseColor, 1.0);
 	return;
