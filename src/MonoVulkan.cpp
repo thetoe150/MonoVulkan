@@ -265,7 +265,12 @@ private:
 
     uint32_t mipLevels;
 
-	std::map<Object, VkSampler> m_samplers;
+	struct {
+		VkSampler snowflake;
+		VkSampler candles;
+		VkSampler quad;
+	}
+	m_samplers;
 
 	typedef struct {
 		void* raw;
@@ -486,7 +491,7 @@ private:
         createModelImages();
         createRenderTargets();
         createFramebuffers();
-        createSampler();
+        createSamplers();
 		loadInstanceData();
         createVertexBuffers();
         createIndexBuffers();
@@ -729,7 +734,9 @@ private:
 				vkDestroyImageView(device, meshImage.emissiveImage.view, nullptr);
 			}
 
-			vkDestroySampler(device, m_samplers[objIdx], nullptr);
+			vkDestroySampler(device, m_samplers.snowflake, nullptr);
+			vkDestroySampler(device, m_samplers.candles, nullptr);
+			vkDestroySampler(device, m_samplers.quad, nullptr);
 		}
 
         vkDestroyBuffer(device, m_towerInstanceBuffer, nullptr);
@@ -1067,7 +1074,7 @@ private:
 			colorAttachment.format = swapChainImageFormat;
 			colorAttachment.samples = msaaSamples;
 			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1077,7 +1084,7 @@ private:
 			bloomThresholdAttachment.format = swapChainImageFormat;
 			bloomThresholdAttachment.samples = msaaSamples;
 			bloomThresholdAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			bloomThresholdAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			bloomThresholdAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			bloomThresholdAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			bloomThresholdAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			bloomThresholdAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1096,7 +1103,7 @@ private:
 			VkAttachmentDescription colorAttachmentResolve{};
 			colorAttachmentResolve.format = swapChainImageFormat;
 			colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-			colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -1106,7 +1113,7 @@ private:
 			VkAttachmentDescription bloomThresholdAttachmentResolve{};
 			bloomThresholdAttachmentResolve.format = swapChainImageFormat;
 			bloomThresholdAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-			bloomThresholdAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			bloomThresholdAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			bloomThresholdAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			bloomThresholdAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			bloomThresholdAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -2362,7 +2369,7 @@ private:
         return VK_SAMPLE_COUNT_1_BIT;
     }
 
-    void createSampler() {
+    void createSamplers() {
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
 
@@ -2394,8 +2401,30 @@ private:
 			samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
 			samplerInfo.mipLodBias = 0.0f;
 
-			if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers[objIdx]) != VK_SUCCESS) {
+			if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers.candles) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create texture sampler!");
+			}
+
+			// quad sampler
+			{
+				VkSamplerCreateInfo samplerInfo{};
+				samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+				samplerInfo.magFilter = VK_FILTER_LINEAR;
+				samplerInfo.minFilter = VK_FILTER_LINEAR;
+				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				samplerInfo.anisotropyEnable = VK_TRUE;
+				samplerInfo.maxAnisotropy = m_physicalDeviceProperties.limits.maxSamplerAnisotropy;
+				samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+				samplerInfo.unnormalizedCoordinates = VK_FALSE;
+				samplerInfo.compareEnable = VK_FALSE;
+				samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+				samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+				if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers.quad) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create texture sampler!");
+				}
 			}
 		}
     }
@@ -3162,7 +3191,7 @@ private:
 					imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 					imageInfo.imageView = m_modelImages[objIdx][meshIdx].baseImage.view;
 					// assume 1 sampler per object type
-					imageInfo.sampler = m_samplers[objIdx];
+					imageInfo.sampler = m_samplers.candles;
 
 					descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 					descriptorWrites[0].dstSet = m_graphicDescriptorSets.candles.meshMaterial[meshIdx][i];
@@ -3176,7 +3205,7 @@ private:
 					normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 					normalImageInfo.imageView = m_modelImages[objIdx][meshIdx].normalImage.view;
 					// assume 1 sampler per object type
-					normalImageInfo.sampler = m_samplers[objIdx];
+					normalImageInfo.sampler = m_samplers.candles;
 
 					descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 					descriptorWrites[1].dstSet = m_graphicDescriptorSets.candles.meshMaterial[meshIdx][i];
@@ -3190,7 +3219,7 @@ private:
 					emissiveImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 					emissiveImageInfo.imageView = m_modelImages[objIdx][meshIdx].emissiveImage.view;
 					// assume 1 sampler per object type
-					emissiveImageInfo.sampler = m_samplers[objIdx];
+					emissiveImageInfo.sampler = m_samplers.candles;
 
 					descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 					descriptorWrites[2].dstSet = m_graphicDescriptorSets.candles.meshMaterial[meshIdx][i];
@@ -3270,7 +3299,7 @@ private:
 				VkDescriptorImageInfo imageInfo{};
 				imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				imageInfo.imageView = m_renderTargets.base.bloomThresholdResRT.view;
-				imageInfo.sampler = m_samplers[Object::CANDLE];
+				imageInfo.sampler = m_samplers.quad;
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.bloom[i];
@@ -3303,7 +3332,7 @@ private:
 				VkDescriptorImageInfo baseImageInfo{};
 				baseImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				baseImageInfo.imageView = m_renderTargets.base.colorResRT.view;
-				baseImageInfo.sampler = m_samplers[Object::CANDLE];
+				baseImageInfo.sampler = m_samplers.quad;
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.combine[i];
@@ -3316,7 +3345,7 @@ private:
 				VkDescriptorImageInfo bloomImageInfo{};
 				bloomImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				bloomImageInfo.imageView = m_renderTargets.bloom.view;
-				bloomImageInfo.sampler = m_samplers[Object::CANDLE];
+				bloomImageInfo.sampler = m_samplers.quad;
 
 				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[1].dstSet = m_graphicDescriptorSets.combine[i]; 
@@ -3712,7 +3741,7 @@ private:
 
 		{
 			TracyVkZone(tracyContext, commandBuffer, "Transfer animation buffers");
-			transferBuffers(commandBuffer);
+			// transferBuffers(commandBuffer);
 		}
 
 		{
@@ -3723,10 +3752,12 @@ private:
 			basePassInfo.renderArea.offset = {0, 0};
 			basePassInfo.renderArea.extent = swapChainExtent;
 
-			std::array<VkClearValue, 3> clearValues{};
+			std::array<VkClearValue, 5> clearValues{};
 			clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 			clearValues[1].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 			clearValues[2].depthStencil = {1.0f, 0};
+			clearValues[3].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+			clearValues[4].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
 			basePassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			basePassInfo.pClearValues = clearValues.data();

@@ -12,13 +12,7 @@ layout (push_constant) uniform DataPushConstant{
 } p_const;
 
 void main() {
-
-	outColor = vec4(1.0, 1.0, 0.0, 1.0);
-	return;
 	vec3 baseColor = texture(baseSampler, vTexCoords).rgb;
-	outColor = vec4(baseColor, 1.0);
-	return;
-
 	baseColor += texture(bloomSampler, vTexCoords).rgb;
 
     // tone mapping
@@ -27,4 +21,5 @@ void main() {
     // const float gamma = 2.2;
     // result = pow(result, vec3(1.0 / gamma));
 	outColor = vec4(baseColor, 1.0);
+	// outColor = vec4(1.0, 1.0, 0.0, 1.0);
 }
