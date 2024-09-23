@@ -670,13 +670,13 @@ private:
         cleanupSwapChain();
 
 		savePipelineCache();
-        vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
+        // vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.candles, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
         vkDestroyPipeline(device, m_computePipeline, nullptr);
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
-        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
+        // vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.candles, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.bloom, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.combine, nullptr);
@@ -695,11 +695,38 @@ private:
         vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
 
-        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.snowflake, nullptr);
+        // vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.snowflake, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.tranformUniform, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.meshMaterial, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.bloom, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.combine, nullptr);
         vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayout, nullptr);
+
+		for(auto& buffer : m_vertexBuffers.snowflake) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
+		for(auto& buffer : m_vertexBuffers.candles) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
+		for(auto& buffer : m_vertexBuffers.quad) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
+
+		for(auto& buffer : m_indexBuffers.snowflake) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
+		for(auto& buffer : m_indexBuffers.candles) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
+		for(auto& buffer : m_indexBuffers.quad) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
 
 		for (unsigned int i = 0; i < Object::COUNT; i++){
 			Object objIdx = static_cast<Object>(i);
@@ -733,11 +760,11 @@ private:
 				vkDestroyImageView(device, meshImage.normalImage.view, nullptr);
 				vkDestroyImageView(device, meshImage.emissiveImage.view, nullptr);
 			}
-
-			vkDestroySampler(device, m_samplers.snowflake, nullptr);
-			vkDestroySampler(device, m_samplers.candles, nullptr);
-			vkDestroySampler(device, m_samplers.quad, nullptr);
 		}
+
+		// vkDestroySampler(device, m_samplers.snowflake, nullptr);
+		vkDestroySampler(device, m_samplers.candles, nullptr);
+		vkDestroySampler(device, m_samplers.quad, nullptr);
 
         vkDestroyBuffer(device, m_towerInstanceBuffer, nullptr);
         vmaFreeMemory(m_allocator, instanceBufferAlloc);
@@ -786,6 +813,10 @@ private:
         vkDestroyImageView(device, m_renderTargets.base.bloomThresholdResRT.view, nullptr);
         vkDestroyImage(device, m_renderTargets.base.bloomThresholdResRT.image, nullptr);
         vmaFreeMemory(m_allocator, m_renderTargets.base.bloomThresholdResRT.allocation);
+
+        vkDestroyImageView(device, m_renderTargets.bloom.view, nullptr);
+        vkDestroyImage(device, m_renderTargets.bloom.image, nullptr);
+        vmaFreeMemory(m_allocator, m_renderTargets.bloom.allocation);
 
         for (auto framebuffer : m_frameBuffers.base) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -1840,7 +1871,7 @@ private:
 			rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
 			rasterizationInfo.lineWidth = 1.0f;
 			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
-			// rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+			rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
 			rasterizationInfo.depthBiasEnable = VK_FALSE;
 			rasterizationInfo.depthClampEnable = VK_FALSE;
@@ -1929,6 +1960,9 @@ private:
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &bloomPipelineInfo, nullptr, &m_graphicPipelines.bloom)
 				   , "fail to create bloom pipeline");
 
+			vkDestroyShaderModule(device, vertShaderModule, nullptr);
+			vkDestroyShaderModule(device, fragShaderModule, nullptr);
+
 			auto combineVertShaderCode = readFile("../../src/shaders/combine.vert.spv");
 			auto combineFragShaderCode = readFile("../../src/shaders/combine.frag.spv");
 
@@ -1968,6 +2002,9 @@ private:
 
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &combinePipelineInfo, nullptr, &m_graphicPipelines.combine)
 				   , "fail to create combine pipeline");
+
+			vkDestroyShaderModule(device, combineVertShaderModule, nullptr);
+			vkDestroyShaderModule(device, combineFragShaderModule, nullptr);
 		}
     }
 
@@ -2370,19 +2407,18 @@ private:
     }
 
     void createSamplers() {
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
+		// TODO: these are a fake ass sampler bro
+		// if(m_model[objIdx].samplers.empty()){
+		// 	m_samplers[objIdx] = VK_NULL_HANDLE;
+		// 	continue;
+		// }
+		
+		// assume there is 1 texture sampler per model
+		// TODO: set sampler according to gltf model
+		// tinygltf::Sampler& modelSampler = m_model[objIdx].samplers[0];
 
-			// TODO: these are a fake ass sampler bro
-			// if(m_model[objIdx].samplers.empty()){
-			// 	m_samplers[objIdx] = VK_NULL_HANDLE;
-			// 	continue;
-			// }
-			
-			// assume there is 1 texture sampler per model
-			// TODO: set sampler according to gltf model
-			// tinygltf::Sampler& modelSampler = m_model[objIdx].samplers[0];
-
+		// candles sampler
+		{
 			VkSamplerCreateInfo samplerInfo{};
 			samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 			samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -2404,27 +2440,27 @@ private:
 			if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers.candles) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create texture sampler!");
 			}
+		}
 
-			// quad sampler
-			{
-				VkSamplerCreateInfo samplerInfo{};
-				samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-				samplerInfo.magFilter = VK_FILTER_LINEAR;
-				samplerInfo.minFilter = VK_FILTER_LINEAR;
-				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-				samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-				samplerInfo.anisotropyEnable = VK_TRUE;
-				samplerInfo.maxAnisotropy = m_physicalDeviceProperties.limits.maxSamplerAnisotropy;
-				samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-				samplerInfo.unnormalizedCoordinates = VK_FALSE;
-				samplerInfo.compareEnable = VK_FALSE;
-				samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-				samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		// quad sampler
+		{
+			VkSamplerCreateInfo samplerInfo{};
+			samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			samplerInfo.magFilter = VK_FILTER_LINEAR;
+			samplerInfo.minFilter = VK_FILTER_LINEAR;
+			samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			samplerInfo.anisotropyEnable = VK_TRUE;
+			samplerInfo.maxAnisotropy = m_physicalDeviceProperties.limits.maxSamplerAnisotropy;
+			samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+			samplerInfo.unnormalizedCoordinates = VK_FALSE;
+			samplerInfo.compareEnable = VK_FALSE;
+			samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+			samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-				if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers.quad) != VK_SUCCESS) {
-					throw std::runtime_error("failed to create texture sampler!");
-				}
+			if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers.quad) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create texture sampler!");
 			}
 		}
     }
@@ -3654,6 +3690,20 @@ private:
 	void renderBloom(VkCommandBuffer commandBuffer) {
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom);
 
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float) swapChainExtent.width;
+		viewport.height = (float) swapChainExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = {0, 0};
+		scissor.extent = swapChainExtent;
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
 		VkDeviceSize offsets{0};
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom,
@@ -3663,6 +3713,20 @@ private:
 
 	void renderCombine(VkCommandBuffer commandBuffer) {
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.combine);
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float) swapChainExtent.width;
+		viewport.height = (float) swapChainExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = {0, 0};
+		scissor.extent = swapChainExtent;
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		VkDeviceSize offsets{0};
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);

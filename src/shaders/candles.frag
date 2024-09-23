@@ -59,4 +59,6 @@ void main() {
 		bloomColor = outColor;
 	else 
 		bloomColor = vec4(0.0);
+
+	bloomColor = outColor;
 }

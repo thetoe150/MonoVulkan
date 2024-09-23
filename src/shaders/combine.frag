@@ -22,4 +22,5 @@ void main() {
     // result = pow(result, vec3(1.0 / gamma));
 	outColor = vec4(baseColor, 1.0);
 	// outColor = vec4(1.0, 1.0, 0.0, 1.0);
+	outColor = vec4(1.0, 1.0, 0.0, 1.0);
 }
