@@ -95,7 +95,19 @@ enum Object{
 	COUNT
 };
 
-inline float quadVertices[] = {
+inline float quadListVertices[] = {
+	// positions        // texture Coords
+	// first triangle
+     0.5f,  0.5f, 0.0f,  1.0f,  1.0f, // top right
+     0.5f, -0.5f, 0.0f,  1.0f, -1.0f,  // bottom right
+    -0.5f,  0.5f, 0.0f, -1.0f,  1.0f,  // top left 
+    // second triangle
+     0.5f, -0.5f, 0.0f,  1.0f, -1.0f,  // bottom right
+    -0.5f, -0.5f, 0.0f, -1.0f, -1.0f,  // bottom left
+    -0.5f,  0.5f, 0.0f, -1.0f,  1.0f,  // top left
+};
+
+inline float quadStripVertices[] = {
 	// positions        // texture Coords
 	-1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
 	-1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
@@ -133,7 +145,7 @@ struct GraphicPushConstant{
 };
 
 struct SpecializationConstant{
-	alignas(4) bool useTexture{true};
+	alignas(4) int useTexture{1};
 }s_specConstant;
 
 const std::vector<const char*> validationLayers = {
