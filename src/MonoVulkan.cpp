@@ -1920,6 +1920,8 @@ private:
 			depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
 
 			VkPipelineColorBlendAttachmentState blendAttachmentInfo{};
+			// WTF: we have to set value for this `colorWriteMask` flag for some reason???
+			blendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
 			blendAttachmentInfo.blendEnable = VK_FALSE;
 
 			VkPipelineColorBlendStateCreateInfo blendInfo{};
@@ -3740,20 +3742,6 @@ private:
 
 	void renderCombine(VkCommandBuffer commandBuffer) {
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.combine);
-
-		VkViewport viewport{};
-		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width = (float) swapChainExtent.width;
-		viewport.height = (float) swapChainExtent.height;
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
-		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-		VkRect2D scissor{};
-		scissor.offset = {0, 0};
-		scissor.extent = swapChainExtent;
-		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		VkDeviceSize offsets{0};
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);

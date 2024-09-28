@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 157
+; Bound: 156
 ; Schema: 0
                OpCapability Shader
                OpCapability ImageQuery
@@ -68,7 +68,6 @@
 %_ptr_Output_v4float = OpTypePointer Output %v4float
    %outColor = OpVariable %_ptr_Output_v4float Output
     %float_1 = OpConstant %float 1
-        %156 = OpConstantComposite %v4float %float_1 %float_1 %float_0 %float_1
        %main = OpFunction %void None %3
           %5 = OpLabel
   %texOffset = OpVariable %_ptr_Function_v2float Function
@@ -210,6 +209,5 @@
         %154 = OpCompositeExtract %float %150 2
         %155 = OpCompositeConstruct %v4float %152 %153 %154 %float_1
                OpStore %outColor %155
-               OpStore %outColor %156
                OpReturn
                OpFunctionEnd
