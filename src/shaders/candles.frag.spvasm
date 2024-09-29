@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 152
+; Bound: 151
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -236,14 +236,12 @@
                OpSelectionMerge %145 None
                OpBranchConditional %143 %144 %148
         %144 = OpLabel
-        %147 = OpLoad %v4float %outColor
+        %147 = OpLoad %v4float %texColor
                OpStore %bloomColor %147
                OpBranch %145
         %148 = OpLabel
                OpStore %bloomColor %149
                OpBranch %145
         %145 = OpLabel
-        %150 = OpLoad %v4float %outColor
-               OpStore %bloomColor %150
                OpReturn
                OpFunctionEnd

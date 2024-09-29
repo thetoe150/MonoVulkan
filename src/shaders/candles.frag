@@ -56,9 +56,7 @@ void main() {
 	// outColor = vec4(texture(u_texSampler, v_fragTexCoord).a);
 	vec3 emit = texture(u_emissiveSampler, v_fragTexCoord).rgb;
 	if (dot(emit, vec3(1.0)) != 0.0)
-		bloomColor = outColor;
+		bloomColor = texColor;
 	else 
 		bloomColor = vec4(0.0);
-
-	bloomColor = outColor;
 }

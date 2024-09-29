@@ -1,8 +1,13 @@
-- add light and bloom
+### TODO:
+- add HDR and bloom
 - add shadow
+- add skymap
+- add tesselated terrain
+- add multi-view port
 - add dof when moving cam?
 - add barrier when compute and graphic queue is not the same 
 - more *physic-based* realistic vortex snow-fall
+- PBR
 - hot reload with that file watcher library
 - shader reflection
 - fix that Vulkan instance extensions layers
@@ -15,6 +20,10 @@
         - Atomic operations
         - Subgroups
 
+### BUGS:
+- candles flame animation crash renderDoc
+- candles base look weird
+
 ### Done
 - add animation for candle - done
 - Push constants - done
@@ -26,3 +35,4 @@
     - Shared memory - done
 - this makefile script is banana - no re-compile sometime - done, add premnake
 - make a better snowflake model and import with gltf - done
+- add light

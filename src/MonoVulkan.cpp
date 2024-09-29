@@ -185,7 +185,10 @@ private:
     std::vector<VkImageView> swapChainImageViews;
 	struct {
 		std::vector<VkFramebuffer> base;
-		std::vector<VkFramebuffer> bloom;
+		struct {
+			std::vector<VkFramebuffer> horizontal;
+			std::vector<VkFramebuffer> vertical;
+		} bloom;
 		std::vector<VkFramebuffer> combine;
 	} m_frameBuffers;
 
@@ -263,7 +266,8 @@ private:
 			Image bloomThresholdResRT;
 			Image depthRT;
 		} base;
-		Image bloom;
+		Image bloom1;
+		Image bloom2;
 	} m_renderTargets;
 
     uint32_t mipLevels;
@@ -337,7 +341,8 @@ private:
 			std::vector<std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> meshMaterial; // per mesh of candles model
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> tranformUniform; // 1 for candles model, update every frame
 		} candles;
-		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> bloom;
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> bloom1;
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> bloom2;
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> combine;
 	} m_graphicDescriptorSets;
 
@@ -818,15 +823,23 @@ private:
         vkDestroyImage(device, m_renderTargets.base.bloomThresholdResRT.image, nullptr);
         vmaFreeMemory(m_allocator, m_renderTargets.base.bloomThresholdResRT.allocation);
 
-        vkDestroyImageView(device, m_renderTargets.bloom.view, nullptr);
-        vkDestroyImage(device, m_renderTargets.bloom.image, nullptr);
-        vmaFreeMemory(m_allocator, m_renderTargets.bloom.allocation);
+        vkDestroyImageView(device, m_renderTargets.bloom1.view, nullptr);
+        vkDestroyImage(device, m_renderTargets.bloom1.image, nullptr);
+        vmaFreeMemory(m_allocator, m_renderTargets.bloom1.allocation);
+
+        vkDestroyImageView(device, m_renderTargets.bloom2.view, nullptr);
+        vkDestroyImage(device, m_renderTargets.bloom2.image, nullptr);
+        vmaFreeMemory(m_allocator, m_renderTargets.bloom2.allocation);
 
         for (auto framebuffer : m_frameBuffers.base) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
 
-        for (auto framebuffer : m_frameBuffers.bloom) {
+        for (auto framebuffer : m_frameBuffers.bloom.horizontal) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
+        for (auto framebuffer : m_frameBuffers.bloom.vertical) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
 
@@ -2115,23 +2128,33 @@ private:
 
 		// bloom
 		{
-			m_frameBuffers.bloom.resize(swapChainImageViews.size());
+			m_frameBuffers.bloom.horizontal.resize(swapChainImageViews.size());
+			m_frameBuffers.bloom.vertical.resize(swapChainImageViews.size());
 
 			for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-				std::array<VkImageView, 1> attachments = {
-					m_renderTargets.bloom.view,
+				std::array<VkImageView, 1> bloom1Attachments = {
+					m_renderTargets.bloom1.view,
 				};
 
 				VkFramebufferCreateInfo framebufferInfo{};
 				framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 				framebufferInfo.renderPass = m_renderPasses.bloom;
-				framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-				framebufferInfo.pAttachments = attachments.data();
+				framebufferInfo.attachmentCount = static_cast<uint32_t>(bloom1Attachments.size());
+				framebufferInfo.pAttachments = bloom1Attachments.data();
 				framebufferInfo.width = swapChainExtent.width;
 				framebufferInfo.height = swapChainExtent.height;
 				framebufferInfo.layers = 1;
 
-				if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_frameBuffers.bloom[i]) != VK_SUCCESS) {
+				if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_frameBuffers.bloom.horizontal[i]) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create framebuffer!");
+				}
+
+				std::array<VkImageView, 1> bloom2Attachments = {
+					m_renderTargets.bloom2.view,
+				};
+				framebufferInfo.pAttachments = bloom2Attachments.data();
+
+				if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_frameBuffers.bloom.vertical[i]) != VK_SUCCESS) {
 					throw std::runtime_error("failed to create framebuffer!");
 				}
 			}
@@ -2217,8 +2240,13 @@ private:
 		// for bloom framebuffer
         createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.bloom.image, m_renderTargets.bloom.allocation);
-        m_renderTargets.bloom.view = createImageView(m_renderTargets.bloom.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.bloom1.image, m_renderTargets.bloom1.allocation);
+        m_renderTargets.bloom1.view = createImageView(m_renderTargets.bloom1.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.bloom2.image, m_renderTargets.bloom2.allocation);
+        m_renderTargets.bloom2.view = createImageView(m_renderTargets.bloom2.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -2484,9 +2512,10 @@ private:
 			samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 			samplerInfo.magFilter = VK_FILTER_LINEAR;
 			samplerInfo.minFilter = VK_FILTER_LINEAR;
-			samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-			samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-			samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			// for bloom
+			samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
 			samplerInfo.anisotropyEnable = VK_TRUE;
 			samplerInfo.maxAnisotropy = m_physicalDeviceProperties.limits.maxSamplerAnisotropy;
 			samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
@@ -3362,25 +3391,38 @@ private:
 			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 			allocInfo.descriptorPool = m_descriptorPool;
 
-			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.bloom.data())
-				, "failed to allocate graphic descriptor sets!");
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.bloom1.data())
+				, "failed to allocate bloom1 graphic descriptor sets!");
+
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.bloom2.data())
+				, "failed to allocate bloom2 graphic descriptor sets!");
 
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
-				VkDescriptorImageInfo imageInfo{};
-				imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				imageInfo.imageView = m_renderTargets.base.bloomThresholdResRT.view;
-				imageInfo.sampler = m_samplers.quad;
+				VkDescriptorImageInfo bloom1ImageInfo{};
+				bloom1ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				bloom1ImageInfo.imageView = m_renderTargets.base.bloomThresholdResRT.view;
+				bloom1ImageInfo.sampler = m_samplers.quad;
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[0].dstSet = m_graphicDescriptorSets.bloom[i];
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.bloom1[i];
 				descriptorWrites[0].dstBinding = 0;
 				descriptorWrites[0].dstArrayElement = 0;
 				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 				descriptorWrites[0].descriptorCount = 1;
-				descriptorWrites[0].pImageInfo = &imageInfo;
+				descriptorWrites[0].pImageInfo = &bloom1ImageInfo;
 
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+
+				// for bloom2
+				VkDescriptorImageInfo bloom2ImageInfo{};
+				bloom2ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				bloom2ImageInfo.imageView = m_renderTargets.bloom1.view;
+				bloom2ImageInfo.sampler = m_samplers.quad;
+
+				descriptorWrites[0].pImageInfo = &bloom2ImageInfo;
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.bloom2[i];
 				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 			}
 		}
@@ -3416,7 +3458,7 @@ private:
                                  
 				VkDescriptorImageInfo bloomImageInfo{};
 				bloomImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				bloomImageInfo.imageView = m_renderTargets.bloom.view;
+				bloomImageInfo.imageView = m_renderTargets.bloom2.view;
 				bloomImageInfo.sampler = m_samplers.quad;
 
 				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -3723,20 +3765,23 @@ private:
 		}
 	}
 
-	void renderBloom(VkCommandBuffer commandBuffer) {
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom.vertical);
-
+	void renderBloomHorizontal(VkCommandBuffer commandBuffer) {
 		VkDeviceSize offsets{0};
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom,
-						0, 1, &m_graphicDescriptorSets.bloom[m_currentFrame], 0, 0);
-		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom.horizontal);
-
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom,
-						0, 1, &m_graphicDescriptorSets.bloom[m_currentFrame], 0, 0);
+						0, 1, &m_graphicDescriptorSets.bloom1[m_currentFrame], 0, 0);
+		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+	}
+
+	void renderBloomVertical(VkCommandBuffer commandBuffer) {
+		VkDeviceSize offsets{0};
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom.vertical);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom,
+						0, 1, &m_graphicDescriptorSets.bloom2[m_currentFrame], 0, 0);
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
@@ -3820,7 +3865,7 @@ private:
 
 		{
 			TracyVkZone(tracyContext, commandBuffer, "Transfer animation buffers");
-			// transferBuffers(commandBuffer);
+			transferBuffers(commandBuffer);
 		}
 
 		{
@@ -3847,10 +3892,11 @@ private:
 
 			vkCmdEndRenderPass(commandBuffer);
 
+////////////////////////////////////////////////////////////////
 			VkRenderPassBeginInfo bloomPassInfo{};
 			bloomPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			bloomPassInfo.renderPass = m_renderPasses.bloom;
-			bloomPassInfo.framebuffer = m_frameBuffers.bloom[imageIndex];
+			bloomPassInfo.framebuffer = m_frameBuffers.bloom.horizontal[imageIndex];
 			bloomPassInfo.renderArea.offset = {0, 0};
 			bloomPassInfo.renderArea.extent = swapChainExtent;
 
@@ -3862,7 +3908,14 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &bloomPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				renderBloom(commandBuffer);
+				renderBloomHorizontal(commandBuffer);
+
+			vkCmdEndRenderPass(commandBuffer);
+
+			bloomPassInfo.framebuffer = m_frameBuffers.bloom.vertical[imageIndex];
+			vkCmdBeginRenderPass(commandBuffer, &bloomPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				renderBloomVertical(commandBuffer);
 
 			vkCmdEndRenderPass(commandBuffer);
 
