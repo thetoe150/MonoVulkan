@@ -547,6 +547,10 @@ private:
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 		}
 
+		if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+			recreatePipelines();
+		}
+
 		//// key for rotate object
 		//float rotateVelocity = deltaTime * 40.0f;
 		//if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS)
@@ -1494,6 +1498,20 @@ private:
 	void createPipelineLayouts() {
 		createGraphicPipelineLayouts();
 		createComputePipelineLayouts();
+	}
+
+	void recreatePipelines() {
+        vkDeviceWaitIdle(device);
+
+        // vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.candles, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
+        vkDestroyPipeline(device, m_computePipeline, nullptr);
+
+        createGraphicPipelines();
+		createComputePipelines();
 	}
 
 	void createPipelines() {
