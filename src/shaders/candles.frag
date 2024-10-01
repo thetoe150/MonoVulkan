@@ -52,7 +52,6 @@ void main() {
 	vec3 specular = vec3(0.2) * spec;
 
 	outColor = vec4(ambient + diffuse + specular, texColor.a);
-	// outColor = vec4(color, 1.0);
 	// outColor = vec4(texture(u_texSampler, v_fragTexCoord).a);
 	vec3 emit = texture(u_emissiveSampler, v_fragTexCoord).rgb;
 	if (dot(emit, vec3(1.0)) != 0.0)
