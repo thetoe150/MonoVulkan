@@ -27,6 +27,9 @@
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #include <tiny_gltf.h>
 
+#include <spirv_reflect.h>
+#include <spirv_reflect_output.h>
+
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
 
@@ -58,8 +61,8 @@
 	}																							\
 }																								\
 
-constexpr uint32_t WIDTH = 1600;
-constexpr uint32_t HEIGHT = 900;
+constexpr uint32_t WIDTH = 1000;
+constexpr uint32_t HEIGHT = 750;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 constexpr float c_towerScale[3] = {10.0f, 10.0f, 10.0f};
@@ -155,7 +158,8 @@ const std::vector<const char*> validationLayers = {
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME,
-	VK_EXT_ROBUSTNESS_2_EXTENSION_NAME
+	VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
+	VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME	
 };
 
 #ifdef NDEBUG

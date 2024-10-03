@@ -8,7 +8,6 @@
 - add barrier when compute and graphic queue is not the same 
 - more *physic-based* realistic vortex snow-fall
 - PBR
-- hot reload with that file watcher library
 - shader reflection
 - fix that Vulkan instance extensions layers
 - Vulkan features:
@@ -35,4 +34,5 @@
     - Shared memory - done
 - this makefile script is banana - no re-compile sometime - done, add premnake
 - make a better snowflake model and import with gltf - done
-- add light
+- add light - done
+- hot reload - done

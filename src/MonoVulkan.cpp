@@ -221,7 +221,7 @@ private:
     VkPipelineLayout m_computePipelineLayout;
 
 	VkPipelineCache m_pipelineCache;
-	std::vector<char> pipelineCacheBlob;
+	std::vector<uint8_t> pipelineCacheBlob;
 
     VkPipeline m_computePipeline;
 	struct {
@@ -360,6 +360,8 @@ private:
     VkFence m_inFlightComputeFences;
 	VkSemaphore m_computeFinishedSemaphore;
     uint32_t m_currentFrame = 0;
+
+	VkPolygonMode m_currentPolygonMode{VK_POLYGON_MODE_LINE};
 
 	float m_lastTime;
 	float m_currentDeltaTime = 0;
@@ -546,9 +548,14 @@ private:
 			s_moveCam = false;
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 		}
-
 		if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 			recreatePipelines();
+		}
+		if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
+			m_currentPolygonMode = VK_POLYGON_MODE_FILL;
+		}
+		if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
+			m_currentPolygonMode = VK_POLYGON_MODE_LINE;
 		}
 
 		//// key for rotate object
@@ -642,7 +649,7 @@ private:
 
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
-			std::cout << std::endl << ">>>>>>> New Frame Start <<<<<<<<" << std::endl;
+			// std::cout << std::endl << ">>>>>>> New Frame Start <<<<<<<<" << std::endl;
 			processInput();
 			updateContext();
             drawFrame();
@@ -1017,13 +1024,18 @@ private:
 		robustFeature.robustImageAccess2 = false;
 
 		divisorFeature.pNext = &robustFeature;
-		robustFeature.pNext = nullptr;
 
 		// VkPhysicalDeviceRobustness2PropertiesEXT robustProperties{};
 		// robustProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT;
 		// robustProperties.robustUniformBufferAccessSizeAlignment = 256;
 
 		// robustFeature.pNext = &robustProperties;
+		VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicState{};
+		extendedDynamicState.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+		extendedDynamicState.extendedDynamicState = 1;
+		extendedDynamicState.pNext = nullptr;
+
+		robustFeature.pNext = &extendedDynamicState;
 
         if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
             throw std::runtime_error("failed to create logical device!");
@@ -1651,7 +1663,8 @@ private:
 
 		// 	std::vector<VkDynamicState> dynamicStates = {
 		// 		VK_DYNAMIC_STATE_VIEWPORT,
-		// 		VK_DYNAMIC_STATE_SCISSOR
+		// 		VK_DYNAMIC_STATE_SCISSOR,
+		//		VK_DYNAMIC_STATE_POLYGON_MODE_EXT	
 		// 	};
 		// 	VkPipelineDynamicStateCreateInfo dynamicState{};
 		// 	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1769,7 +1782,7 @@ private:
 			rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 			rasterizer.depthClampEnable = VK_FALSE;
 			rasterizer.rasterizerDiscardEnable = VK_FALSE;
-			rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+			rasterizer.polygonMode = m_currentPolygonMode;
 			rasterizer.lineWidth = 1.0f;
 			rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 			rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -1814,7 +1827,8 @@ private:
 
 			std::vector<VkDynamicState> dynamicStates = {
 				VK_DYNAMIC_STATE_VIEWPORT,
-				VK_DYNAMIC_STATE_SCISSOR
+				VK_DYNAMIC_STATE_SCISSOR,
+				VK_DYNAMIC_STATE_POLYGON_MODE_EXT
 			};
 			VkPipelineDynamicStateCreateInfo dynamicState{};
 			dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1823,6 +1837,12 @@ private:
 
 			auto vertShaderCode = readFile("../../src/shaders/candles.vert.spv");
 			auto fragShaderCode = readFile("../../src/shaders/candles.frag.spv");
+
+			{
+				spv_reflect::ShaderModule reflect(vertShaderCode);
+				SpvReflectToYaml reflectLogger(reflect.GetShaderModule());
+				
+			}
 
 			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
 			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -3701,6 +3721,8 @@ private:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+		vkCmdSetPolygonModeEXT(commandBuffer, m_currentPolygonMode);
+
 		tinygltf::Model& model = m_model[object];
 
 		int meshIdx = 0;
@@ -4193,7 +4215,7 @@ private:
         m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    VkShaderModule createShaderModule(const std::vector<char>& code) {
+    VkShaderModule createShaderModule(const std::vector<uint8_t>& code) {
         VkShaderModuleCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         createInfo.codeSize = code.size();
@@ -4622,7 +4644,7 @@ private:
 		file.close();
 	}
 
-    static std::vector<char> readFile(const std::string& filename) {
+    static std::vector<uint8_t> readFile(const std::string& filename) {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
         if (!file.is_open()) {
@@ -4630,11 +4652,11 @@ private:
         }
 
         size_t fileSize = (size_t) file.tellg();
-        std::vector<char> buffer(fileSize);
+        std::vector<uint8_t> buffer(fileSize);
 
 		std::cout << "@@@@@ read file at path: " << filename << ", with size: " << fileSize << "\n";
         file.seekg(0);
-        file.read(buffer.data(), fileSize);
+        file.read((char*)buffer.data(), fileSize);
 
         file.close();
 
