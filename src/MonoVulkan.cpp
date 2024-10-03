@@ -359,8 +359,6 @@ private:
 	VkSemaphore m_computeFinishedSemaphore;
     uint32_t m_currentFrame = 0;
 
-	VkPolygonMode m_currentPolygonMode{VK_POLYGON_MODE_LINE};
-
 	// ----------------------------- Vulkan Info struct ----------------------------------
 	VkPhysicalDeviceProperties m_physicalDeviceProperties;
 
@@ -373,7 +371,7 @@ private:
 	VkDescriptorPool imguiDescriptorPool;
 
 	bool isDynamicState3Support{false};
-	PFN_vkCmdSetPolygonModeEXT m_vkCmdSetPolygonModeEXT;
+	PFN_vkCmdSetPrimitiveTopologyEXT m_vkCmdSetPrimitiveTopologyEXT;
 
     bool framebufferResized = false;
 
@@ -408,8 +406,13 @@ private:
 	static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods){
 		if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 			glfwSetWindowShouldClose(window, true);
-		if(key == GLFW_KEY_Z && action == GLFW_PRESS)
-			std::cout << "Callback key Z is pressed.\n";
+
+		if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+			s_currentTopologyIdx += 1;
+			if (s_currentTopologyIdx > 2) {
+				s_currentTopologyIdx %= 3;
+			}
+		}
 	}
 
 	static void mouseCallback(GLFWwindow* window, double xpos, double ypos){
@@ -556,12 +559,6 @@ private:
 		}
 		if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 			recreatePipelines();
-		}
-		if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
-			m_currentPolygonMode = VK_POLYGON_MODE_FILL;
-		}
-		if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
-			m_currentPolygonMode = VK_POLYGON_MODE_LINE;
 		}
 
 		//// key for rotate object
@@ -1056,7 +1053,7 @@ private:
 				<< "\nQueue present family Index: " << indices.presentFamily.value() << std::endl;
 
 
-		m_vkCmdSetPolygonModeEXT = (PFN_vkCmdSetPolygonModeEXT)vkGetDeviceProcAddr(device, "vkCmdSetPolygonModeEXT");
+		m_vkCmdSetPrimitiveTopologyEXT = (PFN_vkCmdSetPrimitiveTopologyEXT)vkGetDeviceProcAddr(device, "vkCmdSetPrimitiveTopologyEXT");
     }
 
 	void createAllocator(){
@@ -1673,7 +1670,6 @@ private:
 		// 	std::vector<VkDynamicState> dynamicStates = {
 		// 		VK_DYNAMIC_STATE_VIEWPORT,
 		// 		VK_DYNAMIC_STATE_SCISSOR,
-		//		VK_DYNAMIC_STATE_POLYGON_MODE_EXT	
 		// 	};
 		// 	VkPipelineDynamicStateCreateInfo dynamicState{};
 		// 	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1791,7 +1787,7 @@ private:
 			rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 			rasterizer.depthClampEnable = VK_FALSE;
 			rasterizer.rasterizerDiscardEnable = VK_FALSE;
-			rasterizer.polygonMode = m_currentPolygonMode;
+			rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 			rasterizer.lineWidth = 1.0f;
 			rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 			rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -1837,7 +1833,7 @@ private:
 			std::vector<VkDynamicState> dynamicStates = {
 				VK_DYNAMIC_STATE_VIEWPORT,
 				VK_DYNAMIC_STATE_SCISSOR,
-				VK_DYNAMIC_STATE_POLYGON_MODE_EXT	
+				VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT
 			};
 			VkPipelineDynamicStateCreateInfo dynamicState{};
 			dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -3730,7 +3726,7 @@ private:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		m_vkCmdSetPolygonModeEXT(commandBuffer, m_currentPolygonMode);
+		m_vkCmdSetPrimitiveTopologyEXT(commandBuffer, DynamicPrimitiveTopologies[s_currentTopologyIdx]);
 
 		tinygltf::Model& model = m_model[object];
 
