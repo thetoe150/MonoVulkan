@@ -172,8 +172,6 @@ private:
     VkDevice device;
 	VmaAllocator m_allocator;
 
-	VkPhysicalDeviceProperties m_physicalDeviceProperties;
-
     VkQueue m_graphicQueue;
     VkQueue m_computeQueue;
     VkQueue m_presentQueue;
@@ -363,11 +361,19 @@ private:
 
 	VkPolygonMode m_currentPolygonMode{VK_POLYGON_MODE_LINE};
 
+	// ----------------------------- Vulkan Info struct ----------------------------------
+	VkPhysicalDeviceProperties m_physicalDeviceProperties;
+
+
+	// ----------------------------- other ----------------------------------
 	float m_lastTime;
 	float m_currentDeltaTime = 0;
 	float m_currentAnimTime = 0;
 
 	VkDescriptorPool imguiDescriptorPool;
+
+	bool isDynamicState3Support{false};
+	PFN_vkCmdSetPolygonModeEXT m_vkCmdSetPolygonModeEXT;
 
     bool framebufferResized = false;
 
@@ -1048,6 +1054,9 @@ private:
 		std::cout << "\nQueue graphic family Index: " << indices.graphicFamily.value()
 				<< "\nQueue compute family Index: " << indices.computeFamily.value()
 				<< "\nQueue present family Index: " << indices.presentFamily.value() << std::endl;
+
+
+		m_vkCmdSetPolygonModeEXT = (PFN_vkCmdSetPolygonModeEXT)vkGetDeviceProcAddr(device, "vkCmdSetPolygonModeEXT");
     }
 
 	void createAllocator(){
@@ -1828,7 +1837,7 @@ private:
 			std::vector<VkDynamicState> dynamicStates = {
 				VK_DYNAMIC_STATE_VIEWPORT,
 				VK_DYNAMIC_STATE_SCISSOR,
-				VK_DYNAMIC_STATE_POLYGON_MODE_EXT
+				VK_DYNAMIC_STATE_POLYGON_MODE_EXT	
 			};
 			VkPipelineDynamicStateCreateInfo dynamicState{};
 			dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -3721,7 +3730,7 @@ private:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		vkCmdSetPolygonModeEXT(commandBuffer, m_currentPolygonMode);
+		m_vkCmdSetPolygonModeEXT(commandBuffer, m_currentPolygonMode);
 
 		tinygltf::Model& model = m_model[object];
 
