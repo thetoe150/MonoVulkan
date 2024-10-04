@@ -295,6 +295,10 @@ private:
 		std::vector<Buffer> quad;
 	} m_indexBuffers;
 
+	struct {
+		std::vector<Buffer> snowflake;
+	} m_uniformBuffers;
+
 	std::map<Object, std::map<int, VkBuffer>> m_animBuffer;
 	std::map<Object, std::map<int, VmaAllocation>> m_animBufferAlloc;
 
@@ -370,7 +374,6 @@ private:
 
 	VkDescriptorPool imguiDescriptorPool;
 
-	bool isDynamicState3Support{false};
 	PFN_vkCmdSetPrimitiveTopologyEXT m_vkCmdSetPrimitiveTopologyEXT;
 
     bool framebufferResized = false;
@@ -575,27 +578,36 @@ private:
 
     void updateGraphicUniformBuffer() {
 		ZoneScopedN("Update Graphic Transform Uniform Buffer");
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
+		// snowflake
+		{
+			TransformUniform ubo{};
+			ubo.model = glm::mat4(1.0f);
+			ubo.model = glm::translate(ubo.model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
+			if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
+				ubo.model = glm::rotate(ubo.model, m_lastTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
+			ubo.model = glm::scale(ubo.model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
+			glm::mat4 view = g_camera.getViewMatrix();
+			glm::mat4 proj = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+			proj[1][1] *= -1;
+
+			ubo.view = view;
+			ubo.proj = proj;
+
+			*(TransformUniform*)m_uniformBuffers.snowflake[m_currentFrame].raw = ubo;
+		}
+
+		// candles
+		{
+			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
 
 			// transform uniform
 			{
 				unsigned int meshCount = model.meshes.size();
 				TransformUniform ubo{};
-
-				if (objIdx == Object::CANDLE) {
-					ubo.model = glm::mat4(1.0f);
-					ubo.model = glm::translate(ubo.model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
-					ubo.model = glm::scale(ubo.model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
-				}
-				else if (objIdx == Object::SNOWFLAKE) {
-					ubo.model = glm::mat4(1.0f);
-					ubo.model = glm::translate(ubo.model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
-					if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
-						ubo.model = glm::rotate(ubo.model, m_lastTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
-					ubo.model = glm::scale(ubo.model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
-				}
+				ubo.model = glm::mat4(1.0f);
+				ubo.model = glm::translate(ubo.model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
+				ubo.model = glm::scale(ubo.model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
 				
 				// glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 				// glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
@@ -692,14 +704,14 @@ private:
         cleanupSwapChain();
 
 		savePipelineCache();
-        // vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.candles, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
         vkDestroyPipeline(device, m_computePipeline, nullptr);
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
-        // vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
+        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.candles, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.bloom, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.combine, nullptr);
@@ -718,7 +730,7 @@ private:
         vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
 
-        // vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.snowflake, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.snowflake, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.tranformUniform, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.meshMaterial, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.bloom, nullptr);
@@ -751,8 +763,8 @@ private:
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
 
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
+		{
+			Object objIdx = Object::CANDLE;
 			for (auto& bufferIdx : m_animBuffer[objIdx]) {
 				vkDestroyBuffer(device, bufferIdx.second, nullptr);
 			}
@@ -783,6 +795,12 @@ private:
 				vkDestroyImageView(device, meshImage.normalImage.view, nullptr);
 				vkDestroyImageView(device, meshImage.emissiveImage.view, nullptr);
 			}
+		}
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			vkDestroyBuffer(device, m_uniformBuffers.snowflake[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_uniformBuffers.snowflake[i].allocation);
+			vmaFreeMemory(m_allocator, m_uniformBuffers.snowflake[i].allocation);
 		}
 
 		// vkDestroySampler(device, m_samplers.snowflake, nullptr);
@@ -1364,6 +1382,25 @@ private:
     }
 
 	void createGraphicDescriptorSetLayouts() {
+		// snowflake
+		{
+			VkDescriptorSetLayoutBinding uboLayoutBinding{};
+			uboLayoutBinding.binding = 0;
+			uboLayoutBinding.descriptorCount = 1;
+			uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			uboLayoutBinding.pImmutableSamplers = nullptr;
+			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+			VkDescriptorSetLayoutCreateInfo layoutInfo{};
+			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layoutInfo.bindingCount = 1;
+			layoutInfo.pBindings = &uboLayoutBinding;
+
+			CHECK_VK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.snowflake)
+							, "fail to create snowflake descriptor set layout");
+		}
+
+		// candles
 		{
 			// for candles: 2 descriptor set layouts, 1 for texture+sampler(change for each mesh), 1 for uniform buffer (change each frame)
 			{
@@ -1521,7 +1558,7 @@ private:
 	void recreatePipelines() {
         vkDeviceWaitIdle(device);
 
-        // vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.candles, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
@@ -1538,8 +1575,24 @@ private:
 	}
 
 	void createGraphicPipelineLayouts() {
+		// snowflake
 		{
-			// candles
+			VkDescriptorSetLayout layouts = m_graphicDescriptorSetLayouts.snowflake;
+
+			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			pipelineLayoutInfo.setLayoutCount = 1;
+			pipelineLayoutInfo.pSetLayouts = &layouts;
+			pipelineLayoutInfo.pushConstantRangeCount = 0;
+			pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+			if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayouts.snowflake) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create graphic pipeline layout!");
+			}
+		}
+
+		// candles
+		{
 			VkPushConstantRange pushConstant{};
 			pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 			pushConstant.size = sizeof(GraphicPushConstant);
@@ -1597,148 +1650,152 @@ private:
 
     void createGraphicPipelines() {
 		// snowflake pipeline
-		// {
-		// 	VkPipelineVertexInputDivisorStateCreateInfoEXT divisor{};
-		// 	divisor.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
+		{
+			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-		// 	VkVertexInputBindingDivisorDescriptionEXT divisorDescription{};
-		// 	divisorDescription.binding = 4;
-		// 	divisorDescription.divisor = 1;
+			VkVertexInputBindingDescription posBinding{};
+			posBinding.binding = 0;
+			posBinding.stride = 12;
+			posBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-		// 	divisor.vertexBindingDivisorCount = 1;
-		// 	divisor.pVertexBindingDivisors = &divisorDescription;
+			VkVertexInputAttributeDescription posAttribute{};
+			posAttribute.binding = 0;
+			posAttribute.location = 0;
+			posAttribute.offset = 0;
+			posAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
 
-		// 	vertexInputInfo.pNext = &divisor;
+			auto instanceBindingDescription = VertexInstance::getBindingDescription();
+			auto instanceAttributeDescription = VertexInstance::getAttributeDescriptions();
+			instanceBindingDescription.binding = 1;
+			instanceAttributeDescription[0].binding = 1;
+			instanceAttributeDescription[0].location = 1;
 
-		// 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-		// 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-		// 	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		// 	inputAssembly.primitiveRestartEnable = VK_FALSE;
+			std::array<VkVertexInputBindingDescription, 2> bindings{posBinding, instanceBindingDescription};
+			std::array<VkVertexInputAttributeDescription, 2> attributes{posAttribute, instanceAttributeDescription[0]};
 
-		// 	VkPipelineViewportStateCreateInfo viewportState{};
-		// 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-		// 	viewportState.viewportCount = 1;
-		// 	viewportState.scissorCount = 1;
+			vertexInputInfo.vertexBindingDescriptionCount = bindings.size();
+			vertexInputInfo.pVertexBindingDescriptions = bindings.data();
+			vertexInputInfo.vertexAttributeDescriptionCount = attributes.size();
+			vertexInputInfo.pVertexAttributeDescriptions = attributes.data();
 
-		// 	VkPipelineRasterizationStateCreateInfo rasterizer{};
-		// 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-		// 	rasterizer.depthClampEnable = VK_FALSE;
-		// 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
-		// 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-		// 	rasterizer.lineWidth = 1.0f;
-		// 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-		// 	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		// 	rasterizer.depthBiasEnable = VK_FALSE;
+			VkPipelineVertexInputDivisorStateCreateInfoEXT divisor{};
+			divisor.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
 
-		// 	VkPipelineMultisampleStateCreateInfo multisampling{};
-		// 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-		// 	multisampling.sampleShadingEnable = VK_FALSE;
-		// 	multisampling.rasterizationSamples = msaaSamples;
+			VkVertexInputBindingDivisorDescriptionEXT divisorDescription{};
+			divisorDescription.binding = 1;
+			divisorDescription.divisor = 1;
 
-		// 	VkPipelineDepthStencilStateCreateInfo depthStencil{};
-		// 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-		// 	depthStencil.depthTestEnable = VK_TRUE;
-		// 	depthStencil.depthWriteEnable = VK_TRUE;
-		// 	depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-		// 	depthStencil.depthBoundsTestEnable = VK_FALSE;
-		// 	depthStencil.stencilTestEnable = VK_FALSE;
+			divisor.vertexBindingDivisorCount = 1;
+			divisor.pVertexBindingDivisors = &divisorDescription;
 
-		// 	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-		// 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-		// 	colorBlendAttachment.blendEnable = VK_TRUE;
-		// 	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-		// 	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-		// 	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-		// 	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_MIN;
-		// 	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-		// 	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			vertexInputInfo.pNext = &divisor;
 
-		// 	// 2 attachments for 2 framebuffer attachments
-		// 	std::array<VkPipelineColorBlendAttachmentState, 2> blendAttachments{colorBlendAttachment, colorBlendAttachment};
+			VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+			inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+			inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-		// 	VkPipelineColorBlendStateCreateInfo colorBlending{};
-		// 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-		// 	colorBlending.logicOpEnable = VK_FALSE;
-		// 	colorBlending.logicOp = VK_LOGIC_OP_COPY;
-		// 	colorBlending.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
-		// 	colorBlending.pAttachments = blendAttachments.data();
-		// 	// colorBlending.blendConstants[0] = 0.0f;
-		// 	// colorBlending.blendConstants[1] = 0.0f;
-		// 	// colorBlending.blendConstants[2] = 0.0f;
-		// 	// colorBlending.blendConstants[3] = 0.0f;
+			VkPipelineViewportStateCreateInfo viewportState{};
+			viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			viewportState.viewportCount = 1;
+			viewportState.scissorCount = 1;
 
-		// 	std::vector<VkDynamicState> dynamicStates = {
-		// 		VK_DYNAMIC_STATE_VIEWPORT,
-		// 		VK_DYNAMIC_STATE_SCISSOR,
-		// 	};
-		// 	VkPipelineDynamicStateCreateInfo dynamicState{};
-		// 	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		// 	dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-		// 	dynamicState.pDynamicStates = dynamicStates.data();
+			VkPipelineRasterizationStateCreateInfo rasterizer{};
+			rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+			rasterizer.depthClampEnable = VK_FALSE;
+			rasterizer.rasterizerDiscardEnable = VK_FALSE;
+			rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+			rasterizer.lineWidth = 1.0f;
+			rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+			rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+			rasterizer.depthBiasEnable = VK_FALSE;
 
-		// 	auto vertShaderCode = readFile("../../src/shaders/candles.vert.spv");
-		// 	auto fragShaderCode = readFile("../../src/shaders/candles.frag.spv");
+			VkPipelineMultisampleStateCreateInfo multisampling{};
+			multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+			multisampling.sampleShadingEnable = VK_FALSE;
+			multisampling.rasterizationSamples = msaaSamples;
 
-		// 	VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-		// 	VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+			VkPipelineDepthStencilStateCreateInfo depthStencil{};
+			depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+			depthStencil.depthTestEnable = VK_TRUE;
+			depthStencil.depthWriteEnable = VK_TRUE;
+			depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+			depthStencil.depthBoundsTestEnable = VK_FALSE;
+			depthStencil.stencilTestEnable = VK_FALSE;
 
-		// 	struct SpecializationConstant{
-		// 		alignas(4) bool useTexture{true};
-		// 	}specConstant;
+			VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+			colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+			colorBlendAttachment.blendEnable = VK_FALSE;
 
-		// 	std::array<VkSpecializationMapEntry, 1> specEntries;
-		// 	specEntries[0].constantID = 0;
-		// 	specEntries[0].offset = 0;
-		// 	specEntries[0].size = sizeof(SpecializationConstant);
+			// 2 attachments for 2 framebuffer attachments
+			std::array<VkPipelineColorBlendAttachmentState, 2> blendAttachments{colorBlendAttachment, colorBlendAttachment};
 
-		// 	VkSpecializationInfo specInfo{};
-		// 	specInfo.dataSize = sizeof(SpecializationConstant);
-		// 	specInfo.mapEntryCount = static_cast<uint32_t>(specEntries.size());
-		// 	specInfo.pMapEntries = specEntries.data();
-		// 	specInfo.pData = &specConstant;
+			VkPipelineColorBlendStateCreateInfo colorBlending{};
+			colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+			colorBlending.logicOpEnable = VK_FALSE;
+			colorBlending.logicOp = VK_LOGIC_OP_COPY;
+			colorBlending.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
+			colorBlending.pAttachments = blendAttachments.data();
+			// colorBlending.blendConstants[0] = 0.0f;
+			// colorBlending.blendConstants[1] = 0.0f;
+			// colorBlending.blendConstants[2] = 0.0f;
+			// colorBlending.blendConstants[3] = 0.0f;
 
-		// 	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-		// 	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		// 	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-		// 	vertShaderStageInfo.module = vertShaderModule;
-		// 	vertShaderStageInfo.pName = "main";
+			std::vector<VkDynamicState> dynamicStates = {
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR,
+			};
+			VkPipelineDynamicStateCreateInfo dynamicState{};
+			dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+			dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+			dynamicState.pDynamicStates = dynamicStates.data();
 
-		// 	VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-		// 	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		// 	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		// 	fragShaderStageInfo.module = fragShaderModule;
-		// 	fragShaderStageInfo.pName = "main";
-		// 	fragShaderStageInfo.pSpecializationInfo = &specInfo;
+			auto vertShaderCode = readFile("../../src/shaders/snowflake.vert.spv");
+			auto fragShaderCode = readFile("../../src/shaders/snowflake.frag.spv");
 
-		// 	VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
-		// 	VkGraphicsPipelineCreateInfo pipelineInfo{};
-		// 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-		// 	pipelineInfo.stageCount = 2;
-		// 	pipelineInfo.pStages = shaderStages;
-		// 	pipelineInfo.pVertexInputState = &vertexInputInfo;
-		// 	pipelineInfo.pInputAssemblyState = &inputAssembly;
-		// 	pipelineInfo.pViewportState = &viewportState;
-		// 	pipelineInfo.pRasterizationState = &rasterizer;
-		// 	pipelineInfo.pMultisampleState = &multisampling;
-		// 	pipelineInfo.pDepthStencilState = &depthStencil;
-		// 	pipelineInfo.pColorBlendState = &colorBlending;
-		// 	pipelineInfo.pDynamicState = &dynamicState;
-		// 	pipelineInfo.layout = m_graphicPipelineLayout;
-		// 	pipelineInfo.renderPass = m_renderPasses.base;
-		// 	pipelineInfo.subpass = 0;
-		// 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.pName = "main";
 
-		// 	if(Object::CANDLE == Object::SNOWFLAKE)
-		// 		specConstant.useTexture = false;
+			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.pName = "main";
 
-		// 	if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.candles) != VK_SUCCESS) {
-		// 		throw std::runtime_error("failed to create graphics pipeline!");
-		// 	}
+			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
-		// 	vkDestroyShaderModule(device, fragShaderModule, nullptr);
-		// 	vkDestroyShaderModule(device, vertShaderModule, nullptr);
-		// }
+			VkGraphicsPipelineCreateInfo pipelineInfo{};
+			pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+			pipelineInfo.stageCount = 2;
+			pipelineInfo.pStages = shaderStages;
+			pipelineInfo.pVertexInputState = &vertexInputInfo;
+			pipelineInfo.pInputAssemblyState = &inputAssembly;
+			pipelineInfo.pViewportState = &viewportState;
+			pipelineInfo.pRasterizationState = &rasterizer;
+			pipelineInfo.pMultisampleState = &multisampling;
+			pipelineInfo.pDepthStencilState = &depthStencil;
+			pipelineInfo.pColorBlendState = &colorBlending;
+			pipelineInfo.pDynamicState = &dynamicState;
+			pipelineInfo.layout = m_graphicPipelineLayouts.snowflake;
+			pipelineInfo.renderPass = m_renderPasses.base;
+			pipelineInfo.subpass = 0;
+			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.snowflake) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create graphics pipeline!");
+			}
+
+			vkDestroyShaderModule(device, fragShaderModule, nullptr);
+			vkDestroyShaderModule(device, vertShaderModule, nullptr);
+		}
+
 			// candles pipeline
 		{
 			tinygltf::Model& model = m_model[Object::CANDLE];
@@ -1747,7 +1804,6 @@ private:
 
 			auto vertexDef = getModelVertexDescriptions(Object::CANDLE);
 
-			// instance attribute is the same for snowflake and candle
 			auto instanceBindingDescription = VertexInstance::getBindingDescription();
 			auto instanceAttributeDescription = VertexInstance::getAttributeDescriptions();
 
@@ -3036,6 +3092,41 @@ private:
 
 	void createVertexBuffers() {
 		{
+			// Snowflake
+			Object objIdx = Object::SNOWFLAKE;
+			tinygltf::Model& model = m_model[objIdx];
+			tinygltf::Mesh& mesh = model.meshes[0];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+			// only use position buffer view
+			int posAccessor = primitive.attributes["POSITION"];
+			m_vertexBuffers.snowflake.resize(1);
+
+			tinygltf::BufferView view = model.bufferViews[model.accessors[posAccessor].bufferView];
+			Buffer newBuffer{};
+			VkBuffer stagingBuffer;
+			VmaAllocation stagingBufferAlloc{};
+
+			VkBuffer vertexBuffer;
+			VmaAllocation vertexBufferAlloc{};
+
+			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+				memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
+			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
+			copyBuffer(stagingBuffer, vertexBuffer, view.byteLength);
+
+			newBuffer.buffer = vertexBuffer;
+			newBuffer.allocation = vertexBufferAlloc;
+
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vmaFreeMemory(m_allocator, stagingBufferAlloc);
+
+			m_vertexBuffers.snowflake[0] = newBuffer;
+		}
+		
+		{
 			// Candles
 			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
@@ -3099,16 +3190,17 @@ private:
 	}
 
 	void createIndexBuffers() {
-		Object objIdx = Object::CANDLE;
-		tinygltf::Model& model = m_model[objIdx];
-		auto bufferViews = findModelIndexBufferView(objIdx);
+		// snowflake
+		{
+			Object objIdx = Object::CANDLE;
+			tinygltf::Model& model = m_model[objIdx];
+			tinygltf::Mesh& mesh = model.meshes[0];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+			tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+			tinygltf::BufferView& view = model.bufferViews[indexAccessor.bufferView];
 
-		// use gltf buffer view index value as m_vertexBuffer index
-		int maxVal = *std::max_element(bufferViews.begin(), bufferViews.end());
-		m_indexBuffers.candles.resize(maxVal + 1);
+			m_indexBuffers.snowflake.resize(1);
 
-		for (auto viewIdx : bufferViews) {
-			tinygltf::BufferView view = model.bufferViews[viewIdx];
 			Buffer newBuffer{};
 			VkBuffer stagingBuffer;
 			VmaAllocation stagingBufferAloc{};
@@ -3128,7 +3220,42 @@ private:
 
 			vkDestroyBuffer(device, stagingBuffer, nullptr);
 			vmaFreeMemory(m_allocator, stagingBufferAloc);
-			m_indexBuffers.candles[viewIdx] = newBuffer;
+			m_indexBuffers.snowflake[0] = newBuffer;
+		}
+
+		// candles
+		{
+			Object objIdx = Object::CANDLE;
+			tinygltf::Model& model = m_model[objIdx];
+			auto bufferViews = findModelIndexBufferView(objIdx);
+
+			// use gltf buffer view index value as m_vertexBuffer index
+			int maxVal = *std::max_element(bufferViews.begin(), bufferViews.end());
+			m_indexBuffers.candles.resize(maxVal + 1);
+
+			for (auto viewIdx : bufferViews) {
+				tinygltf::BufferView view = model.bufferViews[viewIdx];
+				Buffer newBuffer{};
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingBufferAloc{};
+				VkBuffer indexBuffer;
+				VmaAllocation indexBufferAloc{};
+
+				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+				void* data;
+				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
+					memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
+				vmaUnmapMemory(m_allocator, stagingBufferAloc);
+				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
+				copyBuffer(stagingBuffer, indexBuffer, view.byteLength);
+
+				newBuffer.buffer = indexBuffer;
+				newBuffer.allocation = indexBufferAloc;
+
+				vkDestroyBuffer(device, stagingBuffer, nullptr);
+				vmaFreeMemory(m_allocator, stagingBufferAloc);
+				m_indexBuffers.candles[viewIdx] = newBuffer;
+			}
 		}
 	}
 
@@ -3138,8 +3265,22 @@ private:
 	}
 
     void createGraphicUniformBuffers() {
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
+		// snowflake
+		{
+			m_uniformBuffers.snowflake.resize(MAX_FRAMES_IN_FLIGHT);
+
+			VkDeviceSize bufferSize = sizeof(TransformUniform);
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					, m_uniformBuffers.snowflake[i].buffer, m_uniformBuffers.snowflake[i].allocation);
+
+				vmaMapMemory(m_allocator, m_uniformBuffers.snowflake[i].allocation, &m_uniformBuffers.snowflake[i].raw);
+			}
+		}
+
+		// candles
+		{
+			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
 
 			// transform uniform
@@ -3304,6 +3445,43 @@ private:
 	}
 
 	void createGraphicDescriptorSets(){
+		// snowflake
+		{
+			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
+				layouts = {m_graphicDescriptorSetLayouts.snowflake, m_graphicDescriptorSetLayouts.snowflake};
+			VkDescriptorSetAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			allocInfo.descriptorPool = m_descriptorPool;
+			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+			allocInfo.pSetLayouts = layouts.data();
+
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.snowflake.data())
+							, "fail to allocate snowflake descriptor sets !!");
+
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+				std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+				VkDescriptorBufferInfo bufferInfo{};
+				bufferInfo.buffer = m_uniformBuffers.snowflake[i].buffer;
+				bufferInfo.offset = 0;
+				bufferInfo.range = sizeof(TransformUniform);
+
+				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.snowflake[i];
+				descriptorWrites[0].dstBinding = 0;
+				descriptorWrites[0].dstArrayElement = 0;
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				descriptorWrites[0].descriptorCount = 1;
+				descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+			}
+
+
+		}
+
+		// candles
 		{
 			Object objIdx = Object::CANDLE;
 			if (m_modelImages.find(objIdx) == m_modelImages.end()) {
@@ -3708,8 +3886,50 @@ private:
         
     }
 
-	void renderModel(VkCommandBuffer commandBuffer, Object object) {
+	void renderSnowflake(VkCommandBuffer commandBuffer) {
+		Object object = Object::SNOWFLAKE;
+		tinygltf::Model& model = m_model[object];
+		auto& attributes = model.meshes[0].primitives[0].attributes;
 
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.snowflake);
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float) swapChainExtent.width;
+		viewport.height = (float) swapChainExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = {0, 0};
+		scissor.extent = swapChainExtent;
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+		VkBuffer instanceBuffer{m_storageBuffer};
+		uint32_t instanceCount{SNOWFLAKE_COUNT};
+		size_t positionBufferOffset = model.accessors[attributes["POSITION"]].byteOffset;
+
+		VkBuffer vertexBuffers[2] = {m_vertexBuffers.snowflake[0].buffer, instanceBuffer};
+		VkDeviceSize vertexBufferOffsets[2] = {positionBufferOffset, 0};
+		vkCmdBindVertexBuffers(commandBuffer, 0, sizeof(vertexBuffers) / sizeof(VkBuffer), vertexBuffers, vertexBufferOffsets);
+
+		auto& indexAccessoridx = model.meshes[0].primitives[0].indices;
+		VkBuffer indexBuffer = m_indexBuffers.snowflake[0].buffer;
+		uint64_t indexBufferOffsets = model.accessors[indexAccessoridx].byteOffset;
+		uint64_t verticesCount = model.accessors[indexAccessoridx].count;
+
+		vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
+
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.snowflake, 
+					   0, 1, &m_graphicDescriptorSets.snowflake[m_currentFrame], 0, 0);
+
+		vkCmdDrawIndexed(commandBuffer, verticesCount, instanceCount, 0, 0, 0);
+	}
+
+	void renderCandles(VkCommandBuffer commandBuffer) {
+		Object object = Object::CANDLE;
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles);
 
 		VkViewport viewport{};
@@ -3760,16 +3980,8 @@ private:
 			// 	tangentBufferOffset = model.accessors[attribute["TANGENT"]].byteOffset;
 			// }
 
-			VkBuffer instanceBuffer;
-			uint32_t instanceCount{};
-			if (object == Object::SNOWFLAKE) {
-				instanceBuffer = m_storageBuffer;
-				instanceCount = SNOWFLAKE_COUNT;
-			}
-			else if (object == Object::CANDLE) {
-				instanceBuffer = m_towerInstanceBuffer;
-				instanceCount = m_towerInstanceRaw.size();
-			}
+			VkBuffer instanceBuffer = m_towerInstanceBuffer;
+			uint32_t instanceCount = m_towerInstanceRaw.size();
 
 			VkBuffer vertexBuffers[5] = {positionBuffer, normalBuffer, tangentBuffer, texCordBuffer, instanceBuffer};
 			VkDeviceSize vertexBufferOffsets[5] = {positionBufferOffset, normalBufferOffset, tangentBufferOffset, texCordBufferOffset, 0};
@@ -3933,7 +4145,8 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &basePassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				renderModel(commandBuffer, Object::CANDLE);
+				renderSnowflake(commandBuffer);
+				renderCandles(commandBuffer);
 
 			vkCmdEndRenderPass(commandBuffer);
 
