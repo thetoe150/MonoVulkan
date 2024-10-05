@@ -297,25 +297,14 @@ private:
 
 	struct {
 		std::vector<Buffer> snowflake;
-	} m_uniformBuffers;
+		struct {
+			std::vector<Buffer> transform;
+			std::vector<Buffer> lighting;
+		} candles;
+	} m_graphicUniformBuffers;
 
 	std::map<Object, std::map<int, VkBuffer>> m_animBuffer;
 	std::map<Object, std::map<int, VmaAllocation>> m_animBufferAlloc;
-
-	struct {
-		std::map<Object, std::vector<void*>> transform;
-		std::map<Object, std::vector<void*>> lighting;
-	} m_graphicUniformBuffersMapped;
-
-	struct {
-		std::map<Object, std::vector<VkBuffer>> transform;
-		std::map<Object, std::vector<VkBuffer>> lighting;
-	} m_graphicUniformBuffers;
-
-	struct {
-		std::map<Object, std::vector<VmaAllocation>> transform;
-		std::map<Object, std::vector<VmaAllocation>> lighting;
-	} m_uniformBuffersAlloc;
 
     std::vector<VertexInstance> m_towerInstanceRaw;
 	VkBuffer m_towerInstanceBuffer;
@@ -593,7 +582,7 @@ private:
 			ubo.view = view;
 			ubo.proj = proj;
 
-			*(TransformUniform*)m_uniformBuffers.snowflake[m_currentFrame].raw = ubo;
+			*(TransformUniform*)m_graphicUniformBuffers.snowflake[m_currentFrame].raw = ubo;
 		}
 
 		// candles
@@ -618,7 +607,7 @@ private:
 				ubo.view = view;
 				ubo.proj = proj;
 
-				TransformUniform* tranformUBO = (TransformUniform*)m_graphicUniformBuffersMapped.transform[objIdx][m_currentFrame];
+				TransformUniform* tranformUBO = (TransformUniform*)m_graphicUniformBuffers.candles.transform[m_currentFrame].raw;
 				for (unsigned int i = 0; i < meshCount; i++){
 					tranformUBO[i] = ubo;
 				}
@@ -626,7 +615,7 @@ private:
 
 			// lighting uniform
 			{
-				LightingUniform* lightingUBO = (LightingUniform*)m_graphicUniformBuffersMapped.lighting[objIdx][m_currentFrame];
+				LightingUniform* lightingUBO = (LightingUniform*)m_graphicUniformBuffers.candles.lighting[m_currentFrame].raw;
 				lightingUBO->lightPos = glm::vec3(s_lightPos[0], s_lightPos[1], s_lightPos[2]);
 				lightingUBO->camPos = g_camera.getPostion();
 			}
@@ -763,44 +752,40 @@ private:
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
 
-		{
-			Object objIdx = Object::CANDLE;
-			for (auto& bufferIdx : m_animBuffer[objIdx]) {
-				vkDestroyBuffer(device, bufferIdx.second, nullptr);
-			}
-			for (auto& bufferAllocIdx : m_animBufferAlloc[objIdx]) {
-				vmaFreeMemory(m_allocator, bufferAllocIdx.second);
-			}
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			vkDestroyBuffer(device, m_graphicUniformBuffers.snowflake[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.snowflake[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.snowflake[i].allocation);
 
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				vkDestroyBuffer(device, m_graphicUniformBuffers.transform[objIdx][i], nullptr);
-				vmaUnmapMemory(m_allocator, m_uniformBuffersAlloc.transform[objIdx][i]);
-				vmaFreeMemory(m_allocator, m_uniformBuffersAlloc.transform[objIdx][i]);
+			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.transform[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.transform[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.transform[i].allocation);
 
-				vkDestroyBuffer(device, m_graphicUniformBuffers.lighting[objIdx][i], nullptr);
-				vmaUnmapMemory(m_allocator, m_uniformBuffersAlloc.lighting[objIdx][i]);
-				vmaFreeMemory(m_allocator, m_uniformBuffersAlloc.lighting[objIdx][i]);
-			}
-
-			for (auto& meshImage : m_modelImages[objIdx]) {
-				vkDestroyImage(device, meshImage.baseImage.image, nullptr);
-				vkDestroyImage(device, meshImage.normalImage.image, nullptr);
-				vkDestroyImage(device, meshImage.emissiveImage.image, nullptr);
-
-				vmaFreeMemory(m_allocator, meshImage.baseImage.allocation);
-				vmaFreeMemory(m_allocator, meshImage.normalImage.allocation);
-				vmaFreeMemory(m_allocator, meshImage.emissiveImage.allocation);
-
-				vkDestroyImageView(device, meshImage.baseImage.view, nullptr);
-				vkDestroyImageView(device, meshImage.normalImage.view, nullptr);
-				vkDestroyImageView(device, meshImage.emissiveImage.view, nullptr);
-			}
+			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.lighting[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.lighting[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.lighting[i].allocation);
 		}
 
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			vkDestroyBuffer(device, m_uniformBuffers.snowflake[i].buffer, nullptr);
-			vmaUnmapMemory(m_allocator, m_uniformBuffers.snowflake[i].allocation);
-			vmaFreeMemory(m_allocator, m_uniformBuffers.snowflake[i].allocation);
+		Object objIdx = Object::CANDLE;
+		for (auto& bufferIdx : m_animBuffer[objIdx]) {
+			vkDestroyBuffer(device, bufferIdx.second, nullptr);
+		}
+		for (auto& bufferAllocIdx : m_animBufferAlloc[objIdx]) {
+			vmaFreeMemory(m_allocator, bufferAllocIdx.second);
+		}
+
+		for (auto& meshImage : m_modelImages[objIdx]) {
+			vkDestroyImage(device, meshImage.baseImage.image, nullptr);
+			vkDestroyImage(device, meshImage.normalImage.image, nullptr);
+			vkDestroyImage(device, meshImage.emissiveImage.image, nullptr);
+
+			vmaFreeMemory(m_allocator, meshImage.baseImage.allocation);
+			vmaFreeMemory(m_allocator, meshImage.normalImage.allocation);
+			vmaFreeMemory(m_allocator, meshImage.emissiveImage.allocation);
+
+			vkDestroyImageView(device, meshImage.baseImage.view, nullptr);
+			vkDestroyImageView(device, meshImage.normalImage.view, nullptr);
+			vkDestroyImageView(device, meshImage.emissiveImage.view, nullptr);
 		}
 
 		// vkDestroySampler(device, m_samplers.snowflake, nullptr);
@@ -3267,14 +3252,14 @@ private:
     void createGraphicUniformBuffers() {
 		// snowflake
 		{
-			m_uniformBuffers.snowflake.resize(MAX_FRAMES_IN_FLIGHT);
+			m_graphicUniformBuffers.snowflake.resize(MAX_FRAMES_IN_FLIGHT);
 
 			VkDeviceSize bufferSize = sizeof(TransformUniform);
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-					, m_uniformBuffers.snowflake[i].buffer, m_uniformBuffers.snowflake[i].allocation);
+					, m_graphicUniformBuffers.snowflake[i].buffer, m_graphicUniformBuffers.snowflake[i].allocation);
 
-				vmaMapMemory(m_allocator, m_uniformBuffers.snowflake[i].allocation, &m_uniformBuffers.snowflake[i].raw);
+				vmaMapMemory(m_allocator, m_graphicUniformBuffers.snowflake[i].allocation, &m_graphicUniformBuffers.snowflake[i].raw);
 			}
 		}
 
@@ -3288,15 +3273,13 @@ private:
 				unsigned int meshCount = model.meshes.size();
 				VkDeviceSize bufferSize = sizeof(TransformUniform) * meshCount;
 
-				m_graphicUniformBuffers.transform[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
-				m_uniformBuffersAlloc.transform[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
-				m_graphicUniformBuffersMapped.transform[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+				m_graphicUniformBuffers.candles.transform.resize(MAX_FRAMES_IN_FLIGHT);
 
 				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 					createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-						, m_graphicUniformBuffers.transform[objIdx][i], m_uniformBuffersAlloc.transform[objIdx][i]);
+						, m_graphicUniformBuffers.candles.transform[i].buffer, m_graphicUniformBuffers.candles.transform[i].allocation);
 
-					vmaMapMemory(m_allocator, m_uniformBuffersAlloc.transform[objIdx][i], &m_graphicUniformBuffersMapped.transform[objIdx][i]);
+					vmaMapMemory(m_allocator, m_graphicUniformBuffers.candles.transform[i].allocation, &m_graphicUniformBuffers.candles.transform[i].raw);
 				}
 			}
 
@@ -3304,15 +3287,13 @@ private:
 			{
 				VkDeviceSize bufferSize = sizeof(LightingUniform);
 
-				m_graphicUniformBuffers.lighting[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
-				m_uniformBuffersAlloc.lighting[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
-				m_graphicUniformBuffersMapped.lighting[objIdx].resize(MAX_FRAMES_IN_FLIGHT);
+				m_graphicUniformBuffers.candles.lighting.resize(MAX_FRAMES_IN_FLIGHT);
 
 				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 					createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-						, m_graphicUniformBuffers.lighting[objIdx][i], m_uniformBuffersAlloc.lighting[objIdx][i]);
+						, m_graphicUniformBuffers.candles.lighting[i].buffer, m_graphicUniformBuffers.candles.lighting[i].allocation);
 
-					vmaMapMemory(m_allocator, m_uniformBuffersAlloc.lighting[objIdx][i], &m_graphicUniformBuffersMapped.lighting[objIdx][i]);
+					vmaMapMemory(m_allocator, m_graphicUniformBuffers.candles.lighting[i].allocation, &m_graphicUniformBuffers.candles.lighting[i].raw);
 				}
 			}
 		}
@@ -3463,7 +3444,7 @@ private:
 				std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
 				VkDescriptorBufferInfo bufferInfo{};
-				bufferInfo.buffer = m_uniformBuffers.snowflake[i].buffer;
+				bufferInfo.buffer = m_graphicUniformBuffers.snowflake[i].buffer;
 				bufferInfo.offset = 0;
 				bufferInfo.range = sizeof(TransformUniform);
 
@@ -3573,7 +3554,7 @@ private:
 				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
 				VkDescriptorBufferInfo bufferInfo{};
-				bufferInfo.buffer = m_graphicUniformBuffers.transform[objIdx][i];
+				bufferInfo.buffer = m_graphicUniformBuffers.candles.transform[i].buffer;
 				bufferInfo.offset = 0;
 				bufferInfo.range = sizeof(TransformUniform);
 
@@ -3586,7 +3567,7 @@ private:
 				descriptorWrites[0].pBufferInfo = &bufferInfo;
 
 				VkDescriptorBufferInfo lightBufferInfo{};
-				lightBufferInfo.buffer = m_graphicUniformBuffers.lighting[objIdx][i];
+				lightBufferInfo.buffer = m_graphicUniformBuffers.candles.lighting[i].buffer;
 				lightBufferInfo.offset = 0;
 				lightBufferInfo.range = sizeof(LightingUniform);
 
@@ -3994,7 +3975,7 @@ private:
 			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
 
 			// mesh local transform
-			TransformUniform* uniformMapped = (TransformUniform*)m_graphicUniformBuffersMapped.transform[object][m_currentFrame];
+			TransformUniform* uniformMapped = (TransformUniform*)m_graphicUniformBuffers.candles.transform[m_currentFrame].raw;
 			uniformMapped[meshIdx].model = uniformMapped[meshIdx].model * m_modelMeshTransforms[object][meshIdx];
 
 			// some mesh in the model don't normal mapp
