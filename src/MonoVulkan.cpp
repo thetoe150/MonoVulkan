@@ -2,6 +2,7 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "vulkan/vulkan_core.h"
+#include "vulkan/vulkan_enums.hpp"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -354,7 +355,7 @@ private:
 
 	// ----------------------------- Vulkan Info struct ----------------------------------
 	VkPhysicalDeviceProperties m_physicalDeviceProperties;
-
+	SwapChainSupportDetails m_swapchainProperties;
 
 	// ----------------------------- other ----------------------------------
 	float m_lastTime;
@@ -492,6 +493,12 @@ private:
         createLogicalDevice();
 		createAllocator();
         createSwapChain();
+
+		printPhysicalDeviceProperties();
+		printSwapchainProperties();
+		printQueueFamilyProperties();
+		printMemoryStatistics();
+
         createSwapchainImageViews();
         createRenderPasses();
         createDescriptorSetLayouts();
@@ -514,11 +521,6 @@ private:
         createDescriptorSets();
         createCommandBuffers();
         createSyncObjects();
-
-		// printPhysicalDeviceProperties();
-		// printMemoryStatistics();
-		// printMemoryBudget();
-		// printQueueFamilyProperties();
     }
 
 	void processInput(){
@@ -1051,9 +1053,9 @@ private:
         vkGetDeviceQueue(device, indices.computeFamily.value(), 0, &m_computeQueue);
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &m_presentQueue);
 
-		std::cout << "\nQueue graphic family Index: " << indices.graphicFamily.value()
-				<< "\nQueue compute family Index: " << indices.computeFamily.value()
-				<< "\nQueue present family Index: " << indices.presentFamily.value() << std::endl;
+		// std::cout << "\nQueue graphic family Index: " << indices.graphicFamily.value()
+		// 		<< "\nQueue compute family Index: " << indices.computeFamily.value()
+		// 		<< "\nQueue present family Index: " << indices.presentFamily.value() << std::endl;
 
 
 		m_vkCmdSetPrimitiveTopologyEXT = (PFN_vkCmdSetPrimitiveTopologyEXT)vkGetDeviceProcAddr(device, "vkCmdSetPrimitiveTopologyEXT");
@@ -1123,13 +1125,10 @@ private:
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
         swapChainImages.resize(imageCount);
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
-		std::cout << "swapchain extent width: " << extent.width << "\n";
-		std::cout << "swapchain extent height: " << extent.height << "\n";
-		std::cout << "frames in flight count:" << MAX_FRAMES_IN_FLIGHT << "\n";
-		std::cout << "swapchain images count:" << imageCount << "\n";
 
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
+		m_swapchainProperties = swapChainSupport; 
     }
 
     void createSwapchainImageViews() {
@@ -4600,14 +4599,14 @@ private:
     }
 
 	void printPhysicalDeviceProperties(){
-		std::cout << "Physical device INFO: " <<
+		std::cout << "####### Physical device info: #######" <<
 		"\n apiVersion: \n" << m_physicalDeviceProperties.apiVersion <<
 		"\n driverVersion: \n" << m_physicalDeviceProperties.driverVersion <<
 		"\n vendorID: \n" << m_physicalDeviceProperties.vendorID <<
 		"\n deviceID: \n" << m_physicalDeviceProperties.deviceID <<
 		"\n deviceType: \n" << m_physicalDeviceProperties.deviceType <<
 		// "\n deviceName: \n" << m_physicalDeviceProperties.deviceID <<
-		"\n limit properties: \n" <<
+		"\n ####### Physical device properties: #######\n" <<
 		"\n maxImageDimension1D: " << m_physicalDeviceProperties.limits.maxImageDimension1D <<
 		"\n maxImageDimension2D: "     << m_physicalDeviceProperties.limits.maxImageDimension2D <<
 		"\n maxImageDimension3D: "     << m_physicalDeviceProperties.limits.maxImageDimension3D <<
@@ -4711,7 +4710,34 @@ private:
 		"\n standardSampleLocations: "     << m_physicalDeviceProperties.limits.standardSampleLocations <<
 		"\n optimalBufferCopyOffsetAlignment: "<< m_physicalDeviceProperties.limits.optimalBufferCopyOffsetAlignment <<
 		"\n optimalBufferCopyRowPitchAlignment: "<< m_physicalDeviceProperties.limits.optimalBufferCopyRowPitchAlignment <<
-		"\n nonCoherentAtomSize: " << m_physicalDeviceProperties.limits.nonCoherentAtomSize;
+		"\n nonCoherentAtomSize: " << m_physicalDeviceProperties.limits.nonCoherentAtomSize << "\n";
+	}
+
+	void printSwapchainProperties(){
+		std::cout << "\n ####### Swapchain Properties: #######" <<
+		"\n Min images count: " << m_swapchainProperties.capabilities.minImageCount <<
+		"\n Max images count: " << m_swapchainProperties.capabilities.maxImageCount <<
+		"\n Current images extent width: " << m_swapchainProperties.capabilities.currentExtent.width <<
+		"\n Current images extent height: " << m_swapchainProperties.capabilities.currentExtent.height <<
+		"\n Min images extent width: " << m_swapchainProperties.capabilities.minImageExtent.width <<
+		"\n Min images extent height: " << m_swapchainProperties.capabilities.minImageExtent.height <<
+		"\n Max images extent width: " << m_swapchainProperties.capabilities.maxImageExtent.width <<
+		"\n Max images extent height: " << m_swapchainProperties.capabilities.maxImageExtent.height <<
+		"\n Max Image Array Layers: " << m_swapchainProperties.capabilities.maxImageArrayLayers <<
+		"\n Supported Transforms: " << m_swapchainProperties.capabilities.supportedTransforms <<
+		"\n Current Transform: " << m_swapchainProperties.capabilities.currentTransform <<
+		"\n Supported Composite Alpha: " << m_swapchainProperties.capabilities.supportedCompositeAlpha <<
+		"\n Supported Usage Flags: " << m_swapchainProperties.capabilities.supportedUsageFlags;
+
+		std::cout << "\n ####### Supported Swapchain Formats: #######\n";
+		for (auto& format : m_swapchainProperties.formats) {
+			std::cout << vk::to_string((vk::Format)format.format) << "\n";
+		}
+
+		std::cout << "\n####### Supported Swapchain Present Mode: #######\n";
+		for (auto& presentMode : m_swapchainProperties.presentModes) {
+			std::cout << vk::to_string((vk::PresentModeKHR)presentMode) << "\n";
+		}
 	}
 
 	void printQueueFamilyProperties(){
@@ -4720,10 +4746,10 @@ private:
 		std::vector<VkQueueFamilyProperties> queueProperties(count);
 		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &count, queueProperties.data());
 
+		std::cout << "\n####### Queue Family index: #######" << "\n";
 		for(unsigned int i = 0; i < count; i++){
-			std::cout << "Queue Family index " << i << ": " << vk::to_string((vk::QueueFlags)queueProperties[i].queueFlags) << "\n";
+			std::cout << "At index: " << i << ": " << vk::to_string((vk::QueueFlags)queueProperties[i].queueFlags) << "\n";
 		}
-
 	}
 
 	void printMemoryBudget(){
@@ -4791,14 +4817,14 @@ private:
 		VmaTotalStatistics stats{};
 		vmaCalculateStatistics(m_allocator, &stats);
 
-		std::cout << "\n ######## Total statistics: ########\n";
+		std::cout << "\n ####### Total statistics: #######\n";
 		l_printStat(&stats.total, 1, StatType::TOTAL);
 
-		std::cout << "\n ######## Heap statistics: ########\n";
+		std::cout << "\n ####### Heap statistics: #######\n";
 		unsigned int heapCount = m_allocator->GetMemoryHeapCount();
 		l_printStat(stats.memoryHeap, heapCount, StatType::HEAP);
 
-		std::cout << "\n ######## Type statistics: ########\n";
+		std::cout << "\n ####### Type statistics: #######\n";
 		unsigned int typeCount = m_allocator->GetMemoryTypeCount();
 		l_printStat(stats.memoryType, typeCount, StatType::TYPE);
 
