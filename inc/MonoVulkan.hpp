@@ -144,7 +144,7 @@ struct ComputePushConstant{
 };
 
 struct GraphicPushConstant{
-	alignas(4) int isNormalMapping{1};
+	alignas(4) float value{1};
 };
 
 struct SpecializationConstant{

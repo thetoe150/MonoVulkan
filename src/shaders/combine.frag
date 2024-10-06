@@ -8,18 +8,17 @@ layout(set = 0, binding = 0) uniform sampler2D baseSampler;
 layout(set = 0, binding = 1) uniform sampler2D bloomSampler;
 
 layout (push_constant) uniform DataPushConstant{
-	int useBloom;
+	float exposure;
 } p_const;
 
 void main() {
 	vec3 baseColor = texture(baseSampler, vTexCoords).rgb;
-	baseColor += texture(bloomSampler, vTexCoords).rgb;
+	vec3 hdrColor = baseColor + texture(bloomSampler, vTexCoords).rgb;
 
-    // tone mapping
-    // vec3 result = vec3(1.0) - exp(-hdrColor * exposure);
-    // also gamma correct while we're at it       
-    // const float gamma = 2.2;
-    // result = pow(result, vec3(1.0 / gamma));
-	outColor = vec4(baseColor, 1.0);
-	// outColor = vec4(texture(bloomSampler, vTexCoords).rgb, 1.0);
+     vec3 result = vec3(1.0) - exp(-hdrColor * p_const.exposure);
+     const float gamma = 2.2;
+     result = pow(result, vec3(1.0 / gamma));
+
+	outColor = vec4(result, 1.0);
+	// outColor = vec4(hdrColor, 1.0);
 }

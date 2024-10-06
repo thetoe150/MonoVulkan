@@ -3,6 +3,7 @@
 #include "glm/gtc/type_ptr.hpp"
 #include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan_enums.hpp"
+#include "vulkan/vulkan_to_string.hpp"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -169,7 +170,7 @@ private:
     VkSurfaceKHR surface;
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
     VkDevice device;
 	VmaAllocator m_allocator;
 
@@ -179,7 +180,7 @@ private:
 
     VkSwapchainKHR swapChain;
     std::vector<VkImage> swapChainImages;
-    VkFormat swapChainImageFormat;
+    VkFormat m_swapchainImageFormat;
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
 	struct {
@@ -351,7 +352,6 @@ private:
     std::vector<VkFence> m_inFlightGraphicFences;
     VkFence m_inFlightComputeFences;
 	VkSemaphore m_computeFinishedSemaphore;
-    uint32_t m_currentFrame = 0;
 
 	// ----------------------------- Vulkan Info struct ----------------------------------
 	VkPhysicalDeviceProperties m_physicalDeviceProperties;
@@ -361,6 +361,11 @@ private:
 	float m_lastTime;
 	float m_currentDeltaTime = 0;
 	float m_currentAnimTime = 0;
+
+    uint32_t m_currentFrame = 0;
+
+    VkFormat m_renderTargetImageFormat;
+	GraphicPushConstant m_exposure{0.01};
 
 	VkDescriptorPool imguiDescriptorPool;
 
@@ -494,10 +499,12 @@ private:
 		createAllocator();
         createSwapChain();
 
-		printPhysicalDeviceProperties();
-		printSwapchainProperties();
-		printQueueFamilyProperties();
-		printMemoryStatistics();
+		// printPhysicalDeviceProperties();
+		// printPhysicalDeviceFeatures();
+		// printPhysicalDeviceFormats();
+		// printSwapchainProperties();
+		// printQueueFamilyProperties();
+		// printMemoryStatistics();
 
         createSwapchainImageViews();
         createRenderPasses();
@@ -554,17 +561,6 @@ private:
 		if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 			recreatePipelines();
 		}
-
-		//// key for rotate object
-		//float rotateVelocity = deltaTime * 40.0f;
-		//if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS)
-		//    yAngle -= rotateVelocity;
-		//if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS)
-		//    yAngle += rotateVelocity;
-		//if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS)
-		//    xAngle += rotateVelocity;
-		//if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS)
-		//    xAngle -= rotateVelocity;
 	}
 
     void updateGraphicUniformBuffer() {
@@ -969,7 +965,7 @@ private:
         for (const auto& device : devices) {
             if (isDeviceSuitable(device)) {
                 physicalDevice = device;
-                msaaSamples = getMaxUsableSampleCount();
+                m_msaaSamples = getMaxUsableSampleCount();
                 break;
             }
         }
@@ -979,6 +975,8 @@ private:
         }
 
         vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
+		m_renderTargetImageFormat = findHDRColorFormat();
+		std::cout << "m_renderTargetImageFormat: " << vk::to_string(vk::Format(m_renderTargetImageFormat)) << "\n";
     }
 
     void createLogicalDevice() {
@@ -1126,7 +1124,7 @@ private:
         swapChainImages.resize(imageCount);
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
 
-        swapChainImageFormat = surfaceFormat.format;
+        m_swapchainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
 		m_swapchainProperties = swapChainSupport; 
     }
@@ -1135,7 +1133,7 @@ private:
         swapChainImageViews.resize(swapChainImages.size());
 
         for (uint32_t i = 0; i < swapChainImages.size(); i++) {
-            swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+            swapChainImageViews[i] = createImageView(swapChainImages[i], m_swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
@@ -1143,8 +1141,8 @@ private:
 		// base render pass
 		{
 			VkAttachmentDescription colorAttachment{};
-			colorAttachment.format = swapChainImageFormat;
-			colorAttachment.samples = msaaSamples;
+			colorAttachment.format = m_renderTargetImageFormat;
+			colorAttachment.samples = m_msaaSamples;
 			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1153,8 +1151,8 @@ private:
 			colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 			VkAttachmentDescription bloomThresholdAttachment{};
-			bloomThresholdAttachment.format = swapChainImageFormat;
-			bloomThresholdAttachment.samples = msaaSamples;
+			bloomThresholdAttachment.format = m_renderTargetImageFormat;
+			bloomThresholdAttachment.samples = m_msaaSamples;
 			bloomThresholdAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			bloomThresholdAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			bloomThresholdAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1164,7 +1162,7 @@ private:
 
 			VkAttachmentDescription depthAttachment{};
 			depthAttachment.format = findDepthFormat();
-			depthAttachment.samples = msaaSamples;
+			depthAttachment.samples = m_msaaSamples;
 			depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1173,7 +1171,7 @@ private:
 			depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 			VkAttachmentDescription colorAttachmentResolve{};
-			colorAttachmentResolve.format = swapChainImageFormat;
+			colorAttachmentResolve.format = m_renderTargetImageFormat;
 			colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
 			colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1183,7 +1181,7 @@ private:
 			colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 			VkAttachmentDescription bloomThresholdAttachmentResolve{};
-			bloomThresholdAttachmentResolve.format = swapChainImageFormat;
+			bloomThresholdAttachmentResolve.format = m_renderTargetImageFormat;
 			bloomThresholdAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
 			bloomThresholdAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			bloomThresholdAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1261,7 +1259,7 @@ private:
 		// bloom pass
 		{
 			VkAttachmentDescription blurAttachment{};
-			blurAttachment.format = swapChainImageFormat;
+			blurAttachment.format = m_renderTargetImageFormat;
 			blurAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 			blurAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			blurAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1312,7 +1310,7 @@ private:
 		// combine pass
 		{
 			VkAttachmentDescription combineAttachment{};
-			combineAttachment.format = swapChainImageFormat;
+			combineAttachment.format = m_swapchainImageFormat;
 			combineAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 			combineAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			combineAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1698,7 +1696,7 @@ private:
 			VkPipelineMultisampleStateCreateInfo multisampling{};
 			multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 			multisampling.sampleShadingEnable = VK_FALSE;
-			multisampling.rasterizationSamples = msaaSamples;
+			multisampling.rasterizationSamples = m_msaaSamples;
 
 			VkPipelineDepthStencilStateCreateInfo depthStencil{};
 			depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1836,7 +1834,7 @@ private:
 			VkPipelineMultisampleStateCreateInfo multisampling{};
 			multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 			multisampling.sampleShadingEnable = VK_FALSE;
-			multisampling.rasterizationSamples = msaaSamples;
+			multisampling.rasterizationSamples = m_msaaSamples;
 
 			VkPipelineDepthStencilStateCreateInfo depthStencil{};
 			depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2290,22 +2288,22 @@ private:
     }
 
     void createRenderTargets() {
-        VkFormat colorFormat = swapChainImageFormat;
+        VkFormat colorFormat = m_renderTargetImageFormat;
 
 		// for base framebuffer
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, 
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.colorRT.image, m_renderTargets.base.colorRT.allocation);
         m_renderTargets.base.colorRT.view = createImageView(m_renderTargets.base.colorRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, 
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, colorFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.bloomThresholdRT.image, m_renderTargets.base.bloomThresholdRT.allocation);
         m_renderTargets.base.bloomThresholdRT.view = createImageView(m_renderTargets.base.bloomThresholdRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         VkFormat depthFormat = findDepthFormat();
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat,
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, depthFormat,
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.depthRT.image, m_renderTargets.base.depthRT.allocation);
         m_renderTargets.base.depthRT.view = createImageView(m_renderTargets.base.depthRT.image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -2345,6 +2343,14 @@ private:
         }
 
         throw std::runtime_error("failed to find supported format!");
+    }
+
+    VkFormat findHDRColorFormat() {
+        return findSupportedFormat(
+            {VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT},
+            VK_IMAGE_TILING_OPTIMAL,
+           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT 
+        );
     }
 
     VkFormat findDepthFormat() {
@@ -3979,10 +3985,10 @@ private:
 
 			// some mesh in the model don't normal mapp
 			if(attributes["TANGENT"] == 0) {
-				m_graphicPushConstant.isNormalMapping = 0;
+				m_graphicPushConstant.value = 0;
 			}
 			else {
-				m_graphicPushConstant.isNormalMapping = 1;
+				m_graphicPushConstant.value = 1;
 			}
 
 			vkCmdPushConstants(commandBuffer, m_graphicPipelineLayouts.candles, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), (void*)&m_graphicPushConstant);
@@ -4029,6 +4035,8 @@ private:
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.combine,
 						0, 1, &m_graphicDescriptorSets.combine[m_currentFrame], 0, 0);
+
+		vkCmdPushConstants(commandBuffer, m_graphicPipelineLayouts.candles, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), (void*)&m_exposure);
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
@@ -4102,7 +4110,7 @@ private:
 
 		{
 			TracyVkZone(tracyContext, commandBuffer, "Transfer animation buffers");
-			transferBuffers(commandBuffer);
+			// transferBuffers(commandBuffer);
 		}
 
 		{
@@ -4289,6 +4297,9 @@ private:
         ImGui::SeparatorText("Projection");
 		ImGui::SliderFloat("Near Plane", &s_nearPlane, -10.f, 10.f, "%.5f");
 		ImGui::SliderFloat("Far Plane", &s_farPlane, -10.f, 100.f, "%.5f");
+
+        ImGui::SeparatorText("HDR");
+		ImGui::SliderFloat("Exposure", &m_exposure.value, 0.f, 1.f, "%.05f");
 	}
 
     void drawFrame() {
@@ -4738,6 +4749,17 @@ private:
 		for (auto& presentMode : m_swapchainProperties.presentModes) {
 			std::cout << vk::to_string((vk::PresentModeKHR)presentMode) << "\n";
 		}
+	}
+
+	void printPhysicalDeviceFeatures() {
+		// vkGetPhysicalDeviceFeatures();
+	}
+
+	void printPhysicalDeviceFormats() {
+        // for (VkFormat format : candidates) {
+        //     VkFormatProperties props;
+        //     vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+		// }
 	}
 
 	void printQueueFamilyProperties(){
