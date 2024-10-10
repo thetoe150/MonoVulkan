@@ -2347,7 +2347,7 @@ private:
 
     VkFormat findHDRColorFormat() {
         return findSupportedFormat(
-            {VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT},
+            {VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R8G8B8A8_SRGB},
             VK_IMAGE_TILING_OPTIMAL,
            VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT 
         );
@@ -4110,7 +4110,7 @@ private:
 
 		{
 			TracyVkZone(tracyContext, commandBuffer, "Transfer animation buffers");
-			// transferBuffers(commandBuffer);
+			transferBuffers(commandBuffer);
 		}
 
 		{

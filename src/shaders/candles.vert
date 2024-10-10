@@ -53,7 +53,10 @@ void main() {
 
     v_texCoord = a_texCoord;
     v_fragPosition = fragPos;
+	// normalize normal here won't help if use MSAA with 16bit format
+	// white artifact happen maybe because MSAA rasterization make normalized normal not normalized anymore
     v_normal = a_normal;
+
 	// just for tessting
 	v_tangent = vec3(a_tangent);
     gl_Position = u_transform.proj * u_transform.view * model * vec4(a_position, 1.0);

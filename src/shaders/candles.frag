@@ -29,7 +29,9 @@ layout (push_constant) uniform DataPushConstant{
 void main() {
 	vec4 texColor = texture(u_texSampler, v_fragTexCoord);
 	vec3 color = texColor.rgb;
-	vec3 n = v_normal;
+	// have to normalize here or else
+	// white artifact happen maybe because MSAA rasterization make normalized normal not normalized anymore
+	vec3 n = normalize(v_normal);
 	vec3 l = normalize(u_lighting.lightPos - v_fragPos);
 	vec3 c = normalize(u_lighting.camPos - v_fragPos);
 
