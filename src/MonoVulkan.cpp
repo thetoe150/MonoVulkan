@@ -365,7 +365,7 @@ private:
     uint32_t m_currentFrame = 0;
 
     VkFormat m_renderTargetImageFormat;
-	GraphicPushConstant m_exposure{0.01};
+	GraphicPushConstant m_exposure{0.8};
 
 	VkDescriptorPool imguiDescriptorPool;
 

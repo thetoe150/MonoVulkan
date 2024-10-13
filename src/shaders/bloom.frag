@@ -23,7 +23,7 @@ const float weights[] = float[](0.0896631113333857,
 								0.0024499299678342);
 
 void main() {
-	float blurScale = 0.0006;
+	float blurScale = 0.001;
 	const float blurStrength = 1.0;
 
 	float ar = 1.0;
@@ -32,7 +32,7 @@ void main() {
 	{
 		// vec2 ts = textureSize(u_texSampler, 0);
 		// ar = ts.y / ts.x;
-		blurScale = 0.0012;
+		blurScale = 0.002;
 	}
 
 	vec2 P = vTexCoords.yx - vec2(0, (weights.length() >> 1) * ar * blurScale);

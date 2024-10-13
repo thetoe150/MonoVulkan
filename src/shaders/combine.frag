@@ -15,10 +15,11 @@ void main() {
 	vec3 baseColor = texture(baseSampler, vTexCoords).rgb;
 	vec3 hdrColor = baseColor + texture(bloomSampler, vTexCoords).rgb;
 
-     vec3 result = vec3(1.0) - exp(-hdrColor * p_const.exposure);
-     const float gamma = 2.2;
-     result = pow(result, vec3(1.0 / gamma));
+	// vec3 mapped = hdrColor / (hdrColor + vec3(1.0));
+	 vec3 mapped = vec3(1.0) - exp(-hdrColor * p_const.exposure);
 
-	outColor = vec4(result, 1.0);
-	// outColor = vec4(hdrColor, 1.0);
+	// const float gamma = 2.2;
+	// vec3 result = pow(mapped, vec3(1.0 / gamma));
+
+	outColor = vec4(mapped, 1.0);
 }

@@ -39,14 +39,14 @@
           %3 = OpTypeFunction %void
       %float = OpTypeFloat 32
 %_ptr_Function_float = OpTypePointer Function %float
-%float_0_000600000028 = OpConstant %float 0.000600000028
+%float_0_00100000005 = OpConstant %float 0.00100000005
     %float_1 = OpConstant %float 1
         %int = OpTypeInt 32 1
 %isHorizontal = OpSpecConstant %int 0
       %int_0 = OpConstant %int 0
        %bool = OpTypeBool
          %16 = OpSpecConstantOp %bool IEqual %isHorizontal %int_0
-%float_0_00120000006 = OpConstant %float 0.00120000006
+%float_0_00200000009 = OpConstant %float 0.00200000009
     %v2float = OpTypeVector %float 2
 %_ptr_Function_v2float = OpTypePointer Function %v2float
 %_ptr_Input_v2float = OpTypePointer Input %v2float
@@ -100,12 +100,12 @@
          %dv = OpVariable %_ptr_Function_v2float Function
 %indexable_1 = OpVariable %_ptr_Function__arr_float_uint_13 Function
 %indexable_2 = OpVariable %_ptr_Function__arr_float_uint_13 Function
-               OpStore %blurScale %float_0_000600000028
+               OpStore %blurScale %float_0_00100000005
                OpStore %ar %float_1
                OpSelectionMerge %18 None
                OpBranchConditional %16 %17 %18
          %17 = OpLabel
-               OpStore %blurScale %float_0_00120000006
+               OpStore %blurScale %float_0_00200000009
                OpBranch %18
          %18 = OpLabel
          %25 = OpLoad %v2float %vTexCoords

@@ -45,13 +45,13 @@ void main() {
 	vec3 r = reflect(-l, n);
 	vec3 h = normalize(l + c);
 
-	vec3 ambient = 0.2 * color;
+	vec3 ambient = 0.1 * color;
 
-	float diff = max(dot(l, n), 0.0);
+	float diff = max(dot(l, n), 0.0) * 0.7;
 	vec3 diffuse = diff * color;
 
 	float spec = pow(max(dot(n, h), 0.0), 32.0);
-	vec3 specular = vec3(0.2) * spec;
+	vec3 specular = vec3(0.1) * spec;
 
 	outColor = vec4(ambient + diffuse + specular, texColor.a);
 	// outColor = vec4(texture(u_texSampler, v_fragTexCoord).a);
