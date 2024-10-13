@@ -11,15 +11,28 @@ layout (push_constant) uniform DataPushConstant{
 	float exposure;
 } p_const;
 
+const float gamma = 2.2;
+
 void main() {
-	vec3 baseColor = texture(baseSampler, vTexCoords).rgb;
-	vec3 hdrColor = baseColor + texture(bloomSampler, vTexCoords).rgb;
+	if (true) {
+		vec3 baseColor = pow(texture(baseSampler, vTexCoords).rgb, vec3(gamma));
+		vec3 bloomColor = pow(texture(bloomSampler, vTexCoords).rgb, vec3(gamma));
 
-	// vec3 mapped = hdrColor / (hdrColor + vec3(1.0));
-	 vec3 mapped = vec3(1.0) - exp(-hdrColor * p_const.exposure);
+		vec3 hdrColor = baseColor + bloomColor;
 
-	// const float gamma = 2.2;
-	// vec3 result = pow(mapped, vec3(1.0 / gamma));
+		// vec3 mapped = hdrColor / (hdrColor + vec3(1.0));
+		vec3 mapped = vec3(1.0) - exp(-hdrColor * p_const.exposure);
+		vec3 result = pow(mapped, vec3(1.0 / gamma));
+		outColor = vec4(result, 1.0);
+	}
+	else {
+		vec3 baseColor = texture(baseSampler, vTexCoords).rgb;
+		vec3 bloomColor = texture(bloomSampler, vTexCoords).rgb;
 
-	outColor = vec4(mapped, 1.0);
+		vec3 hdrColor = baseColor + bloomColor;
+		// vec3 mapped = hdrColor / (hdrColor + vec3(1.0));
+		vec3 mapped = vec3(1.0) - exp(-hdrColor * p_const.exposure);
+
+		outColor = vec4(mapped, 1.0);
+	}
 }

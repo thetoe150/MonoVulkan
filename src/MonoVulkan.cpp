@@ -1125,6 +1125,7 @@ private:
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
 
         m_swapchainImageFormat = surfaceFormat.format;
+		std::cout << "Swapchain format: " << m_swapchainImageFormat << "\n";
         swapChainExtent = extent;
 		m_swapchainProperties = swapChainSupport; 
     }
