@@ -2381,7 +2381,7 @@ private:
 				const tinygltf::Material& material = model.materials[mesh.primitives[0].material];
 
 				const tinygltf::Texture& baseTexture = model.textures[material.pbrMetallicRoughness.baseColorTexture.index];
-				 meshImages.baseImage = createModelImageFromGltf(objIdx, baseTexture, true);
+				 meshImages.baseImage = createModelImageFromGltf(objIdx, baseTexture, true, false);
 
 				if (material.normalTexture.index == -1) {
 					// add a dummy image
@@ -2390,7 +2390,7 @@ private:
 				}
 				else {
 					const tinygltf::Texture& normalTexture = model.textures[material.normalTexture.index];
-					meshImages.normalImage = createModelImageFromGltf(objIdx, normalTexture, true);
+					meshImages.normalImage = createModelImageFromGltf(objIdx, normalTexture, true, true);
 				}
 
 				if (material.emissiveTexture.index == -1) {
@@ -2400,7 +2400,7 @@ private:
 				}
 				else {
 					const tinygltf::Texture& emissiveTexture = model.textures[material.emissiveTexture.index];
-					meshImages.emissiveImage = createModelImageFromGltf(objIdx, emissiveTexture, true);
+					meshImages.emissiveImage = createModelImageFromGltf(objIdx, emissiveTexture, true, false);
 				}
 
 				m_modelImages[objIdx].push_back(meshImages);
@@ -2408,7 +2408,7 @@ private:
 		}
     }
 
-	Image createModelImageFromGltf(Object objIdx, const tinygltf::Texture& tex, bool isMipmap) {
+	Image createModelImageFromGltf(Object objIdx, const tinygltf::Texture& tex, bool isMipmap, bool isTexLinearSpace) {
 		tinygltf::Image image = m_model[objIdx].images[tex.source];
 
 		int texWidth = image.width;
@@ -2421,6 +2421,14 @@ private:
 		unsigned char* pixels = image.image.data();
 		if (!pixels) {
 			throw std::runtime_error("failed to load texture image!");
+		}
+
+		VkFormat imageFormat{};
+		if (isTexLinearSpace) {
+			imageFormat = VK_FORMAT_R8G8_UNORM;
+		}
+		else {
+			imageFormat = VK_FORMAT_R8G8B8A8_SRGB;
 		}
 
 		VkBuffer stagingBuffer{};
@@ -2436,24 +2444,24 @@ private:
 
 		// stbi_image_free(pixels);
 
-		createImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
+		createImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, imageFormat, VK_IMAGE_TILING_OPTIMAL, 
 			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
 			textureImage, textureImageAlloc);
 
-		transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+		transitionImageLayout(textureImage, imageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
 		copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
 		//transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
 		if (isMipmap)
-			generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+			generateMipmaps(textureImage, imageFormat, texWidth, texHeight, mipLevels);
 		else
-			transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels);
+			transitionImageLayout(textureImage, imageFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels);
 
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		//vkFreeMemory(device, stagingBufferMemory, nullptr);
 		vmaFreeMemory(m_allocator, stagingBufferAlloc);
 
-		VkImageView textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+		VkImageView textureImageView = createImageView(textureImage, imageFormat, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
 		return Image{textureImage, textureImageAlloc, textureImageView};
 	}
 
