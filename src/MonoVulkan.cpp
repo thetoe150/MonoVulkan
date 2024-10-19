@@ -364,7 +364,9 @@ private:
 
     uint32_t m_currentFrame = 0;
 
+	bool m_isHDR{false};
     VkFormat m_renderTargetImageFormat;
+	VkFormat m_depthFormat;
 	GraphicPushConstant m_exposure{0.8};
 
 	VkDescriptorPool imguiDescriptorPool;
@@ -561,6 +563,21 @@ private:
 		if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 			recreatePipelines();
 		}
+		if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) {
+			if (m_isHDR) {
+				m_renderTargetImageFormat = findHDRColorFormat();
+				recreateRenderTargets();
+				m_isHDR = false;
+			}
+			else {
+				m_renderTargetImageFormat = VK_FORMAT_R8G8B8A8_SRGB;
+				recreateRenderTargets();
+				m_isHDR = true;
+			}
+		}
+		// if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+		// 	recreatePipelines();
+		// }
 	}
 
     void updateGraphicUniformBuffer() {
@@ -817,7 +834,7 @@ private:
         vkDestroyInstance(instance, nullptr);
     }
 
-    void cleanupSwapChain() {
+	void cleanupFrameBuffers() {
         vkDestroyImageView(device, m_renderTargets.base.colorRT.view, nullptr);
         vkDestroyImage(device, m_renderTargets.base.colorRT.image, nullptr);
         vmaFreeMemory(m_allocator, m_renderTargets.base.colorRT.allocation);
@@ -849,19 +866,19 @@ private:
         for (auto framebuffer : m_frameBuffers.base) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
-
         for (auto framebuffer : m_frameBuffers.bloom.horizontal) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
-
         for (auto framebuffer : m_frameBuffers.bloom.vertical) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
-
         for (auto framebuffer : m_frameBuffers.combine) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
+	}
 
+    void cleanupSwapChain() {
+		cleanupFrameBuffers();
         for (auto imageView : swapChainImageViews) {
             vkDestroyImageView(device, imageView, nullptr);
         }
@@ -976,6 +993,7 @@ private:
 
         vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
 		m_renderTargetImageFormat = findHDRColorFormat();
+		m_depthFormat = findDepthFormat();
 		std::cout << "m_renderTargetImageFormat: " << vk::to_string(vk::Format(m_renderTargetImageFormat)) << "\n";
     }
 
@@ -1550,6 +1568,21 @@ private:
 
         createGraphicPipelines();
 		createComputePipelines();
+	}
+
+	void recreateRenderTargets() {
+        vkDeviceWaitIdle(device);
+
+		cleanupFrameBuffers();
+        vkDestroyRenderPass(device, m_renderPasses.base, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.bloom, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.combine, nullptr);
+
+		createRenderPasses();
+		recreatePipelines();
+		createRenderTargets();
+        createFramebuffers();
+		createGraphicDescriptorSets();
 	}
 
 	void createPipelines() {
@@ -2289,46 +2322,42 @@ private:
     }
 
     void createRenderTargets() {
-        VkFormat colorFormat = m_renderTargetImageFormat;
-
 		// for base framebuffer
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, colorFormat, 
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, m_renderTargetImageFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.colorRT.image, m_renderTargets.base.colorRT.allocation);
-        m_renderTargets.base.colorRT.view = createImageView(m_renderTargets.base.colorRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        m_renderTargets.base.colorRT.view = createImageView(m_renderTargets.base.colorRT.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, colorFormat, 
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, m_renderTargetImageFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.bloomThresholdRT.image, m_renderTargets.base.bloomThresholdRT.allocation);
-        m_renderTargets.base.bloomThresholdRT.view = createImageView(m_renderTargets.base.bloomThresholdRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        m_renderTargets.base.bloomThresholdRT.view = createImageView(m_renderTargets.base.bloomThresholdRT.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-        VkFormat depthFormat = findDepthFormat();
-
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, depthFormat,
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, m_depthFormat,
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.depthRT.image, m_renderTargets.base.depthRT.allocation);
-        m_renderTargets.base.depthRT.view = createImageView(m_renderTargets.base.depthRT.image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+        m_renderTargets.base.depthRT.view = createImageView(m_renderTargets.base.depthRT.image, m_depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_renderTargetImageFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.colorResRT.image, m_renderTargets.base.colorResRT.allocation);
-        m_renderTargets.base.colorResRT.view = createImageView(m_renderTargets.base.colorResRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        m_renderTargets.base.colorResRT.view = createImageView(m_renderTargets.base.colorResRT.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_renderTargetImageFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.base.bloomThresholdResRT.image, m_renderTargets.base.bloomThresholdResRT.allocation);
-        m_renderTargets.base.bloomThresholdResRT.view = createImageView(m_renderTargets.base.bloomThresholdResRT.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        m_renderTargets.base.bloomThresholdResRT.view = createImageView(m_renderTargets.base.bloomThresholdResRT.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
 		// for bloom framebuffer
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_renderTargetImageFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.bloom1.image, m_renderTargets.bloom1.allocation);
-        m_renderTargets.bloom1.view = createImageView(m_renderTargets.bloom1.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        m_renderTargets.bloom1.view = createImageView(m_renderTargets.bloom1.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, 
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_renderTargetImageFormat, 
 					VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets.bloom2.image, m_renderTargets.bloom2.allocation);
-        m_renderTargets.bloom2.view = createImageView(m_renderTargets.bloom2.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        m_renderTargets.bloom2.view = createImageView(m_renderTargets.bloom2.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -3411,9 +3440,9 @@ private:
 
 		std::array<VkDescriptorPoolSize, 3> poolSizes{};
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) * 2 + 1; // for mesh transform + light uniform +1 for compute uniform
+		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) * 10 + 1; // for mesh transform + light uniform +1 for compute uniform
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount) * 3 + /*for bloom */(1 + 2) * 2; // for base, normal and emissive texture + bloom texture
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount) * 10 + /*for bloom */(1 + 2) * 5; // for base, normal and emissive texture + bloom texture
 		poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		poolSizes[2].descriptorCount = static_cast<uint32_t>(1);
 
@@ -3427,7 +3456,7 @@ private:
 		// 1 for compute descriptor set
 		// 1 for imgui descriptor set
 		// 4 for other passes with each frame in flight
-		poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 2) + 3 + 4; // for graphics and compute
+		poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 10) + 3 + 4; // for graphics and compute
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
