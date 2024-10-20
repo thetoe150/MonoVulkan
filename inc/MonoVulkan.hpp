@@ -84,8 +84,15 @@ const std::string TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
 // const std::string TOWER_MODEL_PATH = "../../res/models/wooden_watch_tower2.obj";
 
 constexpr int SNOWFLAKE_COUNT = 4096;
-constexpr int MAX_VORTEX_COUNT = 10;
 constexpr float CANDLE_ANIMATION_SPEED = 0.5f;
+
+constexpr int MAX_VORTEX_COUNT = 10;
+constexpr float VORTEX_COVER_RANGE = 3.f;
+constexpr float MAX_FORCE = 5.f;
+constexpr float MIN_FORCE = 3.f;
+constexpr float MAX_RADIUS = 15.f;
+constexpr float MIN_RADIUS = 5.f;
+constexpr float PHASE_RANGE = 2;
 
 static auto startTime = std::chrono::high_resolution_clock::now();
 static std::array<float, MAX_VORTEX_COUNT> s_baseRadius;

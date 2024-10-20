@@ -653,6 +653,7 @@ private:
 	}
 
 	void updateContext() {
+		ZoneScopedN("ComputeAnimationCPU");
         auto now = std::chrono::high_resolution_clock::now();
         float currentTime = std::chrono::duration<float, std::chrono::seconds::period>(now - startTime).count();
 
@@ -2877,6 +2878,7 @@ private:
 	}
 
 	std::vector<float> computeWeights(Object obj, unsigned int meshIdx) {
+		ZoneScopedN("ComputeAnimation - weight");
 		// sample animation
 		tinygltf::Model& model = m_model[obj];
 		// WANRING: assume only 1 animation per object
@@ -2933,6 +2935,7 @@ private:
 	}
 
 	void computeMorphTargets(Object obj, unsigned int meshIdx, std::vector<float> weights) {
+		ZoneScopedN("ComputeAnimation - morph target");
 		tinygltf::Model& model = m_model[obj];
 		auto& mesh = model.meshes[meshIdx];
 
@@ -3368,14 +3371,14 @@ private:
 
 		for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
 			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
-			vortex.pos.x = generateRandomFloat(-5.f, 5.f);
-			vortex.pos.y = generateRandomFloat(-5.f, 5.f);
-			vortex.pos.z = generateRandomFloat(-5.f, 5.f);
+			vortex.pos.x = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
+			vortex.pos.y = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
+			vortex.pos.z = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
 			vortex.height = generateRandomFloat(5.f, 10.f);
 
-			s_basePhase[i] = generateRandomFloat(0.f, 3.14f);
-			s_baseForce[i] = generateRandomFloat(2.f, 4.f);
-			s_baseRadius[i] = generateRandomFloat(5.f, 15.f);
+			s_basePhase[i] = generateRandomFloat(0.f, PHASE_RANGE);
+			s_baseForce[i] = generateRandomFloat(MIN_FORCE, MAX_FORCE);
+			s_baseRadius[i] = generateRandomFloat(MIN_RADIUS, MAX_RADIUS);
 			vortex.force = s_baseForce[i];
 			vortex.radius = s_baseRadius[i];
 		}
@@ -3911,6 +3914,8 @@ private:
     }
 
 	void renderSnowflake(VkCommandBuffer commandBuffer) {
+		TracyVkZone(tracyContext, commandBuffer, "Render Snowflake");
+
 		Object object = Object::SNOWFLAKE;
 		tinygltf::Model& model = m_model[object];
 		auto& attributes = model.meshes[0].primitives[0].attributes;
@@ -3953,6 +3958,7 @@ private:
 	}
 
 	void renderCandles(VkCommandBuffer commandBuffer) {
+		TracyVkZone(tracyContext, commandBuffer, "Render Candles");
 		Object object = Object::CANDLE;
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles);
 
@@ -4047,6 +4053,7 @@ private:
 	}
 
 	void renderBloomHorizontal(VkCommandBuffer commandBuffer) {
+		TracyVkZone(tracyContext, commandBuffer, "Render Bloom Horizontal");
 		VkDeviceSize offsets{0};
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom.horizontal);
@@ -4057,6 +4064,7 @@ private:
 	}
 
 	void renderBloomVertical(VkCommandBuffer commandBuffer) {
+		TracyVkZone(tracyContext, commandBuffer, "Render Bloom Vertical");
 		VkDeviceSize offsets{0};
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom.vertical);
@@ -4067,6 +4075,7 @@ private:
 	}
 
 	void renderCombine(VkCommandBuffer commandBuffer) {
+		TracyVkZone(tracyContext, commandBuffer, "Render Combine Pass");
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.combine);
 
 		VkDeviceSize offsets{0};
@@ -4147,6 +4156,7 @@ private:
         }
 
 		{
+			ZoneScopedN("Wait Transfer Animation Buffers");
 			TracyVkZone(tracyContext, commandBuffer, "Transfer animation buffers");
 			transferBuffers(commandBuffer);
 		}
@@ -4176,7 +4186,7 @@ private:
 
 			vkCmdEndRenderPass(commandBuffer);
 
-////////////////////////////////////////////////////////////////
+
 			VkRenderPassBeginInfo bloomPassInfo{};
 			bloomPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			bloomPassInfo.renderPass = m_renderPasses.bloom;
@@ -4229,8 +4239,8 @@ private:
 
 			vkCmdEndRenderPass(commandBuffer);
 		
-			TracyVkCollect(tracyContext, commandBuffer);
 		}
+		TracyVkCollect(tracyContext, commandBuffer);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record graphic command buffer!");
@@ -4252,7 +4262,6 @@ private:
 			vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), (void*)&m_computePushConstant);
 			// FIXME: choose right number of workgroups
 			vkCmdDispatch(commandBuffer, 1024, 1, 1);
-			TracyVkCollect(tracyContext, commandBuffer);
 		}
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -4341,7 +4350,7 @@ private:
 	}
 
     void drawFrame() {
-		ZoneScopedN("Update&Render&Present");
+		ZoneScopedN("Render");
 
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -4354,7 +4363,7 @@ private:
 		{
 			ZoneScopedN("Submit Compute Command Buffer");
 			{
-				ZoneScopedN("Wait for Compute Fence");
+				ZoneScopedN("Wait for previous Compute Fence");
 				vkWaitForFences(device, 1, &m_inFlightComputeFences, VK_TRUE, UINT64_MAX);
 				vkResetFences(device, 1, &m_inFlightComputeFences);
 			}
@@ -4375,6 +4384,7 @@ private:
 				computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
 				computeSubmitInfo.waitSemaphoreCount = sizeof(computeWaitSemaphores) / sizeof(VkSemaphore);
+				// computeSubmitInfo.waitSemaphoreCount = 0;
 				computeSubmitInfo.pWaitSemaphores = computeWaitSemaphores;
 				computeSubmitInfo.pWaitDstStageMask = waitStages;
 				computeSubmitInfo.signalSemaphoreCount = sizeof(computeSignalSemaphores) / sizeof(VkSemaphore);
