@@ -217,7 +217,10 @@ private:
 	}
     m_graphicPipelineLayouts;
 
-	VkDescriptorSetLayout m_computeDescriptorSetLayout;
+	struct {
+		VkDescriptorSetLayout snowflake;
+	} m_computeDescriptorSetLayouts;
+
     VkPipelineLayout m_computePipelineLayout;
 
 	VkPipelineCache m_pipelineCache;
@@ -312,19 +315,23 @@ private:
 	VkBuffer m_towerInstanceBuffer;
 	VmaAllocation instanceBufferAlloc;
 
+	struct {
+		std::array<Buffer, MAX_FRAMES_IN_FLIGHT> snowflake;
+		struct {
+			Buffer candles;
+		} candles;
+	} m_storageBuffers;
 
-	// Compute buffers
-	VkBuffer m_storageBuffer;
-	VmaAllocation m_storageBufferAlloc;
+	struct {
+		struct {
+			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> vortex;
+		} snowflake;
+	} m_computeUniformBuffers;
 
 	SpecializationConstant m_graphicSpecConstant;
 	GraphicPushConstant m_graphicPushConstant;
 
 	ComputePushConstant m_computePushConstant;
-
-	VkBuffer m_vortexUniformBuffer;
-	VmaAllocation m_vortexUniformBufferAlloc;
-	void* m_vortexUniformBufferMapped;
 
     VkDescriptorPool m_descriptorPool;
 
@@ -339,7 +346,9 @@ private:
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> combine;
 	} m_graphicDescriptorSets;
 
-    VkDescriptorSet m_computeDescriptorSets;
+    struct {
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> snowflake; 
+	} m_computeDescriptorSets;
 
     std::vector<VkCommandBuffer> m_graphicCommandBuffers;
     VkCommandBuffer m_computeCommandBuffer;
@@ -640,7 +649,7 @@ private:
 	void updateComputeUniformBuffer() {
 		ZoneScopedN("Update Compute Vortex Uniform Buffer");
 		for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
-			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
+			Vortex& vortex = ((Vortex*)m_computeUniformBuffers.snowflake.vortex[m_currentFrame].raw)[i];
 
 			vortex.radius = s_baseRadius[i] * std::abs(std::sin(m_lastTime * 0.1f + s_basePhase[i]));
 			vortex.force = s_baseForce[i] * std::sin(m_lastTime * 0.2f);
@@ -725,12 +734,16 @@ private:
         vkDestroyRenderPass(device, m_renderPasses.bloom, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.combine, nullptr);
 
-		vkDestroyBuffer(device, m_vortexUniformBuffer, nullptr);
-		vmaUnmapMemory(m_allocator, m_vortexUniformBufferAlloc);
-		vmaFreeMemory(m_allocator, m_vortexUniformBufferAlloc);
+		for(Buffer& buffer : m_computeUniformBuffers.snowflake.vortex) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaUnmapMemory(m_allocator, buffer.allocation);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
 
-		vkDestroyBuffer(device, m_storageBuffer, nullptr);
-		vmaFreeMemory(m_allocator, m_storageBufferAlloc);
+		for(auto& buffer : m_storageBuffers.snowflake) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
 
         vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
@@ -740,7 +753,7 @@ private:
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.meshMaterial, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.bloom, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.combine, nullptr);
-        vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayouts.snowflake, nullptr);
 
 		for(auto& buffer : m_vertexBuffers.snowflake) {
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
@@ -1512,28 +1525,38 @@ private:
 	}
 
 	void createComputeDescriptorSetLayouts() {
-		VkDescriptorSetLayoutBinding storageBinding{};
-		storageBinding.binding = 0;
-		storageBinding.descriptorCount = 1;
-		storageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		storageBinding.pImmutableSamplers = nullptr;
-		storageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		// snowflake
+		{
+			VkDescriptorSetLayoutBinding inputStorageBinding{};
+			inputStorageBinding.binding = 0;
+			inputStorageBinding.descriptorCount = 1;
+			inputStorageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			inputStorageBinding.pImmutableSamplers = nullptr;
+			inputStorageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-		VkDescriptorSetLayoutBinding uboBinding{};
-		uboBinding.binding = 1;
-		uboBinding.descriptorCount = 1;
-		uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		uboBinding.pImmutableSamplers = nullptr;
-		uboBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+			VkDescriptorSetLayoutBinding outputStorageBinding{};
+			outputStorageBinding.binding = 1;
+			outputStorageBinding.descriptorCount = 1;
+			outputStorageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			outputStorageBinding.pImmutableSamplers = nullptr;
+			outputStorageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-		std::array<VkDescriptorSetLayoutBinding, 2> bindings = {storageBinding, uboBinding};
-		VkDescriptorSetLayoutCreateInfo layoutInfo{};
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-		layoutInfo.pBindings = bindings.data();
+			VkDescriptorSetLayoutBinding uboBinding{};
+			uboBinding.binding = 2;
+			uboBinding.descriptorCount = 1;
+			uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			uboBinding.pImmutableSamplers = nullptr;
+			uboBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_computeDescriptorSetLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create descriptor set layout!");
+			std::array<VkDescriptorSetLayoutBinding, 3> bindings = {inputStorageBinding, outputStorageBinding, uboBinding};
+			VkDescriptorSetLayoutCreateInfo layoutInfo{};
+			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+			layoutInfo.pBindings = bindings.data();
+
+			if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_computeDescriptorSetLayouts.snowflake) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create descriptor set layout!");
+			}
 		}
 	}
 
@@ -2182,7 +2205,7 @@ private:
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = &m_computeDescriptorSetLayout;
+		pipelineLayoutInfo.pSetLayouts = &m_computeDescriptorSetLayouts.snowflake;
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 
@@ -3362,25 +3385,31 @@ private:
 	}
 
     void createComputeUniformBuffers() {
-		m_vortexUniformBufferMapped = static_cast<void*>(new Vortex[MAX_VORTEX_COUNT]);
+		m_computeUniformBuffers.snowflake.vortex[0].raw = static_cast<void*>(new Vortex[MAX_VORTEX_COUNT]);
+		m_computeUniformBuffers.snowflake.vortex[1].raw = static_cast<void*>(new Vortex[MAX_VORTEX_COUNT]);
 
 		VkDeviceSize bufferSize = sizeof(Vortex) * MAX_VORTEX_COUNT;
 		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-				, m_vortexUniformBuffer, m_vortexUniformBufferAlloc);
-		vmaMapMemory(m_allocator, m_vortexUniformBufferAlloc, &m_vortexUniformBufferMapped);
+				, m_computeUniformBuffers.snowflake.vortex[0].buffer, m_computeUniformBuffers.snowflake.vortex[0].allocation);
+		vmaMapMemory(m_allocator, m_computeUniformBuffers.snowflake.vortex[0].allocation, &m_computeUniformBuffers.snowflake.vortex[0].raw);
+
+		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+				, m_computeUniformBuffers.snowflake.vortex[1].buffer, m_computeUniformBuffers.snowflake.vortex[1].allocation);
+		vmaMapMemory(m_allocator, m_computeUniformBuffers.snowflake.vortex[1].allocation, &m_computeUniformBuffers.snowflake.vortex[1].raw);
 
 		for(unsigned int i = 0; i < MAX_VORTEX_COUNT; i++){
-			Vortex& vortex = ((Vortex*)m_vortexUniformBufferMapped)[i];
-			vortex.pos.x = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
-			vortex.pos.y = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
-			vortex.pos.z = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
-			vortex.height = generateRandomFloat(5.f, 10.f);
+			Vortex& vortex0 = ((Vortex*)m_computeUniformBuffers.snowflake.vortex[0].raw)[i];
+			Vortex& vortex1 = ((Vortex*)m_computeUniformBuffers.snowflake.vortex[1].raw)[i];
+			vortex0.pos.x = vortex1.pos.x = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
+			vortex0.pos.y = vortex1.pos.y = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
+			vortex0.pos.z = vortex1.pos.z = generateRandomFloat(-VORTEX_COVER_RANGE, VORTEX_COVER_RANGE);
+			vortex0.height = vortex1.height = generateRandomFloat(5.f, 10.f);
 
 			s_basePhase[i] = generateRandomFloat(0.f, PHASE_RANGE);
 			s_baseForce[i] = generateRandomFloat(MIN_FORCE, MAX_FORCE);
 			s_baseRadius[i] = generateRandomFloat(MIN_RADIUS, MAX_RADIUS);
-			vortex.force = s_baseForce[i];
-			vortex.radius = s_baseRadius[i];
+			vortex0.force = vortex1.force = s_baseForce[i];
+			vortex0.radius = vortex1.radius = s_baseRadius[i];
 		}
 	}
 
@@ -3424,9 +3453,13 @@ private:
 		vmaUnmapMemory(m_allocator, stagingBufferAlloc);
 
 		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-			   , m_storageBuffer, m_storageBufferAlloc);
+			   , m_storageBuffers.snowflake[0].buffer, m_storageBuffers.snowflake[0].allocation);
 
-		copyBuffer(stagingBuffer, m_storageBuffer, bufferSize);
+		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+			   , m_storageBuffers.snowflake[1].buffer, m_storageBuffers.snowflake[1].allocation);
+
+		copyBuffer(stagingBuffer, m_storageBuffers.snowflake[0].buffer, bufferSize);
+		copyBuffer(stagingBuffer, m_storageBuffers.snowflake[1].buffer, bufferSize);
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vmaFreeMemory(m_allocator, stagingBufferAlloc);
 	}
@@ -3723,8 +3756,8 @@ private:
 	}
 
 	void createComputeDescriptorSets() {
-		std::array<VkDescriptorSetLayout, 1> 
-			layouts = {m_computeDescriptorSetLayout};
+		std::array<VkDescriptorSetLayout, 2> 
+			layouts = {m_computeDescriptorSetLayouts.snowflake, m_computeDescriptorSetLayouts.snowflake};
 
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -3732,38 +3765,78 @@ private:
 		allocInfo.descriptorPool = m_descriptorPool;
 		allocInfo.pSetLayouts = layouts.data();
 
-		if (vkAllocateDescriptorSets(device, &allocInfo, &m_computeDescriptorSets) != VK_SUCCESS)
+		if (vkAllocateDescriptorSets(device, &allocInfo, m_computeDescriptorSets.snowflake.data()) != VK_SUCCESS)
 			throw std::runtime_error("failed to allocate compute descriptor sets!");
 
-		VkDescriptorBufferInfo storageBufferInfo{};
-		storageBufferInfo.buffer = m_storageBuffer;
-		storageBufferInfo.offset = 0;
-		// FIXME: range is sus
-		storageBufferInfo.range = VK_WHOLE_SIZE;
+		VkDescriptorBufferInfo inputStorageBufferInfo{};
+		inputStorageBufferInfo.buffer = m_storageBuffers.snowflake[0].buffer;
+		inputStorageBufferInfo.offset = 0;
+		inputStorageBufferInfo.range = VK_WHOLE_SIZE;
+
+		VkDescriptorBufferInfo outputStorageBufferInfo{};
+		outputStorageBufferInfo.buffer = m_storageBuffers.snowflake[1].buffer;
+		outputStorageBufferInfo.offset = 0;
+		outputStorageBufferInfo.range = VK_WHOLE_SIZE;
 
 		VkDescriptorBufferInfo uboBufferInfo{};
-		uboBufferInfo.buffer = m_vortexUniformBuffer;
+		uboBufferInfo.buffer = m_computeUniformBuffers.snowflake.vortex[0].buffer;
 		uboBufferInfo.offset = 0;
-		// FIXME: range is sus
 		uboBufferInfo.range = VK_WHOLE_SIZE;
 
-		std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+		std::array<VkWriteDescriptorSet, 6> descriptorWrites{};
 
+		// write for the first frame descriptorset
 		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[0].dstSet = m_computeDescriptorSets;
+		descriptorWrites[0].dstSet = m_computeDescriptorSets.snowflake[0];
 		descriptorWrites[0].dstBinding = 0;
 		descriptorWrites[0].dstArrayElement = 0;
 		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		descriptorWrites[0].descriptorCount = 1;
-		descriptorWrites[0].pBufferInfo = &storageBufferInfo;
+		descriptorWrites[0].pBufferInfo = &inputStorageBufferInfo;
 
 		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[1].dstSet = m_computeDescriptorSets;
+		descriptorWrites[1].dstSet = m_computeDescriptorSets.snowflake[0];
 		descriptorWrites[1].dstBinding = 1;
 		descriptorWrites[1].dstArrayElement = 0;
-		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		descriptorWrites[1].descriptorCount = 1;
-		descriptorWrites[1].pBufferInfo = &uboBufferInfo;
+		descriptorWrites[1].pBufferInfo = &outputStorageBufferInfo;
+
+		descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[2].dstSet = m_computeDescriptorSets.snowflake[0];
+		descriptorWrites[2].dstBinding = 2;
+		descriptorWrites[2].dstArrayElement = 0;
+		descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[2].descriptorCount = 1;
+		descriptorWrites[2].pBufferInfo = &uboBufferInfo;
+
+		// write for the second frame descriptorset
+		uboBufferInfo.buffer = m_computeUniformBuffers.snowflake.vortex[1].buffer;
+
+		descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[3].dstSet = m_computeDescriptorSets.snowflake[1];
+		descriptorWrites[3].dstBinding = 0;
+		descriptorWrites[3].dstArrayElement = 0;
+		descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		descriptorWrites[3].descriptorCount = 1;
+		descriptorWrites[3].pBufferInfo = &outputStorageBufferInfo;
+
+		descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[4].dstSet = m_computeDescriptorSets.snowflake[1];
+		descriptorWrites[4].dstBinding = 1;
+		descriptorWrites[4].dstArrayElement = 0;
+		descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		descriptorWrites[4].descriptorCount = 1;
+		descriptorWrites[4].pBufferInfo = &inputStorageBufferInfo;
+
+		descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[5].dstSet = m_computeDescriptorSets.snowflake[1];
+		descriptorWrites[5].dstBinding = 2;
+		descriptorWrites[5].dstArrayElement = 0;
+		descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[5].descriptorCount = 1;
+		descriptorWrites[5].pBufferInfo = &uboBufferInfo;
+
 
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, 0);
 	}
@@ -3936,7 +4009,7 @@ private:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		VkBuffer instanceBuffer{m_storageBuffer};
+		VkBuffer instanceBuffer{m_storageBuffers.snowflake[m_currentFrame].buffer};
 		uint32_t instanceCount{SNOWFLAKE_COUNT};
 		size_t positionBufferOffset = model.accessors[attributes["POSITION"]].byteOffset;
 
@@ -4258,7 +4331,7 @@ private:
 		{
 			TracyVkZone(tracyContext, commandBuffer, "Dispatch Snowflake Compute");
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets, 0, nullptr);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets.snowflake[m_currentFrame], 0, nullptr);
 			vkCmdPushConstants(commandBuffer, m_computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), (void*)&m_computePushConstant);
 			// FIXME: choose right number of workgroups
 			vkCmdDispatch(commandBuffer, 1024, 1, 1);

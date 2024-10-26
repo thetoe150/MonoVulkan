@@ -20,11 +20,15 @@ layout (push_constant) uniform DataPushConstant{
 	float deltaTime;
 } p_const;
 
-layout (std140, binding = 0) buffer SnowflakeStorageBuffer{
-	Snowflake s_snowflake[ ];
+layout (std140, binding = 0) buffer inputSnowflakeStorageBuffer{
+	Snowflake s_inputSnowflakes[ ];
 };
 
-layout (binding = 1) uniform VortexUniformBuffer{
+layout (std140, binding = 1) buffer outputSnowflakeStorageBuffer{
+	Snowflake s_outputSnowflakes[ ];
+};
+
+layout (binding = 2) uniform VortexUniformBuffer{
 	Vortex u_vortex[vortexCount];
 };
 
@@ -44,11 +48,11 @@ void main(){
 	for (int i = 0; i < vortexCount; i++)
 	{
 		// distance check
-		float y_distance = abs(u_vortex[i].pos.y - s_snowflake[index].pos.y);
+		float y_distance = abs(u_vortex[i].pos.y - s_inputSnowflakes[index].pos.y);
 		if (y_distance >= u_vortex[i].height)
 			continue;
 
-		float xz_distance = distance(u_vortex[i].pos.xz, s_snowflake[index].pos.xz);
+		float xz_distance = distance(u_vortex[i].pos.xz, s_inputSnowflakes[index].pos.xz);
 		if (xz_distance > 2 * u_vortex[i].radius)
 			continue;
 
@@ -61,7 +65,7 @@ void main(){
 
 		// calculate direction
 		vec2 dir;
-		vec2 origin_vec = s_snowflake[index].pos.xz - u_vortex[i].pos.xz;
+		vec2 origin_vec = s_inputSnowflakes[index].pos.xz - u_vortex[i].pos.xz;
 		vec2 perpen_vec = vec2(1, - origin_vec.x / origin_vec.y);
 		dir = normalize(perpen_vec);
 
@@ -72,24 +76,24 @@ void main(){
 	}
 
 	// apply force
-	float weight_force = s_snowflake[index].weight * 9.8f;
+	float weight_force = s_inputSnowflakes[index].weight * 9.8f;
 	vec3 total_force = weight_force * vec3(0, -1, 0) 
 		+ vec3(sum_vortex_force.direction.x, 0, sum_vortex_force.direction.y) * sum_vortex_force.value;
 
 	vec3 d = vec3(total_force) * p_const.deltaTime * 0.1;
 
 	// bound snowflake pos
-	s_snowflake[index].pos += d;
-	if (s_snowflake[index].pos.x < -16.f)
-		s_snowflake[index].pos.x = 16.f;
-	else if (s_snowflake[index].pos.x > 16.f)
-		s_snowflake[index].pos.x = -16.f;
+	s_outputSnowflakes[index].pos += d;
+	if (s_outputSnowflakes[index].pos.x < -16.f)
+		s_outputSnowflakes[index].pos.x = 16.f;
+	else if (s_outputSnowflakes[index].pos.x > 16.f)
+		s_outputSnowflakes[index].pos.x = -16.f;
 
-	if (s_snowflake[index].pos.y < -16.f)
-		s_snowflake[index].pos.y = 16.f;
+	if (s_outputSnowflakes[index].pos.y < -16.f)
+		s_outputSnowflakes[index].pos.y = 16.f;
 
-	if (s_snowflake[index].pos.z < -16.f)
-		s_snowflake[index].pos.z = 16.f;
-	else if (s_snowflake[index].pos.z > 16.f)
-		s_snowflake[index].pos.z = -16.f;
+	if (s_outputSnowflakes[index].pos.z < -16.f)
+		s_outputSnowflakes[index].pos.z = 16.f;
+	else if (s_outputSnowflakes[index].pos.z > 16.f)
+		s_outputSnowflakes[index].pos.z = -16.f;
 }
