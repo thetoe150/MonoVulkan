@@ -351,7 +351,7 @@ private:
 	} m_computeDescriptorSets;
 
     std::vector<VkCommandBuffer> m_graphicCommandBuffers;
-    VkCommandBuffer m_computeCommandBuffer;
+    std::vector<VkCommandBuffer> m_computeCommandBuffers;
     VkCommandBuffer tracyCommandBuffer;
 
     std::vector<VkSemaphore> m_imageAvailableSemaphores;
@@ -359,8 +359,8 @@ private:
     std::vector<VkSemaphore> m_computeStartingSemaphores;
 
     std::vector<VkFence> m_inFlightGraphicFences;
-    VkFence m_inFlightComputeFences;
-	VkSemaphore m_computeFinishedSemaphore;
+    std::vector<VkFence> m_inFlightComputeFences;
+    std::vector<VkSemaphore> m_computeFinishedSemaphores;
 
 	// ----------------------------- Vulkan Info struct ----------------------------------
 	VkPhysicalDeviceProperties m_physicalDeviceProperties;
@@ -829,9 +829,10 @@ private:
             vkDestroySemaphore(device, m_imageAvailableSemaphores[i], nullptr);
             vkDestroySemaphore(device, m_computeStartingSemaphores[i], nullptr);
             vkDestroyFence(device, m_inFlightGraphicFences[i], nullptr);
+
+			vkDestroyFence(device, m_inFlightComputeFences[i], nullptr);
+			vkDestroySemaphore(device, m_computeFinishedSemaphores[i], nullptr);
         }
-		vkDestroyFence(device, m_inFlightComputeFences, nullptr);
-		vkDestroySemaphore(device, m_computeFinishedSemaphore, nullptr);
 
         vkDestroyCommandPool(device, m_graphicCommandPool, nullptr);
         vkDestroyCommandPool(device, m_computeCommandPool, nullptr);
@@ -3953,7 +3954,6 @@ private:
 
     void createCommandBuffers() {
         m_graphicCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
         VkCommandBufferAllocateInfo graphicAllocInfo{};
         graphicAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         graphicAllocInfo.commandPool = m_graphicCommandPool;
@@ -3964,13 +3964,14 @@ private:
             throw std::runtime_error("failed to allocate command buffers!");
         }
 
+        m_computeCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 		VkCommandBufferAllocateInfo	computeAllocInfo{};
         computeAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         computeAllocInfo.commandPool = m_computeCommandPool;
         computeAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        computeAllocInfo.commandBufferCount = 1;
+        computeAllocInfo.commandBufferCount = (uint32_t) m_computeCommandBuffers.size();
 
-        if (vkAllocateCommandBuffers(device, &computeAllocInfo, &m_computeCommandBuffer) != VK_SUCCESS) {
+        if (vkAllocateCommandBuffers(device, &computeAllocInfo, m_computeCommandBuffers.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate command buffers!");
         }
 
@@ -4329,6 +4330,26 @@ private:
 		}
 
 		{
+			// uint32_t lastFrame = (m_currentFrame - 1) % MAX_FRAMES_IN_FLIGHT;
+
+			// VkBufferMemoryBarrier lastSnowflakeStorageBarrier{};
+			// lastSnowflakeStorageBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			// lastSnowflakeStorageBarrier.srcAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT; 
+			// lastSnowflakeStorageBarrier.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+			// lastSnowflakeStorageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			// lastSnowflakeStorageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			// lastSnowflakeStorageBarrier.buffer = m_storageBuffers.snowflake[lastFrame].buffer;
+			// lastSnowflakeStorageBarrier.size = VK_WHOLE_SIZE;
+			// lastSnowflakeStorageBarrier.offset = 0;
+
+			// vkCmdPipelineBarrier(commandBuffer,
+			// 	VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+			// 	0, nullptr,
+			// 	1, &lastSnowflakeStorageBarrier,
+			// 	0, nullptr);
+		}
+
+		{
 			TracyVkZone(tracyContext, commandBuffer, "Dispatch Snowflake Compute");
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipeline);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_computePipelineLayout, 0, 1, &m_computeDescriptorSets.snowflake[m_currentFrame], 0, nullptr);
@@ -4347,6 +4368,9 @@ private:
         m_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 		m_computeStartingSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         m_inFlightGraphicFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+		m_computeFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        m_inFlightComputeFences.resize(MAX_FRAMES_IN_FLIGHT);
 
 		// we can submit an empty command buffer to signal the m_renderFinishedSemaphores but
 		// doing this way creating a timeline semaphore is cooler
@@ -4369,9 +4393,13 @@ private:
                 vkCreateFence(device, &fenceInfo, nullptr, &m_inFlightGraphicFences[i]) != VK_SUCCESS ){
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
+
+			CHECK_VK_RESULT(vkCreateFence(device, &fenceInfo, nullptr, &m_inFlightComputeFences[i])
+						, "fail to create Compute fence");
+
+			CHECK_VK_RESULT(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_computeFinishedSemaphores[i])
+					  , "failed to create compute synchronization objects for a frame!");
         }
-		CHECK_VK_RESULT(vkCreateFence(device, &fenceInfo, nullptr, &m_inFlightComputeFences)
-					, "fail to create Compute fence");
 
 		// signal the last index computeStartingSemaphore because if we don't do manually, noone do :(
 		VkSubmitInfo submitInfo{};
@@ -4382,11 +4410,6 @@ private:
 				  ,"fail to submit semaphore signaling to queue");
 		CHECK_VK_RESULT(vkQueueWaitIdle(m_graphicQueue)
 				  ,"fail to wait for semaphore signling queuing");
-
-		VkSemaphoreCreateInfo computeSemaphoreInfo{};
-        computeSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		CHECK_VK_RESULT(vkCreateSemaphore(device, &computeSemaphoreInfo, nullptr, &m_computeFinishedSemaphore)
-				  , "failed to create compute synchronization objects for a frame!");
     }
 
 
@@ -4437,8 +4460,8 @@ private:
 			ZoneScopedN("Submit Compute Command Buffer");
 			{
 				ZoneScopedN("Wait for previous Compute Fence");
-				vkWaitForFences(device, 1, &m_inFlightComputeFences, VK_TRUE, UINT64_MAX);
-				vkResetFences(device, 1, &m_inFlightComputeFences);
+				vkWaitForFences(device, 1, &m_inFlightComputeFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+				vkResetFences(device, 1, &m_inFlightComputeFences[m_currentFrame]);
 			}
 			{
 				// NOTE: only update Uniform buffer after the command buffer with the same m_currentFrame (the last 2 frames) have FINISHED.
@@ -4447,25 +4470,25 @@ private:
 				updateComputePushConstant();
 
 				ZoneScopedN("Dispatch Compute Command Buffer");
-				vkResetCommandBuffer(m_computeCommandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
-				recordComputeCommandBuffer(m_computeCommandBuffer);
+				vkResetCommandBuffer(m_computeCommandBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+				recordComputeCommandBuffer(m_computeCommandBuffers[m_currentFrame]);
 
 				VkSubmitInfo computeSubmitInfo{};
-				VkSemaphore computeWaitSemaphores[] = {m_computeStartingSemaphores[(m_currentFrame - 1) % 2]};
+				VkSemaphore* computeWaitSemaphores = nullptr;
 				VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
-				VkSemaphore computeSignalSemaphores[] = {m_computeFinishedSemaphore};
+				VkSemaphore computeSignalSemaphores[] = {m_computeFinishedSemaphores[m_currentFrame]};
 				computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-				computeSubmitInfo.waitSemaphoreCount = sizeof(computeWaitSemaphores) / sizeof(VkSemaphore);
-				// computeSubmitInfo.waitSemaphoreCount = 0;
+				// computeSubmitInfo.waitSemaphoreCount = sizeof(computeWaitSemaphores) / sizeof(VkSemaphore);
+				computeSubmitInfo.waitSemaphoreCount = 0;
 				computeSubmitInfo.pWaitSemaphores = computeWaitSemaphores;
 				computeSubmitInfo.pWaitDstStageMask = waitStages;
 				computeSubmitInfo.signalSemaphoreCount = sizeof(computeSignalSemaphores) / sizeof(VkSemaphore);
 				computeSubmitInfo.pSignalSemaphores = computeSignalSemaphores;
 				computeSubmitInfo.commandBufferCount = 1;
-				computeSubmitInfo.pCommandBuffers = &m_computeCommandBuffer;
+				computeSubmitInfo.pCommandBuffers = &m_computeCommandBuffers[m_currentFrame];
 
-				CHECK_VK_RESULT(vkQueueSubmit(m_computeQueue, 1, &computeSubmitInfo, m_inFlightComputeFences)
+				CHECK_VK_RESULT(vkQueueSubmit(m_computeQueue, 1, &computeSubmitInfo, m_inFlightComputeFences[m_currentFrame])
 					, "fail to submit compute command buffer");
 				// vkQueueWaitIdle(m_computeQueue);
 			}
@@ -4499,7 +4522,7 @@ private:
 			VkSubmitInfo submitInfo{};
 			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-			VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame], m_computeFinishedSemaphore};
+			VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame], m_computeFinishedSemaphores[m_currentFrame]};
 			VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT};
 			submitInfo.waitSemaphoreCount = sizeof(waitSemaphores) / sizeof(VkSemaphore);
 			submitInfo.pWaitSemaphores = waitSemaphores;
@@ -4508,7 +4531,7 @@ private:
 			submitInfo.commandBufferCount = 1;
 			submitInfo.pCommandBuffers = &m_graphicCommandBuffers[m_currentFrame];
 
-			VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_currentFrame], m_computeStartingSemaphores[m_currentFrame]};
+			VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_currentFrame]};
 			submitInfo.signalSemaphoreCount = sizeof(signalSemaphores) / sizeof(VkSemaphore);
 			submitInfo.pSignalSemaphores = signalSemaphores;
 

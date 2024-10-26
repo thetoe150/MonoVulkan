@@ -83,7 +83,7 @@ void main(){
 	vec3 d = vec3(total_force) * p_const.deltaTime * 0.1;
 
 	// bound snowflake pos
-	s_outputSnowflakes[index].pos += d;
+	s_outputSnowflakes[index].pos = s_inputSnowflakes[index].pos + d;
 	if (s_outputSnowflakes[index].pos.x < -16.f)
 		s_outputSnowflakes[index].pos.x = 16.f;
 	else if (s_outputSnowflakes[index].pos.x > 16.f)
