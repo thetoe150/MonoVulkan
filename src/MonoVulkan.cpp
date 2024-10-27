@@ -1,9 +1,6 @@
 #include "MonoVulkan.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
-#include "vulkan/vulkan_core.h"
-#include "vulkan/vulkan_enums.hpp"
-#include "vulkan/vulkan_to_string.hpp"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -244,7 +241,6 @@ private:
 	std::map<Object, tinygltf::Model> m_model;
 	std::map<Object, std::vector< glm::mat4>> m_modelMeshTransforms;
 
-	std::map<Object, std::vector<std::vector< glm::vec3>>> m_modelMeshAnimPositions;
 	std::map<Object, std::vector<std::vector< float>>> m_modelMeshFrameWeights;
 
 	typedef struct {
@@ -282,11 +278,18 @@ private:
 	}
 	m_samplers;
 
-	typedef struct {
+	struct Buffer{
 		void* raw;
+		uint32_t size;
 		VkBuffer buffer;
 		VmaAllocation allocation;
-	} Buffer;
+
+		Buffer()
+		: size(0),
+		  buffer(VK_NULL_HANDLE),
+		  allocation(VK_NULL_HANDLE)
+		{}
+	};
 
 	struct {
 		std::vector<Buffer> snowflake;
@@ -308,19 +311,20 @@ private:
 		} candles;
 	} m_graphicUniformBuffers;
 
-	std::map<Object, std::map<int, VkBuffer>> m_animBuffer;
-	std::map<Object, std::map<int, VmaAllocation>> m_animBufferAlloc;
-
     std::vector<VertexInstance> m_towerInstanceRaw;
 	VkBuffer m_towerInstanceBuffer;
 	VmaAllocation instanceBufferAlloc;
 
 	struct {
 		std::array<Buffer, MAX_FRAMES_IN_FLIGHT> snowflake;
-		struct {
-			Buffer candles;
-		} candles;
+		// per meshs in model
+		std::vector<Buffer> candles;
 	} m_storageBuffers;
+
+	struct {
+		std::vector<Buffer> candles;
+	} m_animBuffers;
+	
 
 	struct {
 		struct {
@@ -759,9 +763,11 @@ private:
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
-		for(auto& buffer : m_vertexBuffers.candles) {
-			vkDestroyBuffer(device, buffer.buffer, nullptr);
-			vmaFreeMemory(m_allocator, buffer.allocation);
+		// for(auto& buffer : m_vertexBuffers.candles) {
+		for(unsigned int i = 0; i < m_vertexBuffers.candles.size(); i++) {
+			std::cout << "i : " <<i << std::endl;
+			vkDestroyBuffer(device, m_vertexBuffers.candles[i].buffer, nullptr);
+			vmaFreeMemory(m_allocator, m_vertexBuffers.candles[i].allocation);
 		}
 		for(auto& buffer : m_vertexBuffers.quad) {
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
@@ -795,13 +801,15 @@ private:
 			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.lighting[i].allocation);
 		}
 
+		for (auto& buffer : m_animBuffers.candles) {
+			if (buffer.size != 0) {
+				vkDestroyBuffer(device, buffer.buffer, nullptr);
+				vmaFreeMemory(m_allocator, buffer.allocation);
+				free(buffer.raw);
+			}
+		}
+
 		Object objIdx = Object::CANDLE;
-		for (auto& bufferIdx : m_animBuffer[objIdx]) {
-			vkDestroyBuffer(device, bufferIdx.second, nullptr);
-		}
-		for (auto& bufferAllocIdx : m_animBufferAlloc[objIdx]) {
-			vmaFreeMemory(m_allocator, bufferAllocIdx.second);
-		}
 
 		for (auto& meshImage : m_modelImages[objIdx]) {
 			vkDestroyImage(device, meshImage.baseImage.image, nullptr);
@@ -2888,15 +2896,16 @@ private:
 #if 1
 	void computeAnimation(Object obj) {
 		tinygltf::Model& model = m_model[obj];
-		m_modelMeshAnimPositions[obj].resize(model.meshes.size());
+		m_animBuffers.candles.resize(model.meshes.size());
 		
 		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
 			auto weights = computeWeights(obj, meshIdx);
+			// check if there is animation from gltf sampler side
 			if (!weights.empty()) {
 				computeMorphTargets(obj, meshIdx, weights);
 			}
 			else {
-				m_modelMeshAnimPositions[obj][meshIdx] = {};
+				m_animBuffers.candles[meshIdx] = {};
 			}
 		}
 	}
@@ -2905,7 +2914,7 @@ private:
 		ZoneScopedN("ComputeAnimation - weight");
 		// sample animation
 		tinygltf::Model& model = m_model[obj];
-		// WANRING: assume only 1 animation per object
+		// WARNING: assume only 1 animation per object
 		tinygltf::Animation& anims = model.animations[0];
 		std::vector<tinygltf::AnimationChannel>& channels = anims.channels;
 		std::vector<tinygltf::AnimationChannel>::iterator channel = std::find_if(channels.begin(), channels.end(), [&model, meshIdx](tinygltf::AnimationChannel& i_channel){
@@ -2969,23 +2978,27 @@ private:
 		const tinygltf::Buffer& posBuffer = model.buffers[posView.buffer];
 		
 		const unsigned char* pData = posBuffer.data.data() + posView.byteOffset + posAccessor.byteOffset;
-		const glm::vec3* pPos = reinterpret_cast<const glm::vec3*>(pData);
-		m_modelMeshAnimPositions[obj][meshIdx].resize(posAccessor.count);
+		// TODO: should be the right type of accessor instead of glm::vec3
+		if (m_animBuffers.candles[meshIdx].size == 0){
+			m_animBuffers.candles[meshIdx].raw = (unsigned char*) malloc(posAccessor.count * sizeof(glm::vec3));
+			m_animBuffers.candles[meshIdx].size = posAccessor.count * sizeof(glm::vec3);
+		}
+		memcpy(m_animBuffers.candles[meshIdx].raw, pData, posAccessor.count * sizeof(glm::vec3));
+		glm::vec3* pPosVec = reinterpret_cast<glm::vec3*>(m_animBuffers.candles[meshIdx].raw);
 
-		memcpy(m_modelMeshAnimPositions[obj][meshIdx].data(), pPos, posAccessor.count * sizeof(glm::vec3));
-
-		// compute morph target
+		// accumulate with each morph target
 		auto& morphTargets = mesh.primitives[0].targets;
 		for (unsigned int morphIdx = 0; morphIdx < morphTargets.size(); morphIdx++) {
 			unsigned int morphAccessorIdx = morphTargets[morphIdx]["POSITION"];
 			const tinygltf::Accessor& morphAccessor = model.accessors[morphAccessorIdx];
+			assert(posAccessor.count == morphAccessor.count);
 			const tinygltf::BufferView& bufferView = model.bufferViews[morphAccessor.bufferView];
 			const tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
-			const unsigned char* pData = buffer.data.data() + bufferView.byteOffset + morphAccessor.byteOffset;
-			const glm::vec3* pPos = reinterpret_cast<const glm::vec3*>(pData);
+			const unsigned char* pMorphData = buffer.data.data() + bufferView.byteOffset + morphAccessor.byteOffset;
+			const glm::vec3* pMorphVec = reinterpret_cast<const glm::vec3*>(pMorphData);
 
 			for (unsigned int vertexIdx = 0; vertexIdx < morphAccessor.count; vertexIdx++){
-				m_modelMeshAnimPositions[obj][meshIdx][vertexIdx] += pPos[vertexIdx] * weights[morphIdx];
+				pPosVec[vertexIdx] += pMorphVec[vertexIdx] * weights[morphIdx];
 			}
 		}
 	}
@@ -3196,24 +3209,17 @@ private:
 				VkBuffer stagingBuffer;
 				VmaAllocation stagingBufferAlloc{};
 
-				VkBuffer vertexBuffer;
-				VmaAllocation vertexBufferAlloc{};
-
 				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
 				void* data;
 				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
 					memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
 				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
-				copyBuffer(stagingBuffer, vertexBuffer, view.byteLength);
-
-				newBuffer.buffer = vertexBuffer;
-				newBuffer.allocation = vertexBufferAlloc;
+				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+				 , m_vertexBuffers.candles[viewIdx].buffer, m_vertexBuffers.candles[viewIdx].allocation);
+				copyBuffer(stagingBuffer, m_vertexBuffers.candles[viewIdx].buffer, view.byteLength);
 
 				vkDestroyBuffer(device, stagingBuffer, nullptr);
 				vmaFreeMemory(m_allocator, stagingBufferAlloc);
-
-				m_vertexBuffers.candles[viewIdx] = newBuffer;
 			}
 		}
 
@@ -3370,17 +3376,16 @@ private:
     }
 
 	void createAnimationBuffers() {
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
-			if (m_modelMeshAnimPositions.find(objIdx) == m_modelMeshAnimPositions.end()) {
-				continue;
-			}
-			for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
-				if (!m_modelMeshAnimPositions[objIdx][meshIdx].empty()){
-					unsigned int size = m_modelMeshAnimPositions[objIdx][meshIdx].size() * sizeof(glm::vec3);
-					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-						  , m_animBuffer[objIdx][meshIdx], m_animBufferAlloc[objIdx][meshIdx]);
-				}
+		// only candles have animation
+		Object objIdx = Object::CANDLE;
+		for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
+			tinygltf::Mesh& mesh = m_model[objIdx].meshes[meshIdx];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+				
+			if (!primitive.targets.empty()){
+				unsigned int size = m_animBuffers.candles[meshIdx].size;
+				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+					  , m_animBuffers.candles[meshIdx].buffer, m_animBuffers.candles[meshIdx].allocation);
 			}
 		}
 	}
@@ -4065,9 +4070,10 @@ private:
 
 			VkBuffer positionBuffer = m_vertexBuffers.candles[model.accessors[attributes["POSITION"]].bufferView].buffer;
 			size_t positionBufferOffset = model.accessors[attributes["POSITION"]].byteOffset;
-			bool hasAnimation = m_modelMeshAnimPositions.find(object) !=  m_modelMeshAnimPositions.end();
-			if (hasAnimation && !m_modelMeshAnimPositions[object][meshIdx].empty()) {
-				positionBuffer = m_animBuffer[object][meshIdx];
+			// assume only position morph target
+			bool hasAnimation = !mesh.primitives[0].targets.empty();
+			if (hasAnimation && m_animBuffers.candles[meshIdx].size != 0) {
+				positionBuffer = m_animBuffers.candles[meshIdx].buffer;
 				positionBufferOffset = 0;
 			}
 
@@ -4161,63 +4167,59 @@ private:
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
-	void transferBuffers(VkCommandBuffer commandBuffer) {
-		for (unsigned int i = 0; i < Object::COUNT; i++){
-			Object objIdx = static_cast<Object>(i);
-			if (m_modelMeshAnimPositions.find(objIdx) == m_modelMeshAnimPositions.end()) {
-				continue;
+	void transferAnimationBuffers(VkCommandBuffer commandBuffer) {
+		Object objIdx = Object::CANDLE;
+
+		std::vector<VkBufferMemoryBarrier> animBarriers{};
+		std::vector<VkBuffer> stagingBuffers{};
+		std::vector<VmaAllocation> stagingAllocs{};
+		for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
+			if (m_animBuffers.candles[meshIdx].size != 0){
+				// Transfer vertex position animation data
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingAlloc;
+				unsigned int size = m_animBuffers.candles[meshIdx].size;
+
+				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
+
+				void* data;
+				vmaMapMemory(m_allocator, stagingAlloc, &data);
+					memcpy(data, m_animBuffers.candles[meshIdx].raw, static_cast<size_t>(size));
+				vmaUnmapMemory(m_allocator, stagingAlloc);
+
+				VkBufferCopy copyRegion{};
+				copyRegion.size = size;
+
+				vkCmdCopyBuffer(commandBuffer, stagingBuffer, m_animBuffers.candles[meshIdx].buffer, 1, &copyRegion);
+
+				stagingBuffers.push_back(stagingBuffer);
+				stagingAllocs.push_back(stagingAlloc);
+
+				VkBufferMemoryBarrier animBarrier{};
+				animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+				animBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
+				animBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+				animBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				animBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				animBarrier.buffer = m_animBuffers.candles[meshIdx].buffer;
+				animBarrier.size = size;
+				animBarrier.offset = 0;
+			 
+				animBarriers.push_back(animBarrier);
 			}
-			std::vector<VkBufferMemoryBarrier> animBarriers{};
-			std::vector<VkBuffer> stagingBuffers{};
-			std::vector<VmaAllocation> stagingAllocs{};
-			for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
-				if (!m_modelMeshAnimPositions[objIdx][meshIdx].empty()){
-					// Transfer vertex position animation data
-					VkBuffer stagingBuffer;
-					VmaAllocation stagingAlloc;
-					unsigned int size = m_modelMeshAnimPositions[objIdx][meshIdx].size() * sizeof(glm::vec3);
+		}
 
-					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
+		vkCmdPipelineBarrier(commandBuffer,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+			0, nullptr,
+			animBarriers.size(), animBarriers.data(),
+			0, nullptr);
 
-					void* data;
-					vmaMapMemory(m_allocator, stagingAlloc, &data);
-						memcpy(data, m_modelMeshAnimPositions[objIdx][meshIdx].data(), static_cast<size_t>(size));
-					vmaUnmapMemory(m_allocator, stagingAlloc);
-
-					VkBufferCopy copyRegion{};
-					copyRegion.size = size;
-
-					vkCmdCopyBuffer(commandBuffer, stagingBuffer, m_animBuffer[objIdx][meshIdx], 1, &copyRegion);
-
-					stagingBuffers.push_back(stagingBuffer);
-					stagingAllocs.push_back(stagingAlloc);
-
-					VkBufferMemoryBarrier animBarrier{};
-					animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					animBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
-					animBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-					animBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					animBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					animBarrier.buffer = m_animBuffer[objIdx][meshIdx];
-					animBarrier.size = size;
-					animBarrier.offset = 0;
-				 
-					animBarriers.push_back(animBarrier);
-				}
-			}
-
-			vkCmdPipelineBarrier(commandBuffer,
-				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
-				0, nullptr,
-				animBarriers.size(), animBarriers.data(),
-				0, nullptr);
-
-			for(auto& buffer : stagingBuffers) {
-					vkDestroyBuffer(device, buffer, nullptr);
-			}
-			for(auto& alloc : stagingAllocs) {
-					vmaFreeMemory(m_allocator, alloc);
-			}
+		for(auto& buffer : stagingBuffers) {
+				vkDestroyBuffer(device, buffer, nullptr);
+		}
+		for(auto& alloc : stagingAllocs) {
+				vmaFreeMemory(m_allocator, alloc);
 		}
 	}
 
@@ -4232,7 +4234,7 @@ private:
 		{
 			ZoneScopedN("Wait Transfer Animation Buffers");
 			TracyVkZone(tracyContext, commandBuffer, "Transfer animation buffers");
-			transferBuffers(commandBuffer);
+			transferAnimationBuffers(commandBuffer);
 		}
 
 		{

@@ -9,7 +9,6 @@
 - more *physic-based* realistic vortex snow-fall
 - PBR
 - shader reflection
-- fix that Vulkan instance extensions layers
 - Vulkan features:
     - Separate images and sampler descriptors
     - Multi-threaded command buffer generation
@@ -18,6 +17,8 @@
         - Asynchronous compute
         - Atomic operations
         - Subgroups
+- print total vertex + fragments calculation a frame
+- move animation calculation to compute shader
 
 ### BUGS:
 - candles flame animation crash renderDoc
@@ -36,3 +37,4 @@
 - make a better snowflake model and import with gltf - done
 - add light - done
 - hot reload - done
+- fix that Vulkan instance extensions layers - belong to tracy, don't care

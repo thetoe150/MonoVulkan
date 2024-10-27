@@ -52,6 +52,7 @@
 #include <optional>
 #include <set>
 #include <unordered_map>
+#include <assert.h>
 
 
 #define CHECK_VK_RESULT(f, msg)																	\
