@@ -54,6 +54,10 @@
 #include <unordered_map>
 #include <assert.h>
 
+#ifdef ENABLE_OPTIMIZE_MESH 
+#include "meshoptimizer.h"
+#endif //ENABLE_OPTIMIZE_MESH 
+
 
 #define CHECK_VK_RESULT(f, msg)																	\
 {																								\

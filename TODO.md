@@ -38,3 +38,9 @@
 - add light - done
 - hot reload - done
 - fix that Vulkan instance extensions layers - belong to tracy, don't care
+
+### Note
+- smaller the data structure used in a loop - the faster it runs for some reason
+    + bring the whole map<vector<>> into a loop and iterate is 15ms
+    + bring the vector<> into a loop and iterate is 4ms
+    + bring the only the only pointer to vector<>.data and access through [] takes 2ms
