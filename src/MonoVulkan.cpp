@@ -401,24 +401,52 @@ private:
         m_lastTime = currentTime;
 
         loadModels();
-
 		initBufferData();
-
 		computeAnimation(Object::CANDLE);
-
-#ifdef ENABLE_OPTIMIZE_MESH
 		analyzeMesh();
-#endif
-
 	}
 
-#ifdef ENABLE_OPTIMIZE_MESH
 	void analyzeMesh() {
-		tinygltf::Model& model = m_model[Object::SNOWFLAKE];
-		// model.
-		// meshopt_analyzeVertexCache();
+		tinygltf::Model& model = m_model[Object::CANDLE];
+		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+			tinygltf::Mesh& mesh = model.meshes[meshIdx];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+			tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+			tinygltf::BufferView& view = model.bufferViews[indexAccessor.bufferView];
+			tinygltf::Buffer& buffer = model.buffers[view.buffer];
+			
+			tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes["POSITION"]];
+
+			const unsigned int* indices = reinterpret_cast<unsigned int*>(buffer.data.data() + view.byteOffset + indexAccessor.byteOffset);
+
+			unsigned int stride{0};
+			const float* pos{};
+			if(m_vertexBuffers.candles[meshIdx].size() == 4) {
+				stride = 12;
+
+				unsigned int posIdx{};
+				for(unsigned int i = 0; i < m_modelAttrDef.size(); i++) {
+					if (m_modelAttrDef[i] == "POSTION"){
+						posIdx = i;
+						break;
+					}
+				}
+				pos = reinterpret_cast<float*>(m_vertexBuffers.candles[meshIdx][posIdx].raw);
+			}
+			else {
+				assert(m_vertexBuffers.candles[meshIdx].size() == 1);
+				stride = 48;
+				pos = reinterpret_cast<float*>(m_vertexBuffers.candles[meshIdx][0].raw);
+			}
+
+			meshopt_VertexCacheStatistics cacheStat = meshopt_analyzeVertexCache(indices, indexAccessor.count, posAccessor.count, 16, 0, 0);
+			meshopt_OverdrawStatistics overdrawStat = meshopt_analyzeOverdraw(indices, indexAccessor.count, pos, posAccessor.count , stride);
+			meshopt_VertexFetchStatistics fetchStat = meshopt_analyzeVertexFetch(indices, indexAccessor.count, posAccessor.count, 48);
+
+			printf("Mesh idx %d: %-9s  ACMR %f..%f Overdraw %f..%f Overfetch %f..%f Codec VB %.1f bits/vertex IB %.1f bits/triangle\n",
+				meshIdx, "", cacheStat.acmr, cacheStat.acmr, overdrawStat.overdraw, overdrawStat.overdraw, fetchStat.overfetch, fetchStat.overfetch, 0.0, 0.0);
+		}
 	}
-#endif
 
     void initGLFW() {
         glfwInit();
@@ -791,6 +819,7 @@ private:
 			for(unsigned int j = 0; i < m_vertexBuffers.candles[i].size(); i++) {
 				vkDestroyBuffer(device, m_vertexBuffers.candles[i][j].buffer, nullptr);
 				vmaFreeMemory(m_allocator, m_vertexBuffers.candles[i][j].allocation);
+				free(m_vertexBuffers.candles[i][j].raw);
 			}
 		}
 		for(auto& buffer : m_vertexBuffers.quad) {
