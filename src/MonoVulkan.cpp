@@ -226,7 +226,11 @@ private:
     VkPipeline m_computePipeline;
 	struct {
 		VkPipeline snowflake;
-		VkPipeline candles;
+		struct {
+		VkPipeline interleaved;
+		VkPipeline separated;
+		} candles;
+
 		struct {
 			VkPipeline vertical;
 			VkPipeline horizontal;
@@ -242,6 +246,9 @@ private:
 	std::map<Object, std::vector< glm::mat4>> m_modelMeshTransforms;
 
 	std::map<Object, std::vector<std::vector< float>>> m_modelMeshFrameWeights;
+
+	std::array<std::string, 4> m_shaderAttrDef{"POSITION", "NORMAL", "TANGENT", "TEXCOORD_0"};
+	std::array<std::string, 3> m_modelAttrDef{"NORMAL", "POSITION", "TEXCOORD_0"};
 
 	typedef struct {
 		VkImage image;
@@ -283,17 +290,21 @@ private:
 		uint32_t size;
 		VkBuffer buffer;
 		VmaAllocation allocation;
+		// needTransfer is true, raw and size won't match VkBuffer stored data and size
+		bool needTransfer;
 
 		Buffer()
 		: size(0),
 		  buffer(VK_NULL_HANDLE),
-		  allocation(VK_NULL_HANDLE)
+		  allocation(VK_NULL_HANDLE),
+		  needTransfer(true)
 		{}
 	};
 
 	struct {
 		std::vector<Buffer> snowflake;
-		std::vector<Buffer> candles;
+		// some meshes have one interleave buffer, some have each attribute as 1 buffer
+		std::vector<std::vector<Buffer>> candles;
 		std::vector<Buffer> quad;
 	} m_vertexBuffers;
 
@@ -320,11 +331,6 @@ private:
 		// per meshs in model
 		std::vector<Buffer> candles;
 	} m_storageBuffers;
-
-	struct {
-		std::vector<Buffer> candles;
-	} m_animBuffers;
-	
 
 	struct {
 		struct {
@@ -395,8 +401,24 @@ private:
         m_lastTime = currentTime;
 
         loadModels();
+
+		initBufferData();
+
 		computeAnimation(Object::CANDLE);
+
+#ifdef ENABLE_OPTIMIZE_MESH
+		analyzeMesh();
+#endif
+
 	}
+
+#ifdef ENABLE_OPTIMIZE_MESH
+	void analyzeMesh() {
+		tinygltf::Model& model = m_model[Object::SNOWFLAKE];
+		// model.
+		// meshopt_analyzeVertexCache();
+	}
+#endif
 
     void initGLFW() {
         glfwInit();
@@ -537,12 +559,12 @@ private:
         createIndexBuffers();
 		createInstanceBuffer();
 		createUniformBuffers();
-		createAnimationBuffers();
 		createStorageBuffer();
         createDescriptorPool();
         createDescriptorSets();
         createCommandBuffers();
         createSyncObjects();
+
     }
 
 	void processInput(){
@@ -723,7 +745,8 @@ private:
 
 		savePipelineCache();
         vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
-        vkDestroyPipeline(device, m_graphicPipelines.candles, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.candles.interleaved, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.candles.separated, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
@@ -765,9 +788,10 @@ private:
 		}
 		// for(auto& buffer : m_vertexBuffers.candles) {
 		for(unsigned int i = 0; i < m_vertexBuffers.candles.size(); i++) {
-			std::cout << "i : " <<i << std::endl;
-			vkDestroyBuffer(device, m_vertexBuffers.candles[i].buffer, nullptr);
-			vmaFreeMemory(m_allocator, m_vertexBuffers.candles[i].allocation);
+			for(unsigned int j = 0; i < m_vertexBuffers.candles[i].size(); i++) {
+				vkDestroyBuffer(device, m_vertexBuffers.candles[i][j].buffer, nullptr);
+				vmaFreeMemory(m_allocator, m_vertexBuffers.candles[i][j].allocation);
+			}
 		}
 		for(auto& buffer : m_vertexBuffers.quad) {
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
@@ -801,16 +825,7 @@ private:
 			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.lighting[i].allocation);
 		}
 
-		for (auto& buffer : m_animBuffers.candles) {
-			if (buffer.size != 0) {
-				vkDestroyBuffer(device, buffer.buffer, nullptr);
-				vmaFreeMemory(m_allocator, buffer.allocation);
-				free(buffer.raw);
-			}
-		}
-
 		Object objIdx = Object::CANDLE;
-
 		for (auto& meshImage : m_modelImages[objIdx]) {
 			vkDestroyImage(device, meshImage.baseImage.image, nullptr);
 			vkDestroyImage(device, meshImage.normalImage.image, nullptr);
@@ -1593,7 +1608,8 @@ private:
         vkDeviceWaitIdle(device);
 
         vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
-        vkDestroyPipeline(device, m_graphicPipelines.candles, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.candles.interleaved, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.candles.separated, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
@@ -1856,15 +1872,15 @@ private:
 			auto instanceBindingDescription = VertexInstance::getBindingDescription();
 			auto instanceAttributeDescription = VertexInstance::getAttributeDescriptions();
 
-			std::array<VkVertexInputBindingDescription, 5> totalBindingDescriptions = 
-				{vertexDef["POSITION"].first, vertexDef["NORMAL"].first, vertexDef["TANGENT"].first, vertexDef["TEXCOORD_0"].first, instanceBindingDescription};
-			std::array<VkVertexInputAttributeDescription, 5> totalAttributeDescriptions = 
-				{vertexDef["POSITION"].second, vertexDef["NORMAL"].second, vertexDef["TANGENT"].second, vertexDef["TEXCOORD_0"].second, instanceAttributeDescription[0]};
+			std::array<VkVertexInputBindingDescription, 5> BindingDescriptions = 
+				{vertexDef[0].first, vertexDef[1].first, vertexDef[2].first, vertexDef[3].first, instanceBindingDescription};
+			std::array<VkVertexInputAttributeDescription, 5> AttributeDescriptions = 
+				{vertexDef[0].second, vertexDef[1].second, vertexDef[2].second, vertexDef[3].second, instanceAttributeDescription[0]};
 
-			vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(totalBindingDescriptions.size());
-			vertexInputInfo.pVertexBindingDescriptions = totalBindingDescriptions.data();
-			vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(totalAttributeDescriptions.size());
-			vertexInputInfo.pVertexAttributeDescriptions = totalAttributeDescriptions.data();
+			vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(BindingDescriptions.size());
+			vertexInputInfo.pVertexBindingDescriptions = BindingDescriptions.data();
+			vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(AttributeDescriptions.size());
+			vertexInputInfo.pVertexAttributeDescriptions = AttributeDescriptions.data();
 
 			VkPipelineVertexInputDivisorStateCreateInfoEXT divisor{};
 			divisor.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
@@ -2007,7 +2023,29 @@ private:
 			if(Object::CANDLE == Object::SNOWFLAKE)
 				specConstant.useTexture = false;
 
-			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.candles) != VK_SUCCESS) {
+			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.candles.separated) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create graphics pipeline!");
+			}
+
+			// same pipeline but with interleaved attribute for non-animated optimized meshes
+			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			auto interleavedVertexDef = getInterleavedVertexDescriptions(Object::CANDLE);
+			instanceBindingDescription.binding = 1;
+			instanceAttributeDescription[0].binding = 1;
+			divisorDescription.binding = 1;
+
+			std::array<VkVertexInputBindingDescription, 2> interBindingDescriptions {interleavedVertexDef.first, instanceBindingDescription};
+			std::array<VkVertexInputAttributeDescription, 5> interAttributeDescriptions = 
+				{interleavedVertexDef.second[0], interleavedVertexDef.second[1], interleavedVertexDef.second[2]
+					, interleavedVertexDef.second[3], instanceAttributeDescription[0]};
+
+			vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(interBindingDescriptions.size());
+			vertexInputInfo.pVertexBindingDescriptions = interBindingDescriptions.data();
+			vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(interAttributeDescriptions.size());
+			vertexInputInfo.pVertexAttributeDescriptions = interAttributeDescriptions.data();
+
+			pipelineInfo.pVertexInputState = &vertexInputInfo;
+			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.candles.interleaved) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create graphics pipeline!");
 			}
 
@@ -2826,13 +2864,13 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
-	std::map<std::string, std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>> 
+	std::array<std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>, 4> 
 		getModelVertexDescriptions(Object obj) {
 		tinygltf::Model& model = m_model[obj];
-		std::map<std::string, std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>> vertexDescription;
+		std::array<std::pair<VkVertexInputBindingDescription, VkVertexInputAttributeDescription>, 4> vertexDescription;
 		unsigned int idx = 0;
 		for (auto& attribute : model.meshes[0].primitives[0].attributes) {
-			// WANRING: hardcode each buffer binding for each attribute
+			// each buffer binding for each attribute
 			VkVertexInputBindingDescription bindingDescription{};
 			bindingDescription.binding = idx;
 			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
@@ -2841,6 +2879,7 @@ private:
 
 			attributeDescription.binding = idx;
 			attributeDescription.location = idx;
+			attributeDescription.offset = 0;
 
 			if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC2) {
 				attributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
@@ -2855,11 +2894,70 @@ private:
 				bindingDescription.stride = 16;
 			}
 
-			attributeDescription.offset = 0;
+			if(attribute.first == "POSITION") {
+				vertexDescription[0] = {bindingDescription, attributeDescription};
+			}
+			else if(attribute.first == "NORMAL") {
+				vertexDescription[1] = {bindingDescription, attributeDescription};
+			}
+			else if(attribute.first == "TANGENT") {
+				vertexDescription[2] = {bindingDescription, attributeDescription};
+			}
+			else if(attribute.first == "TEXCOORD_0") {
+				vertexDescription[3] = {bindingDescription, attributeDescription};
+			}
 
-			vertexDescription[attribute.first] = {bindingDescription, attributeDescription};
 			++idx;
 		}
+		return vertexDescription;
+	}
+
+	std::pair<VkVertexInputBindingDescription, std::array<VkVertexInputAttributeDescription, 4>> 
+		getInterleavedVertexDescriptions(Object obj) {
+		tinygltf::Model& model = m_model[obj];
+		std::pair<VkVertexInputBindingDescription, std::array<VkVertexInputAttributeDescription, 4>> vertexDescription;
+
+		vertexDescription.first.binding = 0;
+		vertexDescription.first.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		unsigned int stride = 0;
+		unsigned int idx = 0;
+		for (auto& attribute : model.meshes[0].primitives[0].attributes) {
+			VkVertexInputAttributeDescription attributeDescription{};
+
+			attributeDescription.binding = 0;
+			attributeDescription.location = idx;
+			attributeDescription.offset = stride;
+
+			if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC2) {
+				attributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
+				stride += 8;
+			}
+			else if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC3) {
+				attributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
+				stride += 12;
+			}
+			else if (model.accessors[attribute.second].type == TINYGLTF_TYPE_VEC4) {
+				attributeDescription.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+				stride += 16;
+			}
+
+			if(attribute.first == "POSITION") {
+				vertexDescription.second[0] = attributeDescription;
+			}
+			else if(attribute.first == "NORMAL") {
+				vertexDescription.second[1] = attributeDescription;
+			}
+			else if(attribute.first == "TANGENT") {
+				vertexDescription.second[2] = attributeDescription;
+			}
+			else if(attribute.first == "TEXCOORD_0") {
+				vertexDescription.second[3] = attributeDescription;
+			}
+
+			++idx;
+		}
+
+		vertexDescription.first.stride = stride;
 		return vertexDescription;
 	}
 
@@ -2893,19 +2991,101 @@ private:
 		return indexViewIdx;
 	}
 
+	void initBufferData() {
+		m_vertexBuffers.snowflake.resize(1);
+
+		{
+			tinygltf::Model& model = m_model[Object::CANDLE];
+			m_vertexBuffers.candles.resize(model.meshes.size());
+			bool meshHasAnim{false};
+			for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+				auto& mesh = model.meshes[meshIdx];
+				auto weights = computeWeights(Object::CANDLE, meshIdx);
+				// note: if mesh has animation, use each buffers for each attributes
+				// otherwise use interleaved attributes to input data to mesh optimizer
+				if (!weights.empty()) {
+					meshHasAnim = true;
+					m_vertexBuffers.candles[meshIdx].resize(4);
+				}
+				else {
+					meshHasAnim = false;
+					m_vertexBuffers.candles[meshIdx].resize(1);
+				}
+				for (auto& primitive : mesh.primitives) {
+					assert(mesh.primitives.size() == 1);	
+					unsigned int i = 0;
+					for (auto& attribute : primitive.attributes) {
+						// HACK: there's no tangent for animated meshes
+						std::cout << "attribute at index " << i << " :" << attribute.first << "\n";
+						auto& accessor = model.accessors[attribute.second];
+						auto& bufferView = model.bufferViews[accessor.bufferView];
+						auto& buffer = model.buffers[bufferView.buffer];
+
+						if (meshHasAnim) {
+							// each buffer per attribute data
+							assert(m_vertexBuffers.candles[meshIdx].size() == 4);
+							unsigned int size = accessor.count * accessor.type * 4 /* assume TINYGLTF_COMPONENT_TYPE_FLOAT*/;
+							m_vertexBuffers.candles[meshIdx][i].size = size;
+							void* src = buffer.data.data() + bufferView.byteOffset + accessor.byteOffset;
+							m_vertexBuffers.candles[meshIdx][i].raw = (void*)malloc(size);
+							memcpy(m_vertexBuffers.candles[meshIdx][i].raw, src, size);
+							i++;
+						}
+						else {
+							// one buffer for all attribute interleaved
+							assert(m_vertexBuffers.candles[meshIdx].size() == 1);
+							std::vector<float> src = interleaveAttributes(Object::CANDLE, meshIdx);
+							unsigned int size = src.size() * 4 /* assume TINYGLTF_COMPONENT_TYPE_FLOAT*/;
+							m_vertexBuffers.candles[meshIdx][0].size = size;
+							m_vertexBuffers.candles[meshIdx][0].raw = (void*)malloc(size);
+							memcpy(m_vertexBuffers.candles[meshIdx][0].raw, src.data(), size);
+
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
+		std::vector<float> res;
+		auto& model = m_model[obj];
+		auto& mesh = model.meshes[meshIdx];
+		assert(mesh.primitives.size() == 1);	
+		auto& primitive = mesh.primitives[0];
+		unsigned int count = model.accessors[primitive.attributes["POSITION"]].count;
+		res.reserve(count * 12); // 3 for pos, 3 for normal, 4 for tangent, 2 for texCoord
+		
+		// TODO: remove this
+		for(unsigned int vertex_offset = 0; vertex_offset < count; vertex_offset++) {
+			for(auto& attrDef : m_shaderAttrDef){
+				auto& attribute = primitive.attributes[attrDef];
+				auto& accessor = model.accessors[attribute];
+				auto& bufferView = model.bufferViews[accessor.bufferView];
+				auto& buffer = model.buffers[bufferView.buffer];
+
+				assert(accessor.count == count);
+				void* src = buffer.data.data() + bufferView.byteOffset + accessor.byteOffset;
+				float* offset_src = (float*) src + vertex_offset * accessor.type;
+				for (unsigned int o = 0; o < accessor.type; o++) {
+					res.push_back(offset_src[o]);
+				}
+			}
+		}
+
+		return res;
+	}
+
 #if 1
 	void computeAnimation(Object obj) {
 		tinygltf::Model& model = m_model[obj];
-		m_animBuffers.candles.resize(model.meshes.size());
-		
+
 		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
 			auto weights = computeWeights(obj, meshIdx);
 			// check if there is animation from gltf sampler side
 			if (!weights.empty()) {
 				computeMorphTargets(obj, meshIdx, weights);
-			}
-			else {
-				m_animBuffers.candles[meshIdx] = {};
 			}
 		}
 	}
@@ -2971,20 +3151,16 @@ private:
 		ZoneScopedN("ComputeAnimation - morph target");
 		tinygltf::Model& model = m_model[obj];
 		auto& mesh = model.meshes[meshIdx];
-
-		// set original position
+		// re-set to original position
 		const tinygltf::Accessor& posAccessor = model.accessors[mesh.primitives[0].attributes["POSITION"]];
 		const tinygltf::BufferView& posView = model.bufferViews[posAccessor.bufferView];
 		const tinygltf::Buffer& posBuffer = model.buffers[posView.buffer];
 		
 		const unsigned char* pData = posBuffer.data.data() + posView.byteOffset + posAccessor.byteOffset;
-		// TODO: should be the right type of accessor instead of glm::vec3
-		if (m_animBuffers.candles[meshIdx].size == 0){
-			m_animBuffers.candles[meshIdx].raw = (unsigned char*) malloc(posAccessor.count * sizeof(glm::vec3));
-			m_animBuffers.candles[meshIdx].size = posAccessor.count * sizeof(glm::vec3);
-		}
-		memcpy(m_animBuffers.candles[meshIdx].raw, pData, posAccessor.count * sizeof(glm::vec3));
-		glm::vec3* pPosVec = reinterpret_cast<glm::vec3*>(m_animBuffers.candles[meshIdx].raw);
+		// NOTE: Position is at the first attribute
+		m_vertexBuffers.candles[meshIdx][0].needTransfer = true;
+		memcpy(m_vertexBuffers.candles[meshIdx][0].raw, pData, posAccessor.count * sizeof(glm::vec3));
+		glm::vec3* pPosVec = reinterpret_cast<glm::vec3*>(m_vertexBuffers.candles[meshIdx][0].raw);
 
 		// accumulate with each morph target
 		auto& morphTargets = mesh.primitives[0].targets;
@@ -3167,7 +3343,6 @@ private:
 			tinygltf::Primitive& primitive = mesh.primitives[0];
 			// only use position buffer view
 			int posAccessor = primitive.attributes["POSITION"];
-			m_vertexBuffers.snowflake.resize(1);
 
 			tinygltf::BufferView view = model.bufferViews[model.accessors[posAccessor].bufferView];
 			Buffer newBuffer{};
@@ -3185,6 +3360,7 @@ private:
 			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
 			copyBuffer(stagingBuffer, vertexBuffer, view.byteLength);
 
+			newBuffer.size = view.byteLength;
 			newBuffer.buffer = vertexBuffer;
 			newBuffer.allocation = vertexBufferAlloc;
 
@@ -3198,28 +3374,37 @@ private:
 			// Candles
 			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
-			auto bufferViews = findModelVertexBufferView(objIdx);
-			// use gltf buffer view index value as m_vertexBuffer index
-			int maxVal = *std::max_element(bufferViews.begin(), bufferViews.end());
-			m_vertexBuffers.candles.resize(maxVal + 1);
 
-			for (auto viewIdx : bufferViews) {
-				tinygltf::BufferView view = model.bufferViews[viewIdx];
-				Buffer newBuffer{};
-				VkBuffer stagingBuffer;
-				VmaAllocation stagingBufferAlloc{};
+			for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+				assert(model.meshes.size() == m_vertexBuffers.candles.size());
+				for (unsigned int attrIdx = 0; attrIdx < m_vertexBuffers.candles[meshIdx].size(); attrIdx++) {
+					if (m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer && m_vertexBuffers.candles[meshIdx][attrIdx].size != 0){
+						// Transfer vertex position animation data
+						VkBuffer stagingBuffer;
+						VmaAllocation stagingAlloc;
+						unsigned int size = m_vertexBuffers.candles[meshIdx][attrIdx].size;
 
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
-				void* data;
-				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-					memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
-				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-				 , m_vertexBuffers.candles[viewIdx].buffer, m_vertexBuffers.candles[viewIdx].allocation);
-				copyBuffer(stagingBuffer, m_vertexBuffers.candles[viewIdx].buffer, view.byteLength);
+						createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
 
-				vkDestroyBuffer(device, stagingBuffer, nullptr);
-				vmaFreeMemory(m_allocator, stagingBufferAlloc);
+						void* data;
+						vmaMapMemory(m_allocator, stagingAlloc, &data);
+							memcpy(data, m_vertexBuffers.candles[meshIdx][attrIdx].raw, static_cast<size_t>(size));
+						vmaUnmapMemory(m_allocator, stagingAlloc);
+
+						createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+						 , m_vertexBuffers.candles[meshIdx][attrIdx].buffer, m_vertexBuffers.candles[meshIdx][attrIdx].allocation);
+
+						VkBufferCopy copyRegion{};
+						copyRegion.size = size;
+
+						copyBuffer(stagingBuffer, m_vertexBuffers.candles[meshIdx][attrIdx].buffer, size);
+
+						vkDestroyBuffer(device, stagingBuffer, nullptr);
+						vmaFreeMemory(m_allocator, stagingAlloc);
+
+						m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer = false;
+					}
+				}
 			}
 		}
 
@@ -3374,21 +3559,6 @@ private:
 			}
 		}
     }
-
-	void createAnimationBuffers() {
-		// only candles have animation
-		Object objIdx = Object::CANDLE;
-		for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
-			tinygltf::Mesh& mesh = m_model[objIdx].meshes[meshIdx];
-			tinygltf::Primitive& primitive = mesh.primitives[0];
-				
-			if (!primitive.targets.empty()){
-				unsigned int size = m_animBuffers.candles[meshIdx].size;
-				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-					  , m_animBuffers.candles[meshIdx].buffer, m_animBuffers.candles[meshIdx].allocation);
-			}
-		}
-	}
 
     void createComputeUniformBuffers() {
 		m_computeUniformBuffers.snowflake.vortex[0].raw = static_cast<void*>(new Vortex[MAX_VORTEX_COUNT]);
@@ -4039,7 +4209,6 @@ private:
 	void renderCandles(VkCommandBuffer commandBuffer) {
 		TracyVkZone(tracyContext, commandBuffer, "Render Candles");
 		Object object = Object::CANDLE;
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles);
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
@@ -4062,41 +4231,47 @@ private:
 		int meshIdx = 0;
 		// factor out tangent
 		auto& attribute = model.meshes[0].primitives[0].attributes;
-		VkBuffer tangentBuffer = m_vertexBuffers.candles[model.accessors[attribute["TANGENT"]].bufferView].buffer; 
+		VkBuffer tangentBuffer = m_vertexBuffers.candles[meshIdx][0].buffer;
+		uint32_t instanceCount = m_towerInstanceRaw.size(); 
 		
 		for (auto& mesh : model.meshes) {
-			// assume there is 1 primitive per mesh
-			auto& attributes = mesh.primitives[0].attributes;
+			bool isAnimated = m_vertexBuffers.candles[meshIdx].size() == 4 ? true : false;
 
-			VkBuffer positionBuffer = m_vertexBuffers.candles[model.accessors[attributes["POSITION"]].bufferView].buffer;
-			size_t positionBufferOffset = model.accessors[attributes["POSITION"]].byteOffset;
-			// assume only position morph target
-			bool hasAnimation = !mesh.primitives[0].targets.empty();
-			if (hasAnimation && m_animBuffers.candles[meshIdx].size != 0) {
-				positionBuffer = m_animBuffers.candles[meshIdx].buffer;
-				positionBufferOffset = 0;
+			if (isAnimated) {
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles.separated);
+
+				// assume there is 1 primitive per mesh
+				std::vector<VkBuffer> buffers;
+				std::vector<VkDeviceSize> bufferOffsets;
+
+				// some mesh of the model don't have tangent attribute
+				// HACK: tangent attribute will get a random buffer as dummy
+				for(auto& attr : m_shaderAttrDef) {
+				unsigned int bufferIdx{0};
+					for(unsigned int i = 0; i < m_modelAttrDef.size(); i++) {
+						if (m_modelAttrDef[i] == attr)	
+							bufferIdx = i;
+					}
+					VkBuffer buffer = m_vertexBuffers.candles[meshIdx][bufferIdx].buffer;
+					size_t bufferOffset = 0;
+					buffers.push_back(buffer);
+					bufferOffsets.push_back(bufferOffset);
+				}
+
+				buffers.push_back(m_towerInstanceBuffer);
+				bufferOffsets.push_back(0);
+
+				vkCmdBindVertexBuffers(commandBuffer, 0, buffers.size(), buffers.data(), bufferOffsets.data());
 			}
+			else {
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles.interleaved);
 
-			size_t normalBufferOffset = model.accessors[attributes["NORMAL"]].byteOffset;
-			VkBuffer normalBuffer = m_vertexBuffers.candles[model.accessors[attributes["NORMAL"]].bufferView].buffer;
+				assert(m_vertexBuffers.candles[meshIdx].size() == 1);
+				std::array<VkBuffer, 2> buffers = {m_vertexBuffers.candles[meshIdx][0].buffer, m_towerInstanceBuffer};
+				std::array<VkDeviceSize, 2> offsets = {0, 0};
+				vkCmdBindVertexBuffers(commandBuffer, 0, 2, buffers.data(), offsets.data());
 
-			size_t texCordBufferOffset = model.accessors[attributes["TEXCOORD_0"]].byteOffset;
-			VkBuffer texCordBuffer = m_vertexBuffers.candles[model.accessors[attributes["TEXCOORD_0"]].bufferView].buffer;
-
-			size_t tangentBufferOffset = model.accessors[attributes["TANGENT"]].byteOffset; 
-			// some mesh of the model don't have tangent attribute
-			// if(attribute.find("TANGENT") != attribute.end()) {
-			// 	tangentBuffer = m_vertexBuffer[object][model.accessors[attribute["TANGENT"]].bufferView];
-			// 	tangentBufferOffset = model.accessors[attribute["TANGENT"]].byteOffset;
-			// }
-
-			VkBuffer instanceBuffer = m_towerInstanceBuffer;
-			uint32_t instanceCount = m_towerInstanceRaw.size();
-
-			VkBuffer vertexBuffers[5] = {positionBuffer, normalBuffer, tangentBuffer, texCordBuffer, instanceBuffer};
-			VkDeviceSize vertexBufferOffsets[5] = {positionBufferOffset, normalBufferOffset, tangentBufferOffset, texCordBufferOffset, 0};
-
-			vkCmdBindVertexBuffers(commandBuffer, 0, sizeof(vertexBuffers) / sizeof(VkBuffer), vertexBuffers, vertexBufferOffsets);
+			}
 
 			auto& indexAccessoridx = mesh.primitives[0].indices;
 			VkBuffer indexBuffer = m_indexBuffers.candles[model.accessors[indexAccessoridx].bufferView].buffer;
@@ -4107,8 +4282,8 @@ private:
 			TransformUniform* uniformMapped = (TransformUniform*)m_graphicUniformBuffers.candles.transform[m_currentFrame].raw;
 			uniformMapped[meshIdx].model = uniformMapped[meshIdx].model * m_modelMeshTransforms[object][meshIdx];
 
-			// some mesh in the model don't normal mapp
-			if(attributes["TANGENT"] == 0) {
+			// some meshes have animation and don't normal map
+			if(isAnimated) {
 				m_graphicPushConstant.value = 0;
 			}
 			else {
@@ -4167,45 +4342,47 @@ private:
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
-	void transferAnimationBuffers(VkCommandBuffer commandBuffer) {
+	void transferFrameVertexBuffers(VkCommandBuffer commandBuffer) {
 		Object objIdx = Object::CANDLE;
 
 		std::vector<VkBufferMemoryBarrier> animBarriers{};
 		std::vector<VkBuffer> stagingBuffers{};
 		std::vector<VmaAllocation> stagingAllocs{};
 		for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
-			if (m_animBuffers.candles[meshIdx].size != 0){
-				// Transfer vertex position animation data
-				VkBuffer stagingBuffer;
-				VmaAllocation stagingAlloc;
-				unsigned int size = m_animBuffers.candles[meshIdx].size;
+			for (unsigned int attrIdx = 0; attrIdx < m_vertexBuffers.candles[meshIdx].size(); attrIdx++) {
+				if (m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer && m_vertexBuffers.candles[meshIdx][attrIdx].size != 0){
+					// Transfer vertex position animation data
+					VkBuffer stagingBuffer;
+					VmaAllocation stagingAlloc;
+					unsigned int size = m_vertexBuffers.candles[meshIdx][attrIdx].size;
 
-				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
+					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
 
-				void* data;
-				vmaMapMemory(m_allocator, stagingAlloc, &data);
-					memcpy(data, m_animBuffers.candles[meshIdx].raw, static_cast<size_t>(size));
-				vmaUnmapMemory(m_allocator, stagingAlloc);
+					void* data;
+					vmaMapMemory(m_allocator, stagingAlloc, &data);
+						memcpy(data, m_vertexBuffers.candles[meshIdx][attrIdx].raw, static_cast<size_t>(size));
+					vmaUnmapMemory(m_allocator, stagingAlloc);
 
-				VkBufferCopy copyRegion{};
-				copyRegion.size = size;
+					VkBufferCopy copyRegion{};
+					copyRegion.size = size;
 
-				vkCmdCopyBuffer(commandBuffer, stagingBuffer, m_animBuffers.candles[meshIdx].buffer, 1, &copyRegion);
+					vkCmdCopyBuffer(commandBuffer, stagingBuffer, m_vertexBuffers.candles[meshIdx][attrIdx].buffer, 1, &copyRegion);
 
-				stagingBuffers.push_back(stagingBuffer);
-				stagingAllocs.push_back(stagingAlloc);
+					stagingBuffers.push_back(stagingBuffer);
+					stagingAllocs.push_back(stagingAlloc);
 
-				VkBufferMemoryBarrier animBarrier{};
-				animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-				animBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
-				animBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-				animBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				animBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				animBarrier.buffer = m_animBuffers.candles[meshIdx].buffer;
-				animBarrier.size = size;
-				animBarrier.offset = 0;
-			 
-				animBarriers.push_back(animBarrier);
+					VkBufferMemoryBarrier animBarrier{};
+					animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					animBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
+					animBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+					animBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					animBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					animBarrier.buffer = m_vertexBuffers.candles[meshIdx][attrIdx].buffer;
+					animBarrier.size = size;
+					animBarrier.offset = 0;
+				 
+					animBarriers.push_back(animBarrier);
+				}
 			}
 		}
 
@@ -4234,7 +4411,7 @@ private:
 		{
 			ZoneScopedN("Wait Transfer Animation Buffers");
 			TracyVkZone(tracyContext, commandBuffer, "Transfer animation buffers");
-			transferAnimationBuffers(commandBuffer);
+			transferFrameVertexBuffers(commandBuffer);
 		}
 
 		{
