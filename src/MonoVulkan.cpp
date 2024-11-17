@@ -3157,10 +3157,18 @@ private:
 		const tinygltf::Buffer& posBuffer = model.buffers[posView.buffer];
 		
 		const unsigned char* pData = posBuffer.data.data() + posView.byteOffset + posAccessor.byteOffset;
-		// NOTE: Position is at the first attribute
-		m_vertexBuffers.candles[meshIdx][0].needTransfer = true;
-		memcpy(m_vertexBuffers.candles[meshIdx][0].raw, pData, posAccessor.count * sizeof(glm::vec3));
-		glm::vec3* pPosVec = reinterpret_cast<glm::vec3*>(m_vertexBuffers.candles[meshIdx][0].raw);
+		// NOTE: Position is at the first attribute - no, fuck you
+		unsigned int posBufferIdx{0};
+		for (unsigned int i = 0; i < m_modelAttrDef.size(); i++) {
+			if(m_modelAttrDef[i] == "POSITION"){
+				posBufferIdx = i;
+				break;
+			}
+		}
+		m_vertexBuffers.candles[meshIdx][posBufferIdx].needTransfer = true;
+		m_vertexBuffers.candles[meshIdx][posBufferIdx].size = posAccessor.count * sizeof(glm::vec3);
+		memcpy(m_vertexBuffers.candles[meshIdx][posBufferIdx].raw, pData, posAccessor.count * sizeof(glm::vec3));
+		glm::vec3* pPosVec = reinterpret_cast<glm::vec3*>(m_vertexBuffers.candles[meshIdx][posBufferIdx].raw);
 
 		// accumulate with each morph target
 		auto& morphTargets = mesh.primitives[0].targets;
@@ -3378,7 +3386,7 @@ private:
 			for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
 				assert(model.meshes.size() == m_vertexBuffers.candles.size());
 				for (unsigned int attrIdx = 0; attrIdx < m_vertexBuffers.candles[meshIdx].size(); attrIdx++) {
-					if (m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer && m_vertexBuffers.candles[meshIdx][attrIdx].size != 0){
+					if (m_vertexBuffers.candles[meshIdx][attrIdx].size != 0){
 						// Transfer vertex position animation data
 						VkBuffer stagingBuffer;
 						VmaAllocation stagingAlloc;
@@ -4231,7 +4239,6 @@ private:
 		int meshIdx = 0;
 		// factor out tangent
 		auto& attribute = model.meshes[0].primitives[0].attributes;
-		VkBuffer tangentBuffer = m_vertexBuffers.candles[meshIdx][0].buffer;
 		uint32_t instanceCount = m_towerInstanceRaw.size(); 
 		
 		for (auto& mesh : model.meshes) {
