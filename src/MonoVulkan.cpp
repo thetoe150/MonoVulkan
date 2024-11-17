@@ -290,14 +290,14 @@ private:
 		uint32_t size;
 		VkBuffer buffer;
 		VmaAllocation allocation;
-		// needTransfer is true, raw and size won't match VkBuffer stored data and size
+		// needTransfer is true only when raw and size won't match VkBuffer stored data and size
 		bool needTransfer;
 
 		Buffer()
 		: size(0),
 		  buffer(VK_NULL_HANDLE),
 		  allocation(VK_NULL_HANDLE),
-		  needTransfer(true)
+		  needTransfer(false)
 		{}
 	};
 
@@ -310,7 +310,10 @@ private:
 
 	struct {
 		std::vector<Buffer> snowflake;
-		std::vector<Buffer> candles;
+		struct {
+			std::vector<Buffer> lod0;
+			std::vector<Buffer> lod1;
+		} candles;
 		std::vector<Buffer> quad;
 	} m_indexBuffers;
 
@@ -401,24 +404,68 @@ private:
         m_lastTime = currentTime;
 
         loadModels();
-
-		initBufferData();
-
+		initVertexData();
 		computeAnimation(Object::CANDLE);
-
-#ifdef ENABLE_OPTIMIZE_MESH
-		analyzeMesh();
-#endif
-
+		initIndexData();
+		analyzeMeshes(false);
+		optimizeMeshes();
+		generateIndexLOD();
+		analyzeMeshes(true);
 	}
 
-#ifdef ENABLE_OPTIMIZE_MESH
-	void analyzeMesh() {
-		tinygltf::Model& model = m_model[Object::SNOWFLAKE];
-		// model.
-		// meshopt_analyzeVertexCache();
+	void analyzeMeshes(bool isLOD) {
+		tinygltf::Model& model = m_model[Object::CANDLE];
+		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+			tinygltf::Mesh& mesh = model.meshes[meshIdx];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+			tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+			tinygltf::BufferView& view = model.bufferViews[indexAccessor.bufferView];
+			tinygltf::Buffer& buffer = model.buffers[view.buffer];
+			
+			tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes["POSITION"]];
+
+			const unsigned int* indices = reinterpret_cast<unsigned int*>(buffer.data.data() + view.byteOffset + indexAccessor.byteOffset);
+
+			unsigned int stride{0};
+			const float* pos{};
+			if(m_vertexBuffers.candles[meshIdx].size() == 4) {
+				stride = 12;
+
+				unsigned int posIdx{};
+				for(unsigned int i = 0; i < m_modelAttrDef.size(); i++) {
+					if (m_modelAttrDef[i] == "POSTION"){
+						posIdx = i;
+						break;
+					}
+				}
+				pos = reinterpret_cast<float*>(m_vertexBuffers.candles[meshIdx][posIdx].raw);
+			}
+			else {
+				assert(m_vertexBuffers.candles[meshIdx].size() == 1);
+				stride = 48;
+				pos = reinterpret_cast<float*>(m_vertexBuffers.candles[meshIdx][0].raw);
+			}
+
+			meshopt_VertexCacheStatistics cacheStat0 = meshopt_analyzeVertexCache(indices, indexAccessor.count, posAccessor.count, 16, 0, 0);
+			meshopt_OverdrawStatistics overdrawStat0 = meshopt_analyzeOverdraw(indices, indexAccessor.count, pos, posAccessor.count , stride);
+			meshopt_VertexFetchStatistics fetchStat0 = meshopt_analyzeVertexFetch(indices, indexAccessor.count, posAccessor.count, 48);
+
+			printf("Mesh idx %d, LOD0: %-9s  ACMR %f Overdraw %f Overfetch %f Codec VB %.1f bits/vertex IB %.1f bits/triangle\n",
+				meshIdx, "", cacheStat0.acmr, overdrawStat0.overdraw, fetchStat0.overfetch, 0.0, 0.0);
+
+			if (isLOD) {
+				const unsigned int* indicesLOD1 = reinterpret_cast<unsigned int*>(m_indexBuffers.candles.lod1[meshIdx].raw);
+				unsigned int idxCountLOD1 = m_indexBuffers.candles.lod1[meshIdx].size / sizeof(unsigned int);
+				meshopt_VertexCacheStatistics cacheStat1 = meshopt_analyzeVertexCache(indicesLOD1, idxCountLOD1, posAccessor.count, 16, 0, 0);
+				meshopt_OverdrawStatistics overdrawStat1 = meshopt_analyzeOverdraw(indicesLOD1, idxCountLOD1, pos, posAccessor.count , stride);
+				meshopt_VertexFetchStatistics fetchStat1 = meshopt_analyzeVertexFetch(indicesLOD1, idxCountLOD1, posAccessor.count, 48);
+
+				printf("Mesh idx %d, LOD1: %-9s  ACMR %f Overdraw %f Overfetch %f Codec VB %.1f bits/vertex IB %.1f bits/triangle\n",
+					meshIdx, "", cacheStat1.acmr, overdrawStat1.overdraw, fetchStat1.overfetch, 0.0, 0.0);
+			}
+			printf("\n");
+		}
 	}
-#endif
 
     void initGLFW() {
         glfwInit();
@@ -447,6 +494,13 @@ private:
 			if (s_currentTopologyIdx > 2) {
 				s_currentTopologyIdx %= 3;
 			}
+		}
+
+		if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+			if(!useLOD)
+				useLOD = true;
+			else
+				useLOD = false;
 		}
 	}
 
@@ -791,6 +845,7 @@ private:
 			for(unsigned int j = 0; i < m_vertexBuffers.candles[i].size(); i++) {
 				vkDestroyBuffer(device, m_vertexBuffers.candles[i][j].buffer, nullptr);
 				vmaFreeMemory(m_allocator, m_vertexBuffers.candles[i][j].allocation);
+				free(m_vertexBuffers.candles[i][j].raw);
 			}
 		}
 		for(auto& buffer : m_vertexBuffers.quad) {
@@ -802,7 +857,11 @@ private:
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
-		for(auto& buffer : m_indexBuffers.candles) {
+		for(auto& buffer : m_indexBuffers.candles.lod0) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
+		for(auto& buffer : m_indexBuffers.candles.lod1) {
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
@@ -2991,7 +3050,71 @@ private:
 		return indexViewIdx;
 	}
 
-	void initBufferData() {
+	void optimizeMeshes() {
+		tinygltf::Model model = m_model[Object::CANDLE];
+		assert(m_vertexBuffers.candles.size() == model.meshes.size());
+		m_indexBuffers.candles.lod0.resize(m_vertexBuffers.candles.size());
+		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+			// only generate LOD for mesh don't have animation (didn't interleave data)
+			if (m_vertexBuffers.candles[meshIdx].size() != 1)
+				continue;
+
+			tinygltf::Mesh& mesh = model.meshes[meshIdx];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+			tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+			tinygltf::BufferView& view = model.bufferViews[indexAccessor.bufferView];
+			tinygltf::Buffer& buffer = model.buffers[view.buffer];
+			tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes["POSITION"]];
+
+			unsigned int* indices = (unsigned int*)m_indexBuffers.candles.lod0[meshIdx].raw;
+			const float* vertex = (float*)m_vertexBuffers.candles[meshIdx][0].raw;
+
+			unsigned int* tempIndices = (unsigned int*) malloc(sizeof(unsigned int) * indexAccessor.count);
+			meshopt_optimizeVertexCache(tempIndices, indices, indexAccessor.count, posAccessor.count);
+			meshopt_optimizeOverdraw(indices, tempIndices, indexAccessor.count, vertex, posAccessor.count, 48, 1.05f);
+
+			unsigned int* tempVertices = (unsigned int*) malloc(m_vertexBuffers.candles[meshIdx][0].size);
+			unsigned int newVertexSize = meshopt_optimizeVertexFetch(tempVertices, indices, indexAccessor.count, vertex, posAccessor.count, 48);
+
+			free(m_vertexBuffers.candles[meshIdx][0].raw);
+			unsigned int newSize = newVertexSize * 12 * sizeof(float);
+			m_vertexBuffers.candles[meshIdx][0].raw = realloc(tempVertices, newSize);
+			m_vertexBuffers.candles[meshIdx][0].size = newSize;
+			m_vertexBuffers.candles[meshIdx][0].needTransfer = true;
+			m_indexBuffers.candles.lod0[meshIdx].needTransfer = true;
+
+			free(tempIndices);
+		}
+	}
+
+	void generateIndexLOD() {
+		m_indexBuffers.candles.lod1.resize(m_vertexBuffers.candles.size());
+		tinygltf::Model model = m_model[Object::CANDLE];
+		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+			// only generate LOD for mesh don't have animation (didn't interleave data)
+			if (m_vertexBuffers.candles[meshIdx].size() != 1)
+				continue;
+
+			const unsigned int* indices = (unsigned int*)m_indexBuffers.candles.lod0[meshIdx].raw;
+			unsigned int indexSize = m_indexBuffers.candles.lod0[meshIdx].size;
+			const float* vertex = (float*)m_vertexBuffers.candles[meshIdx][0].raw;
+			unsigned int vertexCount = m_vertexBuffers.candles[meshIdx][0].size / (12 * sizeof(float));
+
+			// 3 NORMAL - 4 TANGENT - 2 TEXCOORD_0
+			const float weights[9] = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
+			unsigned int* des = (unsigned int*) malloc(indexSize);
+			float* resultErr{};
+			
+			size_t newIdxSize = meshopt_simplifyWithAttributes(des, indices, indexSize / sizeof(unsigned int), vertex, vertexCount, 48 , vertex + 3, 48 , weights, 9, nullptr, 0, 0.5, 0, resultErr);
+
+			assert(newIdxSize <= indexSize);
+			m_indexBuffers.candles.lod1[meshIdx].raw = (unsigned int*)realloc(des, newIdxSize * sizeof(unsigned int));
+			m_indexBuffers.candles.lod1[meshIdx].size = newIdxSize * sizeof(unsigned int);
+			m_indexBuffers.candles.lod1[meshIdx].needTransfer = true;
+		}
+	}
+
+	void initVertexData() {
 		m_vertexBuffers.snowflake.resize(1);
 
 		{
@@ -3048,6 +3171,25 @@ private:
 		}
 	}
 
+	void initIndexData() {
+		tinygltf::Model& model = m_model[Object::CANDLE];
+		m_indexBuffers.candles.lod0.resize(model.meshes.size());
+		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+			const auto& mesh = model.meshes[meshIdx];
+			assert(mesh.primitives.size() == 1);
+			const auto& primitive = mesh.primitives[0];
+			const auto& indexAcc = model.accessors[primitive.indices];
+			const auto& indexView = model.bufferViews[indexAcc.bufferView];
+			const auto& indexBuffer = model.buffers[indexView.buffer];
+
+			void* data = (void*)(indexBuffer.data.data() + indexView.byteOffset + indexAcc.byteOffset);
+			unsigned int size = indexAcc.count * sizeof(unsigned int);
+			m_indexBuffers.candles.lod0[meshIdx].size = size;
+			m_indexBuffers.candles.lod0[meshIdx].raw = malloc(size);
+			memcpy(m_indexBuffers.candles.lod0[meshIdx].raw, data, size);
+		}
+	}
+
 	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
 		std::vector<float> res;
 		auto& model = m_model[obj];
@@ -3057,7 +3199,7 @@ private:
 		unsigned int count = model.accessors[primitive.attributes["POSITION"]].count;
 		res.reserve(count * 12); // 3 for pos, 3 for normal, 4 for tangent, 2 for texCoord
 		
-		// TODO: remove this
+		// TODO: improve this along with reflection or something
 		for(unsigned int vertex_offset = 0; vertex_offset < count; vertex_offset++) {
 			for(auto& attrDef : m_shaderAttrDef){
 				auto& attribute = primitive.attributes[attrDef];
@@ -3477,38 +3619,59 @@ private:
 			m_indexBuffers.snowflake[0] = newBuffer;
 		}
 
-		// candles
+		// candles lod0
 		{
-			Object objIdx = Object::CANDLE;
-			tinygltf::Model& model = m_model[objIdx];
-			auto bufferViews = findModelIndexBufferView(objIdx);
-
-			// use gltf buffer view index value as m_vertexBuffer index
-			int maxVal = *std::max_element(bufferViews.begin(), bufferViews.end());
-			m_indexBuffers.candles.resize(maxVal + 1);
-
-			for (auto viewIdx : bufferViews) {
-				tinygltf::BufferView view = model.bufferViews[viewIdx];
+			for (auto& buffer : m_indexBuffers.candles.lod0) {
 				Buffer newBuffer{};
 				VkBuffer stagingBuffer;
 				VmaAllocation stagingBufferAloc{};
 				VkBuffer indexBuffer;
 				VmaAllocation indexBufferAloc{};
 
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 				void* data;
 				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-					memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
+					memcpy(data, buffer.raw, buffer.size);
 				vmaUnmapMemory(m_allocator, stagingBufferAloc);
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
-				copyBuffer(stagingBuffer, indexBuffer, view.byteLength);
+				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
+				copyBuffer(stagingBuffer, indexBuffer, buffer.size);
 
-				newBuffer.buffer = indexBuffer;
-				newBuffer.allocation = indexBufferAloc;
+				buffer.buffer = indexBuffer;
+				buffer.allocation = indexBufferAloc;
+				buffer.needTransfer = false;
 
 				vkDestroyBuffer(device, stagingBuffer, nullptr);
 				vmaFreeMemory(m_allocator, stagingBufferAloc);
-				m_indexBuffers.candles[viewIdx] = newBuffer;
+			}
+		}
+
+		// candles lod1, transfer meshopt generated data
+		// raw lod data already setup in generateIndexLOD func
+		{
+			for (auto& buffer : m_indexBuffers.candles.lod1) {
+				if (buffer.needTransfer == false || buffer.size == 0)
+					continue;
+
+				Buffer newBuffer{};
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingBufferAloc{};
+				VkBuffer indexBuffer;
+				VmaAllocation indexBufferAloc{};
+
+				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+				void* data;
+				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
+					memcpy(data, buffer.raw, buffer.size);
+				vmaUnmapMemory(m_allocator, stagingBufferAloc);
+				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
+				copyBuffer(stagingBuffer, indexBuffer, buffer.size);
+
+				buffer.buffer = indexBuffer;
+				buffer.allocation = indexBufferAloc;
+				buffer.needTransfer = false;
+
+				vkDestroyBuffer(device, stagingBuffer, nullptr);
+				vmaFreeMemory(m_allocator, stagingBufferAloc);
 			}
 		}
 	}
@@ -4252,7 +4415,7 @@ private:
 				std::vector<VkDeviceSize> bufferOffsets;
 
 				// some mesh of the model don't have tangent attribute
-				// HACK: tangent attribute will get a random buffer as dummy
+				// WARNING: tangent attribute will get a random buffer as dummy
 				for(auto& attr : m_shaderAttrDef) {
 				unsigned int bufferIdx{0};
 					for(unsigned int i = 0; i < m_modelAttrDef.size(); i++) {
@@ -4271,9 +4434,9 @@ private:
 				vkCmdBindVertexBuffers(commandBuffer, 0, buffers.size(), buffers.data(), bufferOffsets.data());
 			}
 			else {
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles.interleaved);
-
 				assert(m_vertexBuffers.candles[meshIdx].size() == 1);
+
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.candles.interleaved);
 				std::array<VkBuffer, 2> buffers = {m_vertexBuffers.candles[meshIdx][0].buffer, m_towerInstanceBuffer};
 				std::array<VkDeviceSize, 2> offsets = {0, 0};
 				vkCmdBindVertexBuffers(commandBuffer, 0, 2, buffers.data(), offsets.data());
@@ -4281,9 +4444,19 @@ private:
 			}
 
 			auto& indexAccessoridx = mesh.primitives[0].indices;
-			VkBuffer indexBuffer = m_indexBuffers.candles[model.accessors[indexAccessoridx].bufferView].buffer;
-			uint64_t indexBufferOffsets = model.accessors[indexAccessoridx].byteOffset;
-			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
+			unsigned int idxCount{0};
+			if(m_indexBuffers.candles.lod1[meshIdx].size == 0 || !useLOD) {
+				VkBuffer indexBuffer = m_indexBuffers.candles.lod0[meshIdx].buffer;
+				uint64_t indexBufferOffsets = 0;
+				vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
+				idxCount = model.accessors[indexAccessoridx].count;
+			}
+			else {
+				VkBuffer indexBuffer = m_indexBuffers.candles.lod1[meshIdx].buffer;
+				uint64_t indexBufferOffsets = 0;
+				vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffsets, VK_INDEX_TYPE_UINT32);
+				idxCount = m_indexBuffers.candles.lod1[meshIdx].size / sizeof(unsigned int);
+			}
 
 			// mesh local transform
 			TransformUniform* uniformMapped = (TransformUniform*)m_graphicUniformBuffers.candles.transform[m_currentFrame].raw;
@@ -4309,7 +4482,7 @@ private:
 						   1, 1, &m_graphicDescriptorSets.candles.meshMaterial[meshIdx][m_currentFrame], 0, 0);
 
 			// is this count right?
-			vkCmdDrawIndexed(commandBuffer, model.accessors[indexAccessoridx].count, instanceCount, 0, 0, 0);
+			vkCmdDrawIndexed(commandBuffer, idxCount, instanceCount, 0, 0, 0);
 			meshIdx++;
 		}
 	}
