@@ -38,6 +38,7 @@
 - add light - done
 - hot reload - done
 - fix that Vulkan instance extensions layers - belong to tracy, don't care
+- add LODs - done
 
 ### Note
 - smaller the data structure used in a loop - the faster it runs for some reason

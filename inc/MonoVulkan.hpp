@@ -176,6 +176,7 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 static uint32_t s_currentTopologyIdx{0};
+static bool useLOD{false};
 
 inline std::array<VkPrimitiveTopology, 3> DynamicPrimitiveTopologies{
 	VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, 
