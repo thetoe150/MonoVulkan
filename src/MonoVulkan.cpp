@@ -290,14 +290,14 @@ private:
 		uint32_t size;
 		VkBuffer buffer;
 		VmaAllocation allocation;
-		// needTransfer is true, raw and size won't match VkBuffer stored data and size
+		// needTransfer is true only when raw and size won't match VkBuffer stored data and size
 		bool needTransfer;
 
 		Buffer()
 		: size(0),
 		  buffer(VK_NULL_HANDLE),
 		  allocation(VK_NULL_HANDLE),
-		  needTransfer(true)
+		  needTransfer(false)
 		{}
 	};
 
@@ -3043,7 +3043,40 @@ private:
 	}
 
 	void optimizeMeshes() {
+		assert(m_vertexBuffers.candles.size() == model.meshes.size());
+		m_indexBuffers.candles.lod0.resize(m_vertexBuffers.candles.size());
+		tinygltf::Model model = m_model[Object::CANDLE];
+		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+			// only generate LOD for mesh don't have animation (didn't interleave data)
+			if (m_vertexBuffers.candles[meshIdx].size() != 1)
+				continue;
 
+			tinygltf::Mesh& mesh = model.meshes[meshIdx];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+			tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+			tinygltf::BufferView& view = model.bufferViews[indexAccessor.bufferView];
+			tinygltf::Buffer& buffer = model.buffers[view.buffer];
+			tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes["POSITION"]];
+
+			const unsigned int* indices = reinterpret_cast<unsigned int*>(buffer.data.data() + view.byteOffset + indexAccessor.byteOffset);
+			const float* vertex = (float*)m_vertexBuffers.candles[meshIdx][0].raw;
+
+			unsigned int* tempVertices = (unsigned int*) malloc(m_vertexBuffers.candles[meshIdx][0].size);
+			unsigned int* tempIndices = (unsigned int*) malloc(sizeof(unsigned int) * indexAccessor.count);
+			m_indexBuffers.candles.lod0[meshIdx].raw = malloc(sizeof(unsigned int) * indexAccessor.count);
+			unsigned int* optedIndices = reinterpret_cast<unsigned int*>(m_indexBuffers.candles.lod0[meshIdx].raw);
+
+			meshopt_optimizeVertexCache(tempIndices, indices, indexAccessor.count, posAccessor.count);
+			meshopt_optimizeOverdraw(optedIndices, tempIndices, indexAccessor.count, vertex, posAccessor.count, 48, 1.05f);
+			unsigned int newVertexSize = meshopt_optimizeVertexFetch(tempVertices, optedIndices, indexAccessor.count, vertex, posAccessor.count, 48);
+
+			free(m_vertexBuffers.candles[meshIdx][0].raw);
+			m_vertexBuffers.candles[meshIdx][0].raw = realloc(tempVertices, newVertexSize * sizeof(float));
+			m_vertexBuffers.candles[meshIdx][0].needTransfer = true;
+			m_indexBuffers.candles.lod0[meshIdx].needTransfer = true;
+
+			free(tempIndices);
+		}
 	}
 
 	void generateIndexLOD() {
@@ -3564,38 +3597,29 @@ private:
 			m_indexBuffers.snowflake[0] = newBuffer;
 		}
 
-		// candles lod0, transfer data directly hold by gltf, avoid copying
+		// candles lod0
 		{
-			Object objIdx = Object::CANDLE;
-			tinygltf::Model& model = m_model[objIdx];
-			auto bufferViews = findModelIndexBufferView(objIdx);
-
-			// use gltf buffer view index value as m_vertexBuffer index
-			int maxVal = *std::max_element(bufferViews.begin(), bufferViews.end());
-			m_indexBuffers.candles.lod0.resize(maxVal + 1);
-
-			for (const auto& viewIdx : bufferViews) {
-				const tinygltf::BufferView& view = model.bufferViews[viewIdx];
+			for (auto& buffer : m_indexBuffers.candles.lod0) {
 				Buffer newBuffer{};
 				VkBuffer stagingBuffer;
 				VmaAllocation stagingBufferAloc{};
 				VkBuffer indexBuffer;
 				VmaAllocation indexBufferAloc{};
 
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 				void* data;
 				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-					memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
+					memcpy(data, buffer.raw, buffer.size);
 				vmaUnmapMemory(m_allocator, stagingBufferAloc);
-				createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
-				copyBuffer(stagingBuffer, indexBuffer, view.byteLength);
+				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
+				copyBuffer(stagingBuffer, indexBuffer, buffer.size);
 
-				newBuffer.buffer = indexBuffer;
-				newBuffer.allocation = indexBufferAloc;
+				buffer.buffer = indexBuffer;
+				buffer.allocation = indexBufferAloc;
+				buffer.needTransfer = false;
 
 				vkDestroyBuffer(device, stagingBuffer, nullptr);
 				vmaFreeMemory(m_allocator, stagingBufferAloc);
-				m_indexBuffers.candles.lod0[viewIdx] = newBuffer;
 			}
 		}
 
