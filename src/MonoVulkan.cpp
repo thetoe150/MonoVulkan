@@ -664,9 +664,6 @@ private:
 				m_isHDR = true;
 			}
 		}
-		// if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-		// 	recreatePipelines();
-		// }
 	}
 
     void updateGraphicUniformBuffer() {
@@ -4773,35 +4770,53 @@ private:
 
 
 	void processImGui(){
-        // ImGui::SeparatorText("Watch Tower Model");
-		// ImGui::SliderFloat3("Translate", s_translate, -10.f, 10.f, "%.2f");
-		// ImGui::SliderFloat3("Rotate", s_rotate, -10.f, 10.f, "%.2f");
-		// ImGui::SliderFloat3("Scale", s_scale, -10.f, 10.f, "%.2f");
+		if(ImGui::CollapsingHeader("Keybindings")) {
+			ImGui::SeparatorText("Control");
+			ImGui::BulletText("'C' : Cursor control only - lock camera");
+			ImGui::BulletText("'X' : Camera control only - lock cursor");
+			ImGui::BulletText("'ASDW' : movement");
+			ImGui::BulletText("'Space - Shift' : move up - down");
 
+			ImGui::SeparatorText("Render");
+			ImGui::BulletText("'L' : all LOD1");
+			ImGui::BulletText("'P' : change topology");
+			ImGui::BulletText("'H' : toggle HDR");
+			ImGui::BulletText("'R' : re-create pipelines");
+		}
+		
+		ImGui::Spacing();
         ImGui::SeparatorText("Time");
-		ImGui::Text("Current time: (%f)", m_lastTime);
-		ImGui::Text("Delta time: (%f)", m_currentDeltaTime);
-		ImGui::Text("FPS: (%f)", 1 / m_currentDeltaTime);
-
-        ImGui::SeparatorText("Camera");
-		ImGui::Text("Camera front: (%f), (%f), (%f)", g_camera.getFront().x, g_camera.getFront().y, g_camera.getFront().z);
-		ImGui::Text("Camera position: (%f), (%f), (%f)", g_camera.getPostion().x, g_camera.getPostion().y, g_camera.getPostion().z);
+			ImGui::Text("Current time: (%f)", m_lastTime);
+			ImGui::Text("Delta time: (%f)", m_currentDeltaTime);
+			ImGui::Text("FPS: (%f)", 1 / m_currentDeltaTime);
 
 		ImGui::Spacing();
+        ImGui::SeparatorText("Geometry");
 
-        ImGui::SeparatorText("Snowflake Model");
-		ImGui::SliderFloat3("Translate", s_snowTranslate, -10.f, 10.f, "%.2f");
-		ImGui::SliderFloat3("Rotate", s_snowRotate, -10.f, 10.f, "%.2f");
-		ImGui::SliderFloat3("Scale", s_snowScale, -10.f, 10.f, "%.2f");
+		ImGui::Spacing();
+        ImGui::SeparatorText("Transform");
+			ImGui::Text("Camera front: (%f), (%f), (%f)", g_camera.getFront().x, g_camera.getFront().y, g_camera.getFront().z);
+			ImGui::Text("Camera position: (%f), (%f), (%f)", g_camera.getPostion().x, g_camera.getPostion().y, g_camera.getPostion().z);
 
-        ImGui::SeparatorText("Light");
-		ImGui::SliderFloat3("Light Direction", s_lightPos, -20.f, 20.f, "%.2f");
-        ImGui::SeparatorText("Projection");
-		ImGui::SliderFloat("Near Plane", &s_nearPlane, -10.f, 10.f, "%.5f");
-		ImGui::SliderFloat("Far Plane", &s_farPlane, -10.f, 100.f, "%.5f");
+			ImGui::SliderFloat("Near Plane", &s_nearPlane, -10.f, 10.f, "%.5f");
+			ImGui::SliderFloat("Far Plane", &s_farPlane, -10.f, 100.f, "%.5f");
 
-        ImGui::SeparatorText("HDR");
-		ImGui::SliderFloat("Exposure", &m_exposure.value, 0.f, 1.f, "%.05f");
+			if(ImGui::CollapsingHeader("Objects")) {
+				ImGui::SeparatorText("Snowflake Model");
+				ImGui::SliderFloat3("Translate", s_snowTranslate, -10.f, 10.f, "%.2f");
+				ImGui::SliderFloat3("Rotate", s_snowRotate, -10.f, 10.f, "%.2f");
+				ImGui::SliderFloat3("Scale", s_snowScale, -10.f, 10.f, "%.2f");
+			}
+
+		ImGui::Spacing();
+		ImGui::SeparatorText("Lighting");
+			ImGui::SliderFloat3("Light Direction", s_lightPos, -20.f, 20.f, "%.2f");
+
+		ImGui::Spacing();
+		ImGui::SeparatorText("Effect");
+			if(ImGui::CollapsingHeader("HDR")) {
+				ImGui::SliderFloat("Exposure", &m_exposure.value, 0.f, 1.f, "%.05f");
+			}
 	}
 
     void drawFrame() {

@@ -1,5 +1,6 @@
 ### TODO:
-- add HDR and bloom
+- change LOD base on distance
+- frustum culling object on CPU
 - add shadow
 - add skymap
 - add tesselated terrain
@@ -22,7 +23,7 @@
 
 ### BUGS:
 - candles flame animation crash renderDoc
-- candles base look weird
+- mouse scroll go crazy go stupid
 
 ### Done
 - add animation for candle - done
