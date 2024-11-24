@@ -295,6 +295,7 @@ private:
 
 		Buffer()
 		: size(0),
+		  raw(nullptr),
 		  buffer(VK_NULL_HANDLE),
 		  allocation(VK_NULL_HANDLE),
 		  needTransfer(false)
@@ -501,6 +502,10 @@ private:
 				useLOD = true;
 			else
 				useLOD = false;
+		}
+
+		if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
+			s_isLodUpdated = true;
 		}
 	}
 
@@ -751,6 +756,10 @@ private:
 		// updateComputePushConstant();
 
 		computeAnimation(Object::CANDLE);
+		if (s_isLodUpdated) {
+			generateIndexLOD();
+			s_isLodUpdated = false;
+		}
 	}
 
     void mainLoop() {
@@ -3068,7 +3077,7 @@ private:
 
 			unsigned int* tempIndices = (unsigned int*) malloc(sizeof(unsigned int) * indexAccessor.count);
 			meshopt_optimizeVertexCache(tempIndices, indices, indexAccessor.count, posAccessor.count);
-			meshopt_optimizeOverdraw(indices, tempIndices, indexAccessor.count, vertex, posAccessor.count, 48, 1.05f);
+			meshopt_optimizeOverdraw(indices, tempIndices, indexAccessor.count, vertex, posAccessor.count, 48, c_overdrawThreshold);
 
 			unsigned int* tempVertices = (unsigned int*) malloc(m_vertexBuffers.candles[meshIdx][0].size);
 			unsigned int newVertexSize = meshopt_optimizeVertexFetch(tempVertices, indices, indexAccessor.count, vertex, posAccessor.count, 48);
@@ -3088,7 +3097,7 @@ private:
 		m_indexBuffers.candles.lod1.resize(m_vertexBuffers.candles.size());
 		tinygltf::Model model = m_model[Object::CANDLE];
 		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
-			// only generate LOD for mesh don't have animation (didn't interleave data)
+			// only generate LOD for mesh don't have animation (only 1 interleaved buffer data)
 			if (m_vertexBuffers.candles[meshIdx].size() != 1)
 				continue;
 
@@ -3097,14 +3106,16 @@ private:
 			const float* vertex = (float*)m_vertexBuffers.candles[meshIdx][0].raw;
 			unsigned int vertexCount = m_vertexBuffers.candles[meshIdx][0].size / (12 * sizeof(float));
 
-			// 3 NORMAL - 4 TANGENT - 2 TEXCOORD_0
-			const float weights[9] = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
 			unsigned int* des = (unsigned int*) malloc(indexSize);
 			float* resultErr{};
 			
-			size_t newIdxSize = meshopt_simplifyWithAttributes(des, indices, indexSize / sizeof(unsigned int), vertex, vertexCount, 48 , vertex + 3, 48 , weights, 9, nullptr, 0, 0.5, 0, resultErr);
+			size_t newIdxSize = meshopt_simplifyWithAttributes(des, indices, indexSize / sizeof(unsigned int)
+					  , vertex, vertexCount, 48 , vertex + 3, 48 , s_attrWeights, 9, nullptr, 0, s_targetError, 0, resultErr);
 
 			assert(newIdxSize <= indexSize);
+			if (m_indexBuffers.candles.lod1[meshIdx].raw != nullptr) {
+				free(m_indexBuffers.candles.lod1[meshIdx].raw);
+			}
 			m_indexBuffers.candles.lod1[meshIdx].raw = (unsigned int*)realloc(des, newIdxSize * sizeof(unsigned int));
 			m_indexBuffers.candles.lod1[meshIdx].size = newIdxSize * sizeof(unsigned int);
 			m_indexBuffers.candles.lod1[meshIdx].needTransfer = true;
@@ -3146,6 +3157,7 @@ private:
 							assert(m_vertexBuffers.candles[meshIdx].size() == 4);
 							unsigned int size = accessor.count * accessor.type * 4 /* assume TINYGLTF_COMPONENT_TYPE_FLOAT*/;
 							m_vertexBuffers.candles[meshIdx][i].size = size;
+							m_vertexBuffers.candles[meshIdx][i].needTransfer = true;
 							void* src = buffer.data.data() + bufferView.byteOffset + accessor.byteOffset;
 							m_vertexBuffers.candles[meshIdx][i].raw = (void*)malloc(size);
 							memcpy(m_vertexBuffers.candles[meshIdx][i].raw, src, size);
@@ -3157,6 +3169,7 @@ private:
 							std::vector<float> src = interleaveAttributes(Object::CANDLE, meshIdx);
 							unsigned int size = src.size() * 4 /* assume TINYGLTF_COMPONENT_TYPE_FLOAT*/;
 							m_vertexBuffers.candles[meshIdx][0].size = size;
+							m_vertexBuffers.candles[meshIdx][0].needTransfer = true;
 							m_vertexBuffers.candles[meshIdx][0].raw = (void*)malloc(size);
 							memcpy(m_vertexBuffers.candles[meshIdx][0].raw, src.data(), size);
 
@@ -3182,6 +3195,7 @@ private:
 			void* data = (void*)(indexBuffer.data.data() + indexView.byteOffset + indexAcc.byteOffset);
 			unsigned int size = indexAcc.count * sizeof(unsigned int);
 			m_indexBuffers.candles.lod0[meshIdx].size = size;
+			m_indexBuffers.candles.lod0[meshIdx].needTransfer = true;
 			m_indexBuffers.candles.lod0[meshIdx].raw = malloc(size);
 			memcpy(m_indexBuffers.candles.lod0[meshIdx].raw, data, size);
 		}
@@ -3233,7 +3247,7 @@ private:
 		ZoneScopedN("ComputeAnimation - weight");
 		// sample animation
 		tinygltf::Model& model = m_model[obj];
-		// WARNING: assume only 1 animation per object
+		assert(model.animations.size() == 1);
 		tinygltf::Animation& anims = model.animations[0];
 		std::vector<tinygltf::AnimationChannel>& channels = anims.channels;
 		std::vector<tinygltf::AnimationChannel>::iterator channel = std::find_if(channels.begin(), channels.end(), [&model, meshIdx](tinygltf::AnimationChannel& i_channel){
@@ -3525,32 +3539,33 @@ private:
 			for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
 				assert(model.meshes.size() == m_vertexBuffers.candles.size());
 				for (unsigned int attrIdx = 0; attrIdx < m_vertexBuffers.candles[meshIdx].size(); attrIdx++) {
-					if (m_vertexBuffers.candles[meshIdx][attrIdx].size != 0){
-						// Transfer vertex position animation data
-						VkBuffer stagingBuffer;
-						VmaAllocation stagingAlloc;
-						unsigned int size = m_vertexBuffers.candles[meshIdx][attrIdx].size;
+					if (m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer == false || m_vertexBuffers.candles[meshIdx][attrIdx].size == 0)
+						continue;
 
-						createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
+					// Transfer vertex position animation data
+					VkBuffer stagingBuffer;
+					VmaAllocation stagingAlloc;
+					unsigned int size = m_vertexBuffers.candles[meshIdx][attrIdx].size;
 
-						void* data;
-						vmaMapMemory(m_allocator, stagingAlloc, &data);
-							memcpy(data, m_vertexBuffers.candles[meshIdx][attrIdx].raw, static_cast<size_t>(size));
-						vmaUnmapMemory(m_allocator, stagingAlloc);
+					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
 
-						createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-						 , m_vertexBuffers.candles[meshIdx][attrIdx].buffer, m_vertexBuffers.candles[meshIdx][attrIdx].allocation);
+					void* data;
+					vmaMapMemory(m_allocator, stagingAlloc, &data);
+						memcpy(data, m_vertexBuffers.candles[meshIdx][attrIdx].raw, static_cast<size_t>(size));
+					vmaUnmapMemory(m_allocator, stagingAlloc);
 
-						VkBufferCopy copyRegion{};
-						copyRegion.size = size;
+					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+					 , m_vertexBuffers.candles[meshIdx][attrIdx].buffer, m_vertexBuffers.candles[meshIdx][attrIdx].allocation);
 
-						copyBuffer(stagingBuffer, m_vertexBuffers.candles[meshIdx][attrIdx].buffer, size);
+					VkBufferCopy copyRegion{};
+					copyRegion.size = size;
 
-						vkDestroyBuffer(device, stagingBuffer, nullptr);
-						vmaFreeMemory(m_allocator, stagingAlloc);
+					copyBuffer(stagingBuffer, m_vertexBuffers.candles[meshIdx][attrIdx].buffer, size);
 
-						m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer = false;
-					}
+					vkDestroyBuffer(device, stagingBuffer, nullptr);
+					vmaFreeMemory(m_allocator, stagingAlloc);
+
+					m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer = false;
 				}
 			}
 		}
@@ -3619,6 +3634,9 @@ private:
 		// candles lod0
 		{
 			for (auto& buffer : m_indexBuffers.candles.lod0) {
+				if (buffer.needTransfer == false || buffer.size == 0)
+					continue;
+
 				Buffer newBuffer{};
 				VkBuffer stagingBuffer;
 				VmaAllocation stagingBufferAloc{};
@@ -3645,27 +3663,27 @@ private:
 		// candles lod1, transfer meshopt generated data
 		// raw lod data already setup in generateIndexLOD func
 		{
-			for (auto& buffer : m_indexBuffers.candles.lod1) {
-				if (buffer.needTransfer == false || buffer.size == 0)
+			for (unsigned int i = 0; i < m_indexBuffers.candles.lod1.size(); i++) {
+				auto& indexBuffer = m_indexBuffers.candles.lod1[i];
+				if (indexBuffer.needTransfer == false || indexBuffer.size == 0)
 					continue;
 
-				Buffer newBuffer{};
 				VkBuffer stagingBuffer;
 				VmaAllocation stagingBufferAloc{};
-				VkBuffer indexBuffer;
-				VmaAllocation indexBufferAloc{};
+				// same size with LOD0 we need the biggest size possible for LOD1
+				// for the need of re-allocating with different size
+				uint32_t capacity{m_indexBuffers.candles.lod0[i].size};
+				uint32_t size{indexBuffer.size};
 
-				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 				void* data;
 				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-					memcpy(data, buffer.raw, buffer.size);
+					memcpy(data, indexBuffer.raw, size);
 				vmaUnmapMemory(m_allocator, stagingBufferAloc);
-				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
-				copyBuffer(stagingBuffer, indexBuffer, buffer.size);
+				createBuffer(capacity, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer.buffer, indexBuffer.allocation);
+				copyBuffer(stagingBuffer, indexBuffer.buffer, size);
 
-				buffer.buffer = indexBuffer;
-				buffer.allocation = indexBufferAloc;
-				buffer.needTransfer = false;
+				indexBuffer.needTransfer = false;
 
 				vkDestroyBuffer(device, stagingBuffer, nullptr);
 				vmaFreeMemory(m_allocator, stagingBufferAloc);
@@ -4519,7 +4537,7 @@ private:
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
-	void transferFrameVertexBuffers(VkCommandBuffer commandBuffer) {
+	void transferAnimVertexBuffers(VkCommandBuffer commandBuffer) {
 		Object objIdx = Object::CANDLE;
 
 		std::vector<VkBufferMemoryBarrier> animBarriers{};
@@ -4527,39 +4545,41 @@ private:
 		std::vector<VmaAllocation> stagingAllocs{};
 		for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
 			for (unsigned int attrIdx = 0; attrIdx < m_vertexBuffers.candles[meshIdx].size(); attrIdx++) {
-				if (m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer && m_vertexBuffers.candles[meshIdx][attrIdx].size != 0){
-					// Transfer vertex position animation data
-					VkBuffer stagingBuffer;
-					VmaAllocation stagingAlloc;
-					unsigned int size = m_vertexBuffers.candles[meshIdx][attrIdx].size;
+				if (m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer == false || m_vertexBuffers.candles[meshIdx][attrIdx].size == 0)
+					continue;
 
-					createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
+				// Transfer vertex position animation data
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingAlloc;
+				unsigned int size = m_vertexBuffers.candles[meshIdx][attrIdx].size;
 
-					void* data;
-					vmaMapMemory(m_allocator, stagingAlloc, &data);
-						memcpy(data, m_vertexBuffers.candles[meshIdx][attrIdx].raw, static_cast<size_t>(size));
-					vmaUnmapMemory(m_allocator, stagingAlloc);
+				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingAlloc);
 
-					VkBufferCopy copyRegion{};
-					copyRegion.size = size;
+				void* data;
+				vmaMapMemory(m_allocator, stagingAlloc, &data);
+					memcpy(data, m_vertexBuffers.candles[meshIdx][attrIdx].raw, static_cast<size_t>(size));
+				vmaUnmapMemory(m_allocator, stagingAlloc);
 
-					vkCmdCopyBuffer(commandBuffer, stagingBuffer, m_vertexBuffers.candles[meshIdx][attrIdx].buffer, 1, &copyRegion);
+				VkBufferCopy copyRegion{};
+				copyRegion.size = size;
 
-					stagingBuffers.push_back(stagingBuffer);
-					stagingAllocs.push_back(stagingAlloc);
+				vkCmdCopyBuffer(commandBuffer, stagingBuffer, m_vertexBuffers.candles[meshIdx][attrIdx].buffer, 1, &copyRegion);
 
-					VkBufferMemoryBarrier animBarrier{};
-					animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					animBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
-					animBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-					animBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					animBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					animBarrier.buffer = m_vertexBuffers.candles[meshIdx][attrIdx].buffer;
-					animBarrier.size = size;
-					animBarrier.offset = 0;
-				 
-					animBarriers.push_back(animBarrier);
-				}
+				stagingBuffers.push_back(stagingBuffer);
+				stagingAllocs.push_back(stagingAlloc);
+
+				VkBufferMemoryBarrier animBarrier{};
+				animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+				animBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
+				animBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+				animBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				animBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				animBarrier.buffer = m_vertexBuffers.candles[meshIdx][attrIdx].buffer;
+				animBarrier.size = size;
+				animBarrier.offset = 0;
+			 
+				animBarriers.push_back(animBarrier);
+				
 			}
 		}
 
@@ -4577,6 +4597,69 @@ private:
 		}
 	}
 
+	void transferLod1IndexBuffers(VkCommandBuffer commandBuffer) {
+		std::vector<VkBufferMemoryBarrier> lod1Barriers{};
+		std::vector<VkBuffer> stagingBuffers{};
+		std::vector<VmaAllocation> stagingAllocs{};
+		for (auto& buffer : m_indexBuffers.candles.lod1) {
+			if (buffer.needTransfer == false || buffer.size == 0)
+				continue;
+
+			Buffer newBuffer{};
+			VkBuffer stagingBuffer;
+			VmaAllocation stagingBufferAloc{};
+
+			// WARNING: new buffer size could be bigger than existing vulkan buffer
+			createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
+				memcpy(data, buffer.raw, buffer.size);
+			vmaUnmapMemory(m_allocator, stagingBufferAloc);
+
+			VkBufferCopy copyRegion{};
+			copyRegion.srcOffset = 0;
+			copyRegion.dstOffset = 0;
+			copyRegion.size = buffer.size;
+
+			vkCmdCopyBuffer(commandBuffer, stagingBuffer, buffer.buffer, 1, &copyRegion);
+
+			buffer.needTransfer = false;
+
+			stagingBuffers.push_back(stagingBuffer);
+			stagingAllocs.push_back(stagingBufferAloc);
+
+			VkBufferMemoryBarrier lod1Barrier{};
+			lod1Barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			lod1Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; 
+			lod1Barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+			lod1Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			lod1Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			lod1Barrier.buffer = buffer.buffer;
+			lod1Barrier.size = buffer.size;
+			lod1Barrier.offset = 0;
+		 
+			lod1Barriers.push_back(lod1Barrier);
+		}
+
+		vkCmdPipelineBarrier(commandBuffer,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+			0, nullptr,
+			lod1Barriers.size(), lod1Barriers.data(),
+			0, nullptr);
+
+		for(auto& buffer : stagingBuffers) {
+				vkDestroyBuffer(device, buffer, nullptr);
+		}
+		for(auto& alloc : stagingAllocs) {
+				vmaFreeMemory(m_allocator, alloc);
+		}
+	}
+
+	void transferFrameBuffers(VkCommandBuffer commandBuffer) {
+		transferAnimVertexBuffers(commandBuffer);
+		transferLod1IndexBuffers(commandBuffer);
+	}
+
     void recordGraphicCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -4588,7 +4671,7 @@ private:
 		{
 			ZoneScopedN("Wait Transfer Animation Buffers");
 			TracyVkZone(tracyContext, commandBuffer, "Transfer animation buffers");
-			transferFrameVertexBuffers(commandBuffer);
+			transferFrameBuffers(commandBuffer);
 		}
 
 		{
@@ -4779,6 +4862,7 @@ private:
 
 			ImGui::SeparatorText("Render");
 			ImGui::BulletText("'L' : all LOD1");
+			ImGui::BulletText("'K' : re-produce LOD1 applying changes");
 			ImGui::BulletText("'P' : change topology");
 			ImGui::BulletText("'H' : toggle HDR");
 			ImGui::BulletText("'R' : re-create pipelines");
@@ -4792,6 +4876,10 @@ private:
 
 		ImGui::Spacing();
         ImGui::SeparatorText("Geometry");
+		ImGui::SliderFloat("LOD1 generating target error", &s_targetError, 0.f, 1.f, "%.05f");
+		ImGui::SliderFloat2("Texture attribute weights", &s_attrWeights[0], 0.f, 1.f, "%.05f");
+		ImGui::SliderFloat3("Normal attribute weights", &s_attrWeights[2], 0.f, 1.f, "%.05f");
+		ImGui::SliderFloat4("Tangent attribute weights", &s_attrWeights[5], 0.f, 1.f, "%.05f");
 
 		ImGui::Spacing();
         ImGui::SeparatorText("Transform");

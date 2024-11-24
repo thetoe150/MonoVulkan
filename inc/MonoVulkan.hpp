@@ -177,6 +177,11 @@ const std::vector<const char*> deviceExtensions = {
 
 static uint32_t s_currentTopologyIdx{0};
 static bool useLOD{false};
+static const float c_overdrawThreshold{1.05f};
+static bool s_isLodUpdated{false};
+static float s_targetError{0.5f};
+// 3 NORMAL - 4 TANGENT - 2 TEXCOORD_0
+static float s_attrWeights[9] = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
 
 inline std::array<VkPrimitiveTopology, 3> DynamicPrimitiveTopologies{
 	VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, 
