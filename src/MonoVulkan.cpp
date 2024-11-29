@@ -153,7 +153,6 @@ public:
 
     void run() {
 		init();
-		updateContext();
         mainLoop();
 		clean();
     }
@@ -751,6 +750,7 @@ private:
 		m_currentDeltaTime = currentTime - m_lastTime;
         m_lastTime = currentTime;
 
+		// Not wait for fences here for more cpu-gpu parallel
 		// updateGraphicUniformBuffer();
 		// updateComputeUniformBuffer();
 		// updateComputePushConstant();
