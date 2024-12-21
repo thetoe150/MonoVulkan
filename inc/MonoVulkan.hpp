@@ -1,10 +1,11 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/trigonometric.hpp"
 #define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include "GLFW/glfw3.h"
 
 #define VMA_IMPLEMENTATION
 #include "vma/vk_mem_alloc.h"
+#include "vulkan/vulkan.h"
 #include "vulkan/vulkan.hpp"
 
 #define GLM_FORCE_RADIANS
@@ -82,9 +83,9 @@ static float s_lightPos[3] = {20.f, 3.f, -10.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 
-const std::string CANDLE_MODEL_PATH = "../../res/models/candles_set/scene.gltf";
-const std::string SNOWFLAKE_MODEL_PATH = "../../res/models/snowflake/scene.gltf";
-const std::string TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
+const char* CANDLE_MODEL_PATH = "../../res/models/candles_set/scene.gltf";
+const char* SNOWFLAKE_MODEL_PATH = "../../res/models/snowflake/scene.gltf";
+const char* TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
 // const std::string SNOWFLAKE_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 // const std::string TOWER_MODEL_PATH = "../../res/models/wooden_watch_tower2.obj";
 
