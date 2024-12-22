@@ -7,7 +7,6 @@ project "MonoVulkan"
 	kind "ConsoleApp"
 	language "C++"
 	cppdialect "C++17"
-	toolset "msc"
 	targetname "MONO"
 	architecture "x86_64"
 
@@ -26,6 +25,7 @@ project "MonoVulkan"
 	links {"meshoptimizer"}
 
 	filter "system:windows"
+		toolset "msc"
 		libdirs {"C:/VulkanSDK/1.3.268.0/Lib"}
 		links {"vulkan-1"}
 		-- for tracy
@@ -37,7 +37,10 @@ project "MonoVulkan"
 	filter "system:linux"
 		-- local vulanLib = os.findlib("vulkan")
 		libdirs {"/usr/local/bin/1.3.296.0/x86_64/lib"}
+		-- includedirs {"/usr/local/bin/1.3.296.0/x86_64/include/"}
 		links {"vulkan"}
+		libdirs {"build/GLFW/bin"}
+		links {"GLFW"}
 	filter {}
 
 	buildoptions {"-std=c++17"}
@@ -62,8 +65,9 @@ project "MeshOptimizer"
 	language "C++"
 	cppdialect "C++17"
 	targetname "meshoptimizer"
-	toolset "msc"
 	architecture "x86_64"
+	filter "system:windows"
+		toolset "msc"
 
 	location "build/meshoptimizer"
 	includedirs {"src/meshoptimizer"}
@@ -85,7 +89,7 @@ project "GLFW"
 	includedirs {"inc/GLFW", "src/GLFW"}
 	files {"src/GLFW/init.c", "src/GLFW/context.c", "src/GLFW/input.c", "src/GLFW/vulkan.c", "src/GLFW/window.c", "src/GLFW/platform.c", "src/GLFW/monitor.c"}
 
-	filter "system:Linux"
+	filter "system:linux"
 		files {"src/GLFW/x11/*.c"}
 		includedirs {"src/GLFW/x11"}
 		-- files {"posix_module.c", "posix_thread.c", "posix_time.c", "posix_poll.c", "linux_joystick.c"}
