@@ -1,6 +1,5 @@
 workspace "MonoVulkan"
 	configurations {"Debug", "Release"}
-	-- platforms {"Windows", "Unix"}
 	location "build"
 
 project "MonoVulkan"
@@ -13,16 +12,14 @@ project "MonoVulkan"
 	-- gcc makefile have cwd at binary, msvc have cwd at project for some reason
 	-- this is for loading resource at the right path
 	location "build/MonoVulkan"
-	-- filter "options:cc=msc"
-	-- 	location "build/VisualStudio"
 
 	includedirs {"inc/", "tracy/public/tracy", "inc/vma", "inc/imgui", "src/meshoptimizer"}
-	files {"src/**.cpp", "**.hpp", "tracy/public/TracyClient.cpp", "src/spirv_reflect.c", "src/spirv_reflect_output.cpp"}
-	removefiles {"src/cpptrace/**", "src/shaders/**", "src/meshoptimizer/**"}
+	files {"src/MonoVulkan.cpp", "src/backward.cpp", "src/imgui/*.cpp", "tracy/public/TracyClient.cpp", "src/spirv_reflect.c", "src/spirv_reflect_output.cpp"}
 
 	defines {"TRACY_ENABLE", "TRACY_VK_USE_SYMBOL_TABLE", "ENABLE_OPTIMIZE_MESH"}
 	libdirs {"lib", "build/meshoptimizer/bin", "build/GLFW/bin"}
-	links {"meshoptimizer", "GLFW"}
+	links {"meshoptimizer"}
+	links {"GLFW"}
 
 	filter "system:windows"
 		toolset "msc"
@@ -38,8 +35,6 @@ project "MonoVulkan"
 		libdirs {"/usr/local/bin/1.3.296.0/x86_64/lib"}
 		-- includedirs {"/usr/local/bin/1.3.296.0/x86_64/include/"}
 		links {"vulkan"}
-		libdirs {"build/GLFW/bin"}
-		links {"GLFW"}
 	filter {}
 
 	buildoptions {"-std=c++17"}
@@ -63,28 +58,31 @@ project "MeshOptimizer"
 	kind "StaticLib"
 	language "C++"
 	cppdialect "C++17"
-	targetname "meshoptimizer"
 	architecture "x86_64"
 	filter "system:windows"
 		toolset "msc"
+	filter {}
 
 	location "build/meshoptimizer"
+	targetdir "build/meshoptimizer/bin"
+	targetname "meshoptimizer"
+
 	includedirs {"src/meshoptimizer"}
 	files {"src/meshoptimizer/**.cpp"}
 	removefiles {"src/meshoptimizer/nanite.cpp", "src/meshoptimizer/tests.cpp",  "src/meshoptimizer/main.cpp",  "src/meshoptimizer/ansi.c"}
-
 	-- defines {}
 	optimize "On"
-	targetdir "build/meshoptimizer/bin"
 
 -----------------------------------------------------------------------------------------------
 project "GLFW"
 	kind "StaticLib"
 	language "C++"
-	targetname "GLFW"
 	architecture "x86_64"
 
 	location "build/GLFW"
+	targetdir "build/GLFW/bin"
+	targetname "GLFW"
+
 	includedirs {"inc/GLFW", "src/GLFW"}
 	files {"src/GLFW/init.c", "src/GLFW/context.c", "src/GLFW/input.c", "src/GLFW/vulkan.c", "src/GLFW/window.c", "src/GLFW/platform.c", "src/GLFW/monitor.c",
 								"src/GLFW/null_init.c", "src/GLFW/null_joystick.c", "src/GLFW/null_monitor.c", "src/GLFW/null_window.c"}
@@ -102,8 +100,9 @@ project "GLFW"
 	filter {}
 
 	optimize "On"
-	targetdir "build/GLFW/bin"
 
+
+-----------------------------------------------------------------------------------------------
 newaction {
 	trigger = "clean",
 	description = "clean object files",
