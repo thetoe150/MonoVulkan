@@ -22,8 +22,8 @@ project "MonoVulkan"
 	removefiles {"src/cpptrace/**", "src/shaders/**", "src/meshoptimizer/**"}
 
 	defines {"TRACY_ENABLE", "TRACY_VK_USE_SYMBOL_TABLE", "ENABLE_OPTIMIZE_MESH"}
-	libdirs {"lib", "build/meshoptimizer/bin"}
-	links {"meshoptimizer"}
+	libdirs {"lib", "build/meshoptimizer/bin", "build/GLFW/bin"}
+	links {"meshoptimizer", "GLFW"}
 
 	filter "system:windows"
 		libdirs {"C:/VulkanSDK/1.3.268.0/Lib"}
@@ -31,7 +31,6 @@ project "MonoVulkan"
 		-- for tracy
 		defines {"_WIN32_WINNT=0x0602", "WINVER=0x0602"}
 		links {"ws2_32", "imagehlp"}
-		links {"glfw3dll"}
 	filter {}
 
 	filter "system:linux"
@@ -83,17 +82,19 @@ project "GLFW"
 
 	location "build/GLFW"
 	includedirs {"inc/GLFW", "src/GLFW"}
-	files {"src/GLFW/init.c", "src/GLFW/context.c", "src/GLFW/input.c", "src/GLFW/vulkan.c", "src/GLFW/window.c", "src/GLFW/platform.c", "src/GLFW/monitor.c"}
+	files {"src/GLFW/init.c", "src/GLFW/context.c", "src/GLFW/input.c", "src/GLFW/vulkan.c", "src/GLFW/window.c", "src/GLFW/platform.c", "src/GLFW/monitor.c",
+								"src/GLFW/null_init.c", "src/GLFW/null_joystick.c", "src/GLFW/null_monitor.c", "src/GLFW/null_window.c"}
 
 	filter "system:Linux"
 		files {"src/GLFW/x11/*.c"}
 		includedirs {"src/GLFW/x11"}
-		-- files {"posix_module.c", "posix_thread.c", "posix_time.c", "posix_poll.c", "linux_joystick.c"}
-		-- files {"x11_init.c", "x11_window.c", "x11_monitor.c", "x11_platform.c", "xkb_unicode.c", "glx_context.c"}
 		defines {"_GLFW_X11"}
 	filter {}
 
 	filter "system:Windows"
+		files {"src/GLFW/win/*.c"}
+		includedirs {"src/GLFW/win"}
+		defines {"_GLFW_WIN32"}
 	filter {}
 
 	optimize "On"
