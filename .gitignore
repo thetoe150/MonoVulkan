@@ -1,6 +1,4 @@
-/.cache/
 **/.exe
-/obj/
 /build/
 /bin/debug/
-/res/cache/
+/res/cache/.blob

@@ -3,12 +3,9 @@
 - frustum culling object on CPU
 - add shadow
 - add skymap
-- add tesselated terrain
 - add multi-view port
-- add dof when moving cam?
 - add barrier when compute and graphic queue is not the same 
-- more *physic-based* realistic vortex snow-fall
-- PBR
+- more *physic-based* realistic vortex snowfall
 - shader reflection
 - Vulkan features:
     - Separate images and sampler descriptors
