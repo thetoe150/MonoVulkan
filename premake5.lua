@@ -21,6 +21,8 @@ project "MonoVulkan"
 	links {"meshoptimizer"}
 	links {"GLFW"}
 
+	warnings "Extra"
+
 	filter "system:windows"
 		toolset "msc"
 		libdirs {"C:/VulkanSDK/1.3.268.0/Lib"}
