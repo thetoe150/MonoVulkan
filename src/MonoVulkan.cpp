@@ -4656,7 +4656,7 @@ private:
 	}
 
 	void transferFrameBuffers(VkCommandBuffer commandBuffer) {
-		transferAnimVertexBuffers(commandBuffer);
+		// transferAnimVertexBuffers(commandBuffer);
 		transferLod1IndexBuffers(commandBuffer);
 	}
 
@@ -4959,6 +4959,11 @@ private:
 		{
 			ZoneScopedN("Submit Graphic Command Buffer");
 			{
+				ZoneScopedN("Wait for Graphic Fence");
+				vkWaitForFences(device, 1, &m_inFlightGraphicFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+				vkResetFences(device, 1, &m_inFlightGraphicFences[m_currentFrame]);
+			}
+			{
 				ZoneScopedN("Accquire Next Image");
 				result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 				if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -4967,11 +4972,6 @@ private:
 				} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 					throw std::runtime_error("failed to acquire swap chain image!");
 				}
-			}
-			{
-				ZoneScopedN("Wait for Graphic Fence");
-				vkWaitForFences(device, 1, &m_inFlightGraphicFences[m_currentFrame], VK_TRUE, UINT64_MAX);
-				vkResetFences(device, 1, &m_inFlightGraphicFences[m_currentFrame]);
 			}
 
 			// NOTE: only update Uniform buffer after the command buffer with the same m_currentFrame (the last 2 frames) have FINISHED.
