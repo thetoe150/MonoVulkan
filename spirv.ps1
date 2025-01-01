@@ -1,4 +1,4 @@
-Set-PSDebug -Trace 1
+#!/bin/bash
 
 glslc -fshader-stage=vertex src/shaders/candles.vert -o src/shaders/candles.vert.spv
 glslc -fshader-stage=fragment src/shaders/candles.frag -o src/shaders/candles.frag.spv

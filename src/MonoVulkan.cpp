@@ -341,6 +341,9 @@ private:
 		} snowflake;
 	} m_computeUniformBuffers;
 
+
+	std::array<std::vector<Buffer>, MAX_FRAMES_IN_FLIGHT> m_transientBuffers;
+
 	SpecializationConstant m_graphicSpecConstant;
 	GraphicPushConstant m_graphicPushConstant;
 
@@ -4537,12 +4540,19 @@ private:
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
+	void releaseTransientBuffersAtCmdIdx(int idx) {
+		std::vector<Buffer>& bufferToRelease = m_transientBuffers[idx];
+		for(auto& buffer : bufferToRelease) {
+			vkDestroyBuffer(device, buffer.buffer, nullptr);
+			vmaFreeMemory(m_allocator, buffer.allocation);
+		}
+		bufferToRelease.clear();
+	}
+	
 	void transferAnimVertexBuffers(VkCommandBuffer commandBuffer) {
 		Object objIdx = Object::CANDLE;
 
 		std::vector<VkBufferMemoryBarrier> animBarriers{};
-		std::vector<VkBuffer> stagingBuffers{};
-		std::vector<VmaAllocation> stagingAllocs{};
 		for (unsigned int meshIdx = 0; meshIdx < m_model[objIdx].meshes.size(); meshIdx++) {
 			for (unsigned int attrIdx = 0; attrIdx < m_vertexBuffers.candles[meshIdx].size(); attrIdx++) {
 				if (m_vertexBuffers.candles[meshIdx][attrIdx].needTransfer == false || m_vertexBuffers.candles[meshIdx][attrIdx].size == 0)
@@ -4565,8 +4575,10 @@ private:
 
 				vkCmdCopyBuffer(commandBuffer, stagingBuffer, m_vertexBuffers.candles[meshIdx][attrIdx].buffer, 1, &copyRegion);
 
-				stagingBuffers.push_back(stagingBuffer);
-				stagingAllocs.push_back(stagingAlloc);
+				Buffer transientBuffer;
+				transientBuffer.buffer = stagingBuffer;
+				transientBuffer.allocation = stagingAlloc;
+				m_transientBuffers[m_currentFrame].push_back(transientBuffer);
 
 				VkBufferMemoryBarrier animBarrier{};
 				animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -4579,7 +4591,6 @@ private:
 				animBarrier.offset = 0;
 			 
 				animBarriers.push_back(animBarrier);
-				
 			}
 		}
 
@@ -4588,13 +4599,6 @@ private:
 			0, nullptr,
 			animBarriers.size(), animBarriers.data(),
 			0, nullptr);
-
-		for(auto& buffer : stagingBuffers) {
-				vkDestroyBuffer(device, buffer, nullptr);
-		}
-		for(auto& alloc : stagingAllocs) {
-				vmaFreeMemory(m_allocator, alloc);
-		}
 	}
 
 	void transferLod1IndexBuffers(VkCommandBuffer commandBuffer) {
@@ -4625,8 +4629,10 @@ private:
 
 			buffer.needTransfer = false;
 
-			stagingBuffers.push_back(stagingBuffer);
-			stagingAllocs.push_back(stagingBufferAloc);
+			Buffer transientBuffer;
+			transientBuffer.buffer = stagingBuffer;
+			transientBuffer.allocation = stagingBufferAloc;
+			m_transientBuffers[m_currentFrame].push_back(transientBuffer);
 
 			VkBufferMemoryBarrier lod1Barrier{};
 			lod1Barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -4646,17 +4652,10 @@ private:
 			0, nullptr,
 			lod1Barriers.size(), lod1Barriers.data(),
 			0, nullptr);
-
-		for(auto& buffer : stagingBuffers) {
-				vkDestroyBuffer(device, buffer, nullptr);
-		}
-		for(auto& alloc : stagingAllocs) {
-				vmaFreeMemory(m_allocator, alloc);
-		}
 	}
 
 	void transferFrameBuffers(VkCommandBuffer commandBuffer) {
-		// transferAnimVertexBuffers(commandBuffer);
+		transferAnimVertexBuffers(commandBuffer);
 		transferLod1IndexBuffers(commandBuffer);
 	}
 
@@ -4978,6 +4977,7 @@ private:
 			// have to update uniform after WaitForFence or else uniform are override within that frame
 			updateGraphicUniformBuffer();
 
+			releaseTransientBuffersAtCmdIdx(m_currentFrame);
 			vkResetCommandBuffer(m_graphicCommandBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
 			recordGraphicCommandBuffer(m_graphicCommandBuffers[m_currentFrame], imageIndex);
 

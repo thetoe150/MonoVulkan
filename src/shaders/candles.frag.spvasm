@@ -45,26 +45,26 @@
                OpName %u_emissiveSampler "u_emissiveSampler"
                OpName %bloomColor "bloomColor"
                OpName %v_tangent "v_tangent"
-               OpDecorate %u_texSampler DescriptorSet 1
                OpDecorate %u_texSampler Binding 2
+               OpDecorate %u_texSampler DescriptorSet 1
                OpDecorate %v_fragTexCoord Location 0
                OpDecorate %v_normal Location 5
+               OpDecorate %UniformLighting Block
                OpMemberDecorate %UniformLighting 0 Offset 0
                OpMemberDecorate %UniformLighting 1 Offset 16
-               OpDecorate %UniformLighting Block
-               OpDecorate %u_lighting DescriptorSet 0
                OpDecorate %u_lighting Binding 1
+               OpDecorate %u_lighting DescriptorSet 0
                OpDecorate %v_fragPos Location 4
-               OpMemberDecorate %DataPushConstant 0 Offset 0
                OpDecorate %DataPushConstant Block
-               OpDecorate %u_normalSampler DescriptorSet 1
+               OpMemberDecorate %DataPushConstant 0 Offset 0
                OpDecorate %u_normalSampler Binding 3
+               OpDecorate %u_normalSampler DescriptorSet 1
                OpDecorate %v_tangentLightPos Location 2
                OpDecorate %v_tangentFragPos Location 1
                OpDecorate %v_tangentCamPos Location 3
                OpDecorate %outColor Location 0
-               OpDecorate %u_emissiveSampler DescriptorSet 1
                OpDecorate %u_emissiveSampler Binding 4
+               OpDecorate %u_emissiveSampler DescriptorSet 1
                OpDecorate %bloomColor Location 1
                OpDecorate %v_tangent Location 6
        %void = OpTypeVoid

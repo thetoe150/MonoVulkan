@@ -47,39 +47,39 @@
                OpMemberName %gl_PerVertex 3 "gl_CullDistance"
                OpName %_ ""
                OpDecorate %instancePos Location 4
-               OpMemberDecorate %UniformTransform 0 ColMajor
-               OpMemberDecorate %UniformTransform 0 Offset 0
-               OpMemberDecorate %UniformTransform 0 MatrixStride 16
-               OpMemberDecorate %UniformTransform 1 ColMajor
-               OpMemberDecorate %UniformTransform 1 Offset 64
-               OpMemberDecorate %UniformTransform 1 MatrixStride 16
-               OpMemberDecorate %UniformTransform 2 ColMajor
-               OpMemberDecorate %UniformTransform 2 Offset 128
-               OpMemberDecorate %UniformTransform 2 MatrixStride 16
                OpDecorate %UniformTransform Block
-               OpDecorate %u_transform DescriptorSet 0
+               OpMemberDecorate %UniformTransform 0 ColMajor
+               OpMemberDecorate %UniformTransform 0 MatrixStride 16
+               OpMemberDecorate %UniformTransform 0 Offset 0
+               OpMemberDecorate %UniformTransform 1 ColMajor
+               OpMemberDecorate %UniformTransform 1 MatrixStride 16
+               OpMemberDecorate %UniformTransform 1 Offset 64
+               OpMemberDecorate %UniformTransform 2 ColMajor
+               OpMemberDecorate %UniformTransform 2 MatrixStride 16
+               OpMemberDecorate %UniformTransform 2 Offset 128
                OpDecorate %u_transform Binding 0
+               OpDecorate %u_transform DescriptorSet 0
                OpDecorate %a_position Location 0
                OpDecorate %a_normal Location 1
                OpDecorate %a_tangent Location 2
                OpDecorate %v_tangentFragPos Location 1
                OpDecorate %v_tangentLightPos Location 2
+               OpDecorate %UniformLighting Block
                OpMemberDecorate %UniformLighting 0 Offset 0
                OpMemberDecorate %UniformLighting 1 Offset 16
-               OpDecorate %UniformLighting Block
-               OpDecorate %u_lighting DescriptorSet 0
                OpDecorate %u_lighting Binding 1
+               OpDecorate %u_lighting DescriptorSet 0
                OpDecorate %v_tangentCamPos Location 3
                OpDecorate %v_texCoord Location 0
                OpDecorate %a_texCoord Location 3
                OpDecorate %v_fragPosition Location 4
                OpDecorate %v_normal Location 5
                OpDecorate %v_tangent Location 6
+               OpDecorate %gl_PerVertex Block
                OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
                OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
                OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
                OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
-               OpDecorate %gl_PerVertex Block
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
       %float = OpTypeFloat 32
