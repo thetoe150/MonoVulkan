@@ -824,6 +824,10 @@ private:
         vkDestroyRenderPass(device, m_renderPasses.bloom, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.combine, nullptr);
 
+		for(unsigned int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			releaseTransientBuffersAtCmdIdx(i);
+		}
+
 		for(Buffer& buffer : m_computeUniformBuffers.snowflake.vortex) {
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaUnmapMemory(m_allocator, buffer.allocation);
@@ -849,9 +853,9 @@ private:
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
-		// for(auto& buffer : m_vertexBuffers.candles) {
+
 		for(unsigned int i = 0; i < m_vertexBuffers.candles.size(); i++) {
-			for(unsigned int j = 0; i < m_vertexBuffers.candles[i].size(); i++) {
+			for(unsigned int j = 0; j < m_vertexBuffers.candles[i].size(); j++) {
 				vkDestroyBuffer(device, m_vertexBuffers.candles[i][j].buffer, nullptr);
 				vmaFreeMemory(m_allocator, m_vertexBuffers.candles[i][j].allocation);
 				free(m_vertexBuffers.candles[i][j].raw);
@@ -867,14 +871,17 @@ private:
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
 		for(auto& buffer : m_indexBuffers.candles.lod0) {
+			free(buffer.raw);
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
 		for(auto& buffer : m_indexBuffers.candles.lod1) {
+			free(buffer.raw);
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
 		for(auto& buffer : m_indexBuffers.quad) {
+			free(buffer.raw);
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
@@ -3643,19 +3650,15 @@ private:
 				Buffer newBuffer{};
 				VkBuffer stagingBuffer;
 				VmaAllocation stagingBufferAloc{};
-				VkBuffer indexBuffer;
-				VmaAllocation indexBufferAloc{};
 
 				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 				void* data;
 				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
 					memcpy(data, buffer.raw, buffer.size);
 				vmaUnmapMemory(m_allocator, stagingBufferAloc);
-				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
-				copyBuffer(stagingBuffer, indexBuffer, buffer.size);
+				createBuffer(buffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer.buffer, buffer.allocation);
+				copyBuffer(stagingBuffer, buffer.buffer, buffer.size);
 
-				buffer.buffer = indexBuffer;
-				buffer.allocation = indexBufferAloc;
 				buffer.needTransfer = false;
 
 				vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -4578,7 +4581,7 @@ private:
 				Buffer transientBuffer;
 				transientBuffer.buffer = stagingBuffer;
 				transientBuffer.allocation = stagingAlloc;
-				m_transientBuffers[m_currentFrame].push_back(transientBuffer);
+				m_transientBuffers[m_currentFrame].push_back(std::move(transientBuffer));
 
 				VkBufferMemoryBarrier animBarrier{};
 				animBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -4632,7 +4635,7 @@ private:
 			Buffer transientBuffer;
 			transientBuffer.buffer = stagingBuffer;
 			transientBuffer.allocation = stagingBufferAloc;
-			m_transientBuffers[m_currentFrame].push_back(transientBuffer);
+			m_transientBuffers[m_currentFrame].push_back(std::move(transientBuffer));
 
 			VkBufferMemoryBarrier lod1Barrier{};
 			lod1Barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
