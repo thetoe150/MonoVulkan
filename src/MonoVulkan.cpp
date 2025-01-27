@@ -174,11 +174,11 @@ private:
     VkQueue m_computeQueue;
     VkQueue m_presentQueue;
 
-    VkSwapchainKHR swapChain;
-    std::vector<VkImage> swapChainImages;
+    VkSwapchainKHR m_swapChain;
+    std::vector<VkImage> m_swapChainImages;
     VkFormat m_swapchainImageFormat;
     VkExtent2D swapChainExtent;
-    std::vector<VkImageView> swapChainImageViews;
+    std::vector<VkImageView> m_swapChainImageViews;
 
 	struct {
 		std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> base;
@@ -413,10 +413,10 @@ private:
 		initVertexData();
 		computeAnimation(Object::CANDLE);
 		initIndexData();
-		analyzeMeshes(false);
+		// analyzeMeshes(false);
 		optimizeMeshes();
 		generateIndexLOD();
-		analyzeMeshes(true);
+		// analyzeMeshes(true);
 	}
 
 	void analyzeMeshes(bool isLOD) {
@@ -580,8 +580,8 @@ private:
 		info.QueueFamily = findQueueFamilies(physicalDevice).graphicFamily.value();
 		info.Queue = m_graphicQueue;
 		info.DescriptorPool = imguiDescriptorPool;
-		info.MinImageCount = swapChainImages.size();
-		info.ImageCount = swapChainImages.size();
+		info.MinImageCount = m_swapChainImages.size();
+		info.ImageCount = m_swapChainImages.size();
 		// info.RenderPass = m_renderPasses.base;
 		// info.MSAASamples = getMaxUsableSampleCount();
 		info.RenderPass = m_renderPasses.combine;
@@ -996,11 +996,11 @@ private:
 
     void cleanupSwapChain() {
 		cleanupFrameBuffers();
-        for (auto imageView : swapChainImageViews) {
+        for (auto imageView : m_swapChainImageViews) {
             vkDestroyImageView(device, imageView, nullptr);
         }
 
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
+        vkDestroySwapchainKHR(device, m_swapChain, nullptr);
     }
 
     void recreateSwapChain() {
@@ -1251,30 +1251,30 @@ private:
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
 
-        if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
+        if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &m_swapChain) != VK_SUCCESS) {
             throw std::runtime_error("failed to create swap chain!");
         }
 
-        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
-        swapChainImages.resize(imageCount);
-        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
+        vkGetSwapchainImagesKHR(device, m_swapChain, &imageCount, nullptr);
+        m_swapChainImages.resize(imageCount);
+        vkGetSwapchainImagesKHR(device, m_swapChain, &imageCount, m_swapChainImages.data());
 
         m_swapchainImageFormat = surfaceFormat.format;
 		std::cout << "Swapchain format: " << m_swapchainImageFormat << "\n";
+		std::cout << "Swapchain images count: " << imageCount << "\n";
         swapChainExtent = extent;
 		m_swapchainProperties = swapChainSupport; 
     }
 
     void createSwapchainImageViews() {
-        swapChainImageViews.resize(swapChainImages.size());
+        m_swapChainImageViews.resize(m_swapChainImages.size());
 
-        for (uint32_t i = 0; i < swapChainImages.size(); i++) {
-            swapChainImageViews[i] = createImageView(swapChainImages[i], m_swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        for (uint32_t i = 0; i < m_swapChainImages.size(); i++) {
+            m_swapChainImageViews[i] = createImageView(m_swapChainImages[i], m_swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
     void createRenderPasses() {
-
 		// base render pass
 		{
 			VkAttachmentDescription colorAttachment{};
@@ -1361,18 +1361,18 @@ private:
 			std::array<VkSubpassDependency, 2> dependencies;
 			dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
 			dependencies[0].dstSubpass = 0;
-			dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 			dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-			dependencies[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			dependencies[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			dependencies[1].srcSubpass = 0;
 			dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
 			dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-			dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 			dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			dependencies[1].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			std::array<VkAttachmentDescription, 5> attachments = {colorAttachment, bloomThresholdAttachment, 
@@ -1412,13 +1412,12 @@ private:
 			blurSubpass.colorAttachmentCount = 1;
 			blurSubpass.pColorAttachments = &blurRef;
 
-			// WARNING: seem wrong
 			std::array<VkSubpassDependency, 2> blurDeps{};
 			blurDeps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
 			blurDeps[0].dstSubpass = 0;
-			blurDeps[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			blurDeps[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 			blurDeps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			blurDeps[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			blurDeps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			blurDeps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			blurDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
@@ -1465,22 +1464,21 @@ private:
 			combineSubpass.colorAttachmentCount = 1;
 			combineSubpass.pColorAttachments = &combineRef;
 
-			// WARNING: seem wrong
 			std::array<VkSubpassDependency, 2> combineDeps{};
 			combineDeps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
 			combineDeps[0].dstSubpass = 0;
-			combineDeps[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			combineDeps[0].srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			combineDeps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			combineDeps[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			combineDeps[0].srcAccessMask = VK_ACCESS_NONE;
 			combineDeps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			combineDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			combineDeps[1].srcSubpass = 0;
 			combineDeps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
 			combineDeps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			combineDeps[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			combineDeps[1].dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			combineDeps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			combineDeps[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			combineDeps[1].dstAccessMask = VK_ACCESS_NONE;
 			combineDeps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			VkRenderPassCreateInfo combinePassInfo{};
@@ -2413,14 +2411,13 @@ private:
 			if (vkCreateFramebuffer(device, &bloomFBInfo, nullptr, &m_frameBuffers.bloom.vertical[i]) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create framebuffer!");
 			}
-
 		}
 
-		m_frameBuffers.combine.resize(swapChainImageViews.size());
-		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+		m_frameBuffers.combine.resize(m_swapChainImageViews.size());
+		for (size_t i = 0; i < m_swapChainImageViews.size(); i++) {
 			// combine
 			std::array<VkImageView, 1> combineAttachments = {
-				swapChainImageViews[i]
+				m_swapChainImageViews[i]
 			};
 			VkFramebufferCreateInfo combineFBInfo{};
 			combineFBInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -2554,9 +2551,8 @@ private:
 				 meshImages.baseImage = createModelImageFromGltf(objIdx, baseTexture, true, false);
 
 				if (material.normalTexture.index == -1) {
-					// add a dummy image
+					// HACK: add a dummy image
 					meshImages.normalImage = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
-					std::cout << "No normal mapping image for this mesh of model" << std::endl;
 				}
 				else {
 					const tinygltf::Texture& normalTexture = model.textures[material.normalTexture.index];
@@ -2564,9 +2560,8 @@ private:
 				}
 
 				if (material.emissiveTexture.index == -1) {
-					// add a dummy image
+					// HACK: add a dummy image
 					meshImages.emissiveImage = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
-					std::cout << "No emissive mapping image for this mesh of model" << std::endl;
 				}
 				else {
 					const tinygltf::Texture& emissiveTexture = model.textures[material.emissiveTexture.index];
@@ -3151,7 +3146,6 @@ private:
 					unsigned int i = 0;
 					for (auto& attribute : primitive.attributes) {
 						// HACK: there's no tangent for animated meshes
-						std::cout << "attribute at index " << i << " :" << attribute.first << "\n";
 						auto& accessor = model.accessors[attribute.second];
 						auto& bufferView = model.bufferViews[accessor.bufferView];
 						auto& buffer = model.buffers[bufferView.buffer];
@@ -4695,7 +4689,6 @@ private:
 
 			vkCmdEndRenderPass(commandBuffer);
 
-
 			VkRenderPassBeginInfo bloomPassInfo{};
 			bloomPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			bloomPassInfo.renderPass = m_renderPasses.bloom;
@@ -4745,9 +4738,7 @@ private:
 					ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, VK_NULL_HANDLE);
 				}
 
-
 			vkCmdEndRenderPass(commandBuffer);
-		
 		}
 		TracyVkCollect(tracyContext, commandBuffer);
 
@@ -4912,7 +4903,7 @@ private:
 		// ImGui::ShowDemoWindow();
 		processImGui();
 
-		uint32_t imageIndex;
+		uint32_t imageIndex{};
 		VkResult result{};
 		{
 			ZoneScopedN("Submit Compute Command Buffer");
@@ -4963,13 +4954,14 @@ private:
 			{
 				// NOTE: have to wait on m_inFlightGraphicFences before accquiring the next image because m_imageAvailableSemaphores may have NOT been un-signed
 				ZoneScopedN("Accquire Next Image");
-				result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+				result = vkAcquireNextImageKHR(device, m_swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 				if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 					recreateSwapChain();
 					return;
 				} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 					throw std::runtime_error("failed to acquire swap chain image!");
 				}
+				std::cout << "imageIndex: " << imageIndex << "\n";
 			}
 
 			// NOTE: only update Uniform buffer after the command buffer with the same m_currentFrame (the last 2 frames) have FINISHED.
@@ -4984,7 +4976,9 @@ private:
 			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
 			VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame], m_computeFinishedSemaphores[m_currentFrame]};
-			VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT};
+			// waitStage have to be TOP_OF_PIPELINE because there are resources (RT, descriptor set for transform) that change per frame
+			// COLOR_ATTACHMENT_OUTPUT can result in this frame use the resouces of 2 frame ago (if MAX_FRAME_IN_FLIGHT = 2)
+			VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT};
 			submitInfo.waitSemaphoreCount = sizeof(waitSemaphores) / sizeof(VkSemaphore);
 			submitInfo.pWaitSemaphores = waitSemaphores;
 			submitInfo.pWaitDstStageMask = waitStages;
@@ -5010,7 +5004,7 @@ private:
 			presentInfo.waitSemaphoreCount = 1;
 			presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
 
-			VkSwapchainKHR swapChains[] = {swapChain};
+			VkSwapchainKHR swapChains[] = {m_swapChain};
 			presentInfo.swapchainCount = 1;
 			presentInfo.pSwapchains = swapChains;
 
