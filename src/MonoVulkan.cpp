@@ -1063,7 +1063,7 @@ private:
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
         createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         createInfo.pfnUserCallback = debugCallback;
     }
@@ -1112,6 +1112,24 @@ private:
 		m_renderTargetImageFormat = findHDRColorFormat();
 		m_depthFormat = findDepthFormat();
 		std::cout << "m_renderTargetImageFormat: " << vk::to_string(vk::Format(m_renderTargetImageFormat)) << "\n";
+
+		VkPhysicalDeviceToolProperties *toolProps;
+		uint32_t toolNum;
+		vkGetPhysicalDeviceToolProperties(physicalDevice, &toolNum, nullptr);
+		toolProps = (VkPhysicalDeviceToolProperties*)malloc(sizeof(VkPhysicalDeviceToolProperties) * toolNum);
+		vkGetPhysicalDeviceToolProperties(physicalDevice, &toolNum, toolProps);
+		for (unsigned int i = 0; i < toolNum; i++) {
+			printf("%s:\n", toolProps[i].name);
+			printf("Version:\n");
+			printf("%s:\n", toolProps[i].version);
+			printf("Description:\n");
+			printf("\t%s\n", toolProps[i].description);
+			printf("Purposes:\n");
+			if (strnlen(toolProps[i].layer, VK_MAX_EXTENSION_NAME_SIZE) > 0) {
+				printf("Corresponding Layer:\n");
+				printf("\t%s\n", toolProps[i].layer);
+			}
+		}
     }
 
     void createLogicalDevice() {
@@ -1363,7 +1381,7 @@ private:
 			dependencies[0].dstSubpass = 0;
 			dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 			dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-			dependencies[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
@@ -1372,7 +1390,7 @@ private:
 			dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 			dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 			dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			dependencies[1].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			std::array<VkAttachmentDescription, 5> attachments = {colorAttachment, bloomThresholdAttachment, 
@@ -1467,7 +1485,7 @@ private:
 			std::array<VkSubpassDependency, 2> combineDeps{};
 			combineDeps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
 			combineDeps[0].dstSubpass = 0;
-			combineDeps[0].srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			combineDeps[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 			combineDeps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			combineDeps[0].srcAccessMask = VK_ACCESS_NONE;
 			combineDeps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -1479,7 +1497,7 @@ private:
 			combineDeps[1].dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			combineDeps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			combineDeps[1].dstAccessMask = VK_ACCESS_NONE;
-			combineDeps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+			combineDeps[1].dependencyFlags = VK_DEPENDENCY_DEVICE_GROUP_BIT;
 
 			VkRenderPassCreateInfo combinePassInfo{};
 			combinePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO; 
@@ -4961,7 +4979,7 @@ private:
 				} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 					throw std::runtime_error("failed to acquire swap chain image!");
 				}
-				std::cout << "imageIndex: " << imageIndex << "\n";
+				// std::cout << "imageIndex: " << imageIndex << "\n";
 			}
 
 			// NOTE: only update Uniform buffer after the command buffer with the same m_currentFrame (the last 2 frames) have FINISHED.
@@ -5513,6 +5531,7 @@ private:
 		if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT || messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
 			std::cerr << "\n##### " << pCallbackData->pMessage << std::endl;
 		}
+		// std::cerr << "\n##### " << pCallbackData->pMessage << std::endl;
 
         return VK_FALSE;
     }

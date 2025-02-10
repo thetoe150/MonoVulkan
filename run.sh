@@ -60,4 +60,3 @@ done
 
 cd ./bin/debug
 eval $cmd
-
