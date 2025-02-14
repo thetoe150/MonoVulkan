@@ -1095,14 +1095,17 @@ private:
 
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+		std::cout << "Physical device count: " << deviceCount << std::endl;
 
-        for (const auto& device : devices) {
-            if (isDeviceSuitable(device)) {
-                physicalDevice = device;
-                m_msaaSamples = getMaxUsableSampleCount();
-                break;
-            }
+        for (unsigned int i = 0; i < devices.size(); i++) {
+            // if (isDeviceSuitable(devices[i])) {
+            //     physicalDevice = devices[i];
+            //     m_msaaSamples = getMaxUsableSampleCount();
+            //     break;
+            // }
         }
+		physicalDevice = devices[1];
+		m_msaaSamples = getMaxUsableSampleCount();
 
         if (physicalDevice == VK_NULL_HANDLE) {
             throw std::runtime_error("failed to find a suitable GPU!");
