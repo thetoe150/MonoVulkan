@@ -248,7 +248,9 @@ private:
 
 	std::map<Object, std::vector<std::vector< float>>> m_modelMeshFrameWeights;
 
+	// TODO: setup code to get this AttrDef from reflection
 	std::array<std::string, 4> m_shaderAttrDef{"POSITION", "NORMAL", "TANGENT", "TEXCOORD_0"};
+	// TODO: setup code to get this AttrDef from gltf
 	std::array<std::string, 3> m_modelAttrDef{"NORMAL", "POSITION", "TEXCOORD_0"};
 
 	typedef struct {
@@ -419,6 +421,7 @@ private:
 		initIndexData();
 		// analyzeMeshes(false);
 		optimizeMeshes();
+		initShadowData();
 		generateIndexLOD();
 		// analyzeMeshes(true);
 	}
@@ -862,6 +865,10 @@ private:
 		vkDestroyBuffer(device, m_vertexBuffers.quad.buffer, nullptr);
 		vmaFreeMemory(m_allocator, m_vertexBuffers.quad.allocation);
 
+		vkDestroyBuffer(device, m_vertexBuffers.shadow.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_vertexBuffers.shadow.allocation);
+		free(m_vertexBuffers.shadow.raw);
+
 		for(unsigned int i = 0; i < m_vertexBuffers.candles.size(); i++) {
 			for(unsigned int j = 0; j < m_vertexBuffers.candles[i].size(); j++) {
 				vkDestroyBuffer(device, m_vertexBuffers.candles[i][j].buffer, nullptr);
@@ -887,6 +894,10 @@ private:
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
+
+		vkDestroyBuffer(device, m_indexBuffers.shadow.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_indexBuffers.shadow.allocation);
+		free(m_indexBuffers.shadow.raw);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroyBuffer(device, m_graphicUniformBuffers.snowflake[i].buffer, nullptr);
@@ -3246,6 +3257,45 @@ private:
 			memcpy(m_indexBuffers.candles.lod0[meshIdx].raw, data, size);
 		}
 	}
+	void initShadowData() {
+		tinygltf::Model& model = m_model[Object::CANDLE];
+		std::vector<float> shadowVertices;
+		std::vector<unsigned int> shadowIndices;
+		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
+			// only the base of the candles cast shadow
+			if (m_vertexBuffers.candles[meshIdx].size() == 1) {
+				const unsigned int* i = reinterpret_cast<unsigned int*>(m_indexBuffers.candles.lod0[meshIdx].raw);
+				const unsigned int iCount = m_indexBuffers.candles.lod0[meshIdx].size / sizeof(unsigned int);
+				const unsigned int vertexOffset = shadowVertices.size() / 3;
+				for(unsigned int idx = 0; idx < iCount; idx++) {
+					shadowIndices.push_back(i[idx] + vertexOffset);
+				}
+
+				const float* v = reinterpret_cast<float*>(m_vertexBuffers.candles[meshIdx][0].raw);
+				const unsigned int vCount = m_vertexBuffers.candles[meshIdx][0].size / sizeof(float);
+				const unsigned int stride = 12;
+				// interleaved vertex data already in shader attr order
+				const unsigned int offset = 0;
+				for(unsigned int idx = 0 + offset; idx < vCount; idx += stride) {
+					shadowVertices.push_back(v[idx + 0]);
+					shadowVertices.push_back(v[idx + 1]);
+					shadowVertices.push_back(v[idx + 2]);
+				}
+			}
+		}
+
+		unsigned int vSize = shadowVertices.size() * sizeof(float);
+		m_vertexBuffers.shadow.raw = malloc(vSize);
+		memcpy(m_vertexBuffers.shadow.raw, shadowVertices.data(), vSize);
+		m_vertexBuffers.shadow.size = vSize;
+		m_vertexBuffers.shadow.needTransfer = true;
+
+		unsigned int iSize = shadowIndices.size() * sizeof(float);
+		m_indexBuffers.shadow.raw = malloc(iSize);
+		memcpy(m_indexBuffers.shadow.raw, shadowIndices.data(), iSize);
+		m_indexBuffers.shadow.size = iSize;
+		m_indexBuffers.shadow.needTransfer = true;
+	}
 
 	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
 		std::vector<float> res;
@@ -3603,13 +3653,32 @@ private:
 		}
 
 		{
+			// Shadow
+			Buffer& shadowBuffer = m_vertexBuffers.shadow;
+			if(shadowBuffer.needTransfer) {
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingBufferAlloc{};
+				createBuffer(shadowBuffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+				void* data;
+				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+					memcpy(data, shadowBuffer.raw, shadowBuffer.size);
+				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+				createBuffer(shadowBuffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadowBuffer.buffer, shadowBuffer.allocation);
+				copyBuffer(stagingBuffer, shadowBuffer.buffer, shadowBuffer.size);
+				shadowBuffer.needTransfer = false;
+
+				vkDestroyBuffer(device, stagingBuffer, nullptr);
+				vmaFreeMemory(m_allocator, stagingBufferAlloc);
+			}
+		}
+
+		{
 			// Quad
 			VkBuffer stagingBuffer;
 			VmaAllocation stagingBufferAlloc{};
 
 			VkBuffer vertexBuffer;
 			VmaAllocation vertexBufferAlloc{};
-
 
 			int size = sizeof(quadListVertices);
 			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
@@ -3703,6 +3772,26 @@ private:
 
 				vkDestroyBuffer(device, stagingBuffer, nullptr);
 				vmaFreeMemory(m_allocator, stagingBufferAloc);
+			}
+		}
+
+		{
+			// Shadow
+			Buffer& shadowBuffer = m_indexBuffers.shadow;
+			if(shadowBuffer.needTransfer) {
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingBufferAlloc{};
+				createBuffer(shadowBuffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+				void* data;
+				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+					memcpy(data, shadowBuffer.raw, shadowBuffer.size);
+				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+				createBuffer(shadowBuffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadowBuffer.buffer, shadowBuffer.allocation);
+				copyBuffer(stagingBuffer, shadowBuffer.buffer, shadowBuffer.size);
+				shadowBuffer.needTransfer = false;
+
+				vkDestroyBuffer(device, stagingBuffer, nullptr);
+				vmaFreeMemory(m_allocator, stagingBufferAlloc);
 			}
 		}
 	}

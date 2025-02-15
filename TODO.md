@@ -5,6 +5,8 @@
 - add shadow
 - add skymap
 - add multi-view port
+- remove phong shading with flame
+- refactor vertex attribute definition
 - add barrier when compute and graphic queue is not the same 
 - more *physic-based* realistic vortex snowfall
 - shader reflection
