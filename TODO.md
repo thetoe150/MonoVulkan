@@ -1,6 +1,7 @@
 ### TODO:
 - change LOD base on distance
 - frustum culling object on CPU
+- add Tracy on Debian
 - add shadow
 - add skymap
 - add multi-view port

@@ -1,6 +1,7 @@
 #include "MonoVulkan.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "vulkan/vulkan_enums.hpp"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -305,19 +306,22 @@ private:
 	};
 
 	struct {
-		std::vector<Buffer> snowflake;
+		Buffer snowflake;
+		Buffer quad;
+		Buffer shadow;
 		// some meshes have one interleave buffer, some have each attribute as 1 buffer
 		std::vector<std::vector<Buffer>> candles;
-		std::vector<Buffer> quad;
 	} m_vertexBuffers;
 
 	struct {
-		std::vector<Buffer> snowflake;
+		Buffer snowflake;
+		Buffer quad;
+		Buffer shadow;
+		// candle model have multiple meshes each have 2 lod
 		struct {
 			std::vector<Buffer> lod0;
 			std::vector<Buffer> lod1;
 		} candles;
-		std::vector<Buffer> quad;
 	} m_indexBuffers;
 
 	struct {
@@ -852,10 +856,11 @@ private:
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.combine, nullptr);
         vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayouts.snowflake, nullptr);
 
-		for(auto& buffer : m_vertexBuffers.snowflake) {
-			vkDestroyBuffer(device, buffer.buffer, nullptr);
-			vmaFreeMemory(m_allocator, buffer.allocation);
-		}
+		vkDestroyBuffer(device, m_vertexBuffers.snowflake.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_vertexBuffers.snowflake.allocation);
+
+		vkDestroyBuffer(device, m_vertexBuffers.quad.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_vertexBuffers.quad.allocation);
 
 		for(unsigned int i = 0; i < m_vertexBuffers.candles.size(); i++) {
 			for(unsigned int j = 0; j < m_vertexBuffers.candles[i].size(); j++) {
@@ -864,26 +869,20 @@ private:
 				free(m_vertexBuffers.candles[i][j].raw);
 			}
 		}
-		for(auto& buffer : m_vertexBuffers.quad) {
-			vkDestroyBuffer(device, buffer.buffer, nullptr);
-			vmaFreeMemory(m_allocator, buffer.allocation);
-		}
 
-		for(auto& buffer : m_indexBuffers.snowflake) {
-			vkDestroyBuffer(device, buffer.buffer, nullptr);
-			vmaFreeMemory(m_allocator, buffer.allocation);
-		}
+		vkDestroyBuffer(device, m_indexBuffers.snowflake.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_indexBuffers.snowflake.allocation);
+
+		free(m_indexBuffers.quad.raw);
+		vkDestroyBuffer(device, m_indexBuffers.quad.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_indexBuffers.quad.allocation);
+
 		for(auto& buffer : m_indexBuffers.candles.lod0) {
 			free(buffer.raw);
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
 		for(auto& buffer : m_indexBuffers.candles.lod1) {
-			free(buffer.raw);
-			vkDestroyBuffer(device, buffer.buffer, nullptr);
-			vmaFreeMemory(m_allocator, buffer.allocation);
-		}
-		for(auto& buffer : m_indexBuffers.quad) {
 			free(buffer.raw);
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vmaFreeMemory(m_allocator, buffer.allocation);
@@ -1103,6 +1102,10 @@ private:
             //     m_msaaSamples = getMaxUsableSampleCount();
             //     break;
             // }
+
+			physicalDevice = devices[i];
+			vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
+			std::cout << m_physicalDeviceProperties.deviceName << std::endl;
         }
 		physicalDevice = devices[1];
 		m_msaaSamples = getMaxUsableSampleCount();
@@ -3143,7 +3146,19 @@ private:
 	}
 
 	void initVertexData() {
-		m_vertexBuffers.snowflake.resize(1);
+		{
+			// Snowflake
+			tinygltf::Model& model = m_model[Object::SNOWFLAKE];
+			tinygltf::Mesh& mesh = model.meshes[0];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+			// only use position buffer view
+			tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes["POSITION"]];
+			tinygltf::BufferView view = model.bufferViews[posAccessor.bufferView];
+
+			m_vertexBuffers.snowflake.raw = &model.buffers[view.buffer].data.at(0) + view.byteOffset + posAccessor.byteOffset;
+			m_vertexBuffers.snowflake.size = view.byteLength;
+			m_vertexBuffers.snowflake.needTransfer = true;
+		}
 
 		{
 			tinygltf::Model& model = m_model[Object::CANDLE];
@@ -3201,6 +3216,18 @@ private:
 	}
 
 	void initIndexData() {
+		{
+			tinygltf::Model& model = m_model[Object::SNOWFLAKE];
+			tinygltf::Mesh& mesh = model.meshes[0];
+			tinygltf::Primitive& primitive = mesh.primitives[0];
+			tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+			tinygltf::BufferView& view = model.bufferViews[indexAccessor.bufferView];
+
+			m_indexBuffers.snowflake.raw = &model.buffers[view.buffer].data.at(0) + view.byteOffset + indexAccessor.byteOffset;
+			m_indexBuffers.snowflake.size = view.byteLength;
+			m_indexBuffers.snowflake.needTransfer = true;
+		}
+
 		tinygltf::Model& model = m_model[Object::CANDLE];
 		m_indexBuffers.candles.lod0.resize(model.meshes.size());
 		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
@@ -3517,37 +3544,23 @@ private:
 	void createVertexBuffers() {
 		{
 			// Snowflake
-			Object objIdx = Object::SNOWFLAKE;
-			tinygltf::Model& model = m_model[objIdx];
-			tinygltf::Mesh& mesh = model.meshes[0];
-			tinygltf::Primitive& primitive = mesh.primitives[0];
-			// only use position buffer view
-			int posAccessor = primitive.attributes["POSITION"];
+			Buffer& snowBuffer = m_vertexBuffers.snowflake;
 
-			tinygltf::BufferView view = model.bufferViews[model.accessors[posAccessor].bufferView];
-			Buffer newBuffer{};
-			VkBuffer stagingBuffer;
-			VmaAllocation stagingBufferAlloc{};
+			if(snowBuffer.needTransfer) {
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingBufferAlloc{};
+				createBuffer(snowBuffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+				void* data;
+				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+					memcpy(data, snowBuffer.raw, snowBuffer.size);
+				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+				createBuffer(snowBuffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, snowBuffer.buffer, snowBuffer.allocation);
+				copyBuffer(stagingBuffer, snowBuffer.buffer, snowBuffer.size);
+				snowBuffer.needTransfer = false;
 
-			VkBuffer vertexBuffer;
-			VmaAllocation vertexBufferAlloc{};
-
-			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
-			void* data;
-			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-				memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
-			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
-			copyBuffer(stagingBuffer, vertexBuffer, view.byteLength);
-
-			newBuffer.size = view.byteLength;
-			newBuffer.buffer = vertexBuffer;
-			newBuffer.allocation = vertexBufferAlloc;
-
-			vkDestroyBuffer(device, stagingBuffer, nullptr);
-			vmaFreeMemory(m_allocator, stagingBufferAlloc);
-
-			m_vertexBuffers.snowflake[0] = newBuffer;
+				vkDestroyBuffer(device, stagingBuffer, nullptr);
+				vmaFreeMemory(m_allocator, stagingBufferAlloc);
+			}
 		}
 		
 		{
@@ -3597,7 +3610,6 @@ private:
 			VkBuffer vertexBuffer;
 			VmaAllocation vertexBufferAlloc{};
 
-			m_vertexBuffers.quad.resize(1);
 
 			int size = sizeof(quadListVertices);
 			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
@@ -3608,8 +3620,8 @@ private:
 			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
 			copyBuffer(stagingBuffer, vertexBuffer, size);
 
-			m_vertexBuffers.quad[0].buffer = vertexBuffer;
-			m_vertexBuffers.quad[0].allocation = vertexBufferAlloc;
+			m_vertexBuffers.quad.buffer = vertexBuffer;
+			m_vertexBuffers.quad.allocation = vertexBufferAlloc;
 
 			vkDestroyBuffer(device, stagingBuffer, nullptr);
 			vmaFreeMemory(m_allocator, stagingBufferAlloc);
@@ -3617,37 +3629,26 @@ private:
 	}
 
 	void createIndexBuffers() {
-		// snowflake
 		{
-			Object objIdx = Object::CANDLE;
-			tinygltf::Model& model = m_model[objIdx];
-			tinygltf::Mesh& mesh = model.meshes[0];
-			tinygltf::Primitive& primitive = mesh.primitives[0];
-			tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-			tinygltf::BufferView& view = model.bufferViews[indexAccessor.bufferView];
+			// Snowflake
+			Buffer& snowIdxBuffer = m_indexBuffers.snowflake;
 
-			m_indexBuffers.snowflake.resize(1);
+			if (snowIdxBuffer.needTransfer) {
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingBufferAloc{};
 
-			Buffer newBuffer{};
-			VkBuffer stagingBuffer;
-			VmaAllocation stagingBufferAloc{};
-			VkBuffer indexBuffer;
-			VmaAllocation indexBufferAloc{};
+				createBuffer(snowIdxBuffer.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
+				void* data;
+				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
+					memcpy(data, snowIdxBuffer.raw, snowIdxBuffer.size);
+				vmaUnmapMemory(m_allocator, stagingBufferAloc);
+				createBuffer(snowIdxBuffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, snowIdxBuffer.buffer, snowIdxBuffer.allocation);
+				copyBuffer(stagingBuffer, snowIdxBuffer.buffer, snowIdxBuffer.size);
+				snowIdxBuffer.needTransfer = false;	
 
-			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
-			void* data;
-			vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-				memcpy(data, &model.buffers[view.buffer].data.at(0) + view.byteOffset, view.byteLength);
-			vmaUnmapMemory(m_allocator, stagingBufferAloc);
-			createBuffer(view.byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferAloc);
-			copyBuffer(stagingBuffer, indexBuffer, view.byteLength);
-
-			newBuffer.buffer = indexBuffer;
-			newBuffer.allocation = indexBufferAloc;
-
-			vkDestroyBuffer(device, stagingBuffer, nullptr);
-			vmaFreeMemory(m_allocator, stagingBufferAloc);
-			m_indexBuffers.snowflake[0] = newBuffer;
+				vkDestroyBuffer(device, stagingBuffer, nullptr);
+				vmaFreeMemory(m_allocator, stagingBufferAloc);
+			}
 		}
 
 		// candles lod0
@@ -4390,12 +4391,12 @@ private:
 		uint32_t instanceCount{SNOWFLAKE_COUNT};
 		size_t positionBufferOffset = model.accessors[attributes["POSITION"]].byteOffset;
 
-		VkBuffer vertexBuffers[2] = {m_vertexBuffers.snowflake[0].buffer, instanceBuffer};
+		VkBuffer vertexBuffers[2] = {m_vertexBuffers.snowflake.buffer, instanceBuffer};
 		VkDeviceSize vertexBufferOffsets[2] = {positionBufferOffset, 0};
 		vkCmdBindVertexBuffers(commandBuffer, 0, sizeof(vertexBuffers) / sizeof(VkBuffer), vertexBuffers, vertexBufferOffsets);
 
 		auto& indexAccessoridx = model.meshes[0].primitives[0].indices;
-		VkBuffer indexBuffer = m_indexBuffers.snowflake[0].buffer;
+		VkBuffer indexBuffer = m_indexBuffers.snowflake.buffer;
 		uint64_t indexBufferOffsets = model.accessors[indexAccessoridx].byteOffset;
 		uint64_t verticesCount = model.accessors[indexAccessoridx].count;
 
@@ -4522,7 +4523,7 @@ private:
 		VkDeviceSize offsets{0};
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom.horizontal);
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad.buffer, &offsets);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom,
 						0, 1, &m_graphicDescriptorSets.bloom1[m_currentFrame], 0, 0);
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
@@ -4533,7 +4534,7 @@ private:
 		VkDeviceSize offsets{0};
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.bloom.vertical);
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad.buffer, &offsets);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom,
 						0, 1, &m_graphicDescriptorSets.bloom2[m_currentFrame], 0, 0);
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
@@ -4544,7 +4545,7 @@ private:
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.combine);
 
 		VkDeviceSize offsets{0};
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad[0].buffer, &offsets);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad.buffer, &offsets);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.combine,
 						0, 1, &m_graphicDescriptorSets.combine[m_currentFrame], 0, 0);
 
@@ -5069,13 +5070,15 @@ private:
     }
 
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+		std::cout << "Available present mode: " << "\n";
         for (const auto& availablePresentMode : availablePresentModes) {
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+			std::cout << vk::to_string((vk::PresentModeKHR)availablePresentMode) << "\n";
+            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
                 return availablePresentMode;
             }
         }
 
-        return VK_PRESENT_MODE_FIFO_KHR;
+        return VK_PRESENT_MODE_IMMEDIATE_KHR;
     }
 
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
