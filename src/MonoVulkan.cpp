@@ -1,7 +1,4 @@
 #include "MonoVulkan.hpp"
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/gtc/type_ptr.hpp"
-#include "vulkan/vulkan_enums.hpp"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -120,20 +117,6 @@ namespace std {
         }
     };
 }
-
-struct TransformUniform {
-    alignas(16) glm::mat4 model;
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
-    alignas(16) glm::mat4 dummy;
-};
-
-struct LightingUniform {
-    alignas(16) glm::vec3 lightPos;
-    alignas(16) glm::vec3 camPos;
-    alignas(16) glm::mat3 dummy1;
-    alignas(16) glm::mat3 dummy2;
-};
 
 class MonoVulkan {
 public:
@@ -327,11 +310,16 @@ private:
 	} m_indexBuffers;
 
 	struct {
-		std::vector<Buffer> snowflake;
+		std::array<Buffer, MAX_FRAMES_IN_FLIGHT> snowflake;
 		struct {
-			std::vector<Buffer> transform;
-			std::vector<Buffer> lighting;
+			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> perMeshTransform;
+			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> lightingTransform;
 		} candles;
+		struct {
+			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> perMeshTransform;
+			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> transform;
+			Buffer perMeshLookup;
+		} shadow;
 	} m_graphicUniformBuffers;
 
     std::vector<VertexInstance> m_towerInstanceRaw;
@@ -340,8 +328,6 @@ private:
 
 	struct {
 		std::array<Buffer, MAX_FRAMES_IN_FLIGHT> snowflake;
-		// per meshs in model
-		std::vector<Buffer> candles;
 	} m_storageBuffers;
 
 	struct {
@@ -685,9 +671,10 @@ private:
 
     void updateGraphicUniformBuffer() {
 		ZoneScopedN("Update Graphic Transform Uniform Buffer");
+		std::vector<ShadowPerMeshTransform> shadowMeshUniform;
 		// snowflake
 		{
-			TransformUniform ubo{};
+			SnowTransform ubo{};
 			ubo.model = glm::mat4(1.0f);
 			ubo.model = glm::translate(ubo.model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
 			if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
@@ -697,47 +684,51 @@ private:
 			glm::mat4 proj = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
 			proj[1][1] *= -1;
 
-			ubo.view = view;
-			ubo.proj = proj;
+			ubo.viewProj = proj * view;
 
-			*(TransformUniform*)m_graphicUniformBuffers.snowflake[m_currentFrame].raw = ubo;
+			*(SnowTransform*)m_graphicUniformBuffers.snowflake[m_currentFrame].raw = ubo;
 		}
 
 		// candles
 		{
 			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
-
-			// transform uniform
 			{
 				unsigned int meshCount = model.meshes.size();
-				TransformUniform ubo{};
-				ubo.model = glm::mat4(1.0f);
-				ubo.model = glm::translate(ubo.model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
-				ubo.model = glm::scale(ubo.model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
-				
-				// glm::mat4 view = glm::lookAt(glm::vec3(s_viewPos[0], s_viewPos[1], s_viewPos[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-				// glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+				CandlesPerMeshTransform candleMeshModel{};
+				candleMeshModel.model = glm::mat4(1.0f);
+				candleMeshModel.model = glm::translate(candleMeshModel.model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
+				candleMeshModel.model = glm::scale(candleMeshModel.model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
+
+				for (unsigned int meshIdx = 0; meshIdx < meshCount; meshIdx++){
+					// mesh local transform
+					glm::mat4 localMeshModel = candleMeshModel.model * m_modelMeshTransforms[objIdx][meshIdx];
+					CandlesPerMeshTransform* uniformMapped = (CandlesPerMeshTransform*)m_graphicUniformBuffers.candles.perMeshTransform[m_currentFrame].raw;
+					uniformMapped[meshIdx].model = localMeshModel;
+
+					// if mesh cast shadow
+					if (m_vertexBuffers.candles[meshIdx].size() == 1) {
+						ShadowPerMeshTransform model{localMeshModel};
+						shadowMeshUniform.push_back(model);
+					}
+				}
+
+				CandlesLightingTransform* candlesUBO = (CandlesLightingTransform*)m_graphicUniformBuffers.candles.lightingTransform[m_currentFrame].raw;
 				glm::mat4 view = g_camera.getViewMatrix();
 				glm::mat4 proj = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
 				proj[1][1] *= -1;
 
-				ubo.view = view;
-				ubo.proj = proj;
+				candlesUBO->viewProj = proj * view;
+				candlesUBO->lightPos = glm::vec3(s_lightPos[0], s_lightPos[1], s_lightPos[2]);
+				candlesUBO->camPos = g_camera.getPostion();
 
-				TransformUniform* tranformUBO = (TransformUniform*)m_graphicUniformBuffers.candles.transform[m_currentFrame].raw;
-				for (unsigned int i = 0; i < meshCount; i++){
-					tranformUBO[i] = ubo;
-				}
-			}
-
-			// lighting uniform
-			{
-				LightingUniform* lightingUBO = (LightingUniform*)m_graphicUniformBuffers.candles.lighting[m_currentFrame].raw;
-				lightingUBO->lightPos = glm::vec3(s_lightPos[0], s_lightPos[1], s_lightPos[2]);
-				lightingUBO->camPos = g_camera.getPostion();
+				ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.transform[m_currentFrame].raw;
+				shadow->viewProj = candlesUBO->viewProj;
 			}
 		}
+
+		unsigned int shadowUniformSize = shadowMeshUniform.size() * sizeof(ShadowPerMeshTransform);
+		memcpy(m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].raw, shadowMeshUniform.data(), shadowUniformSize);
     }
 	
 	void updateComputeUniformBuffer() {
@@ -899,18 +890,30 @@ private:
 		vmaFreeMemory(m_allocator, m_indexBuffers.shadow.allocation);
 		free(m_indexBuffers.shadow.raw);
 
+		vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.perMeshLookup.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshLookup.allocation);
+		free(m_graphicUniformBuffers.shadow.perMeshLookup.raw);
+
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroyBuffer(device, m_graphicUniformBuffers.snowflake[i].buffer, nullptr);
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.snowflake[i].allocation);
 			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.snowflake[i].allocation);
 
-			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.transform[i].buffer, nullptr);
-			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.transform[i].allocation);
-			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.transform[i].allocation);
+			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.perMeshTransform[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.perMeshTransform[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.perMeshTransform[i].allocation);
 
-			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.lighting[i].buffer, nullptr);
-			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.lighting[i].allocation);
-			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.lighting[i].allocation);
+			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.lightingTransform[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.lightingTransform[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.lightingTransform[i].allocation);
+
+			vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.transform[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.transform[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.transform[i].allocation);
+
+			vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation);
 		}
 
 		Object objIdx = Object::CANDLE;
@@ -3261,12 +3264,14 @@ private:
 		tinygltf::Model& model = m_model[Object::CANDLE];
 		std::vector<float> shadowVertices;
 		std::vector<unsigned int> shadowIndices;
+		std::vector<unsigned char> shadowLookupUniform;
+		unsigned int shadowVertexIdx{0};
 		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
 			// only the base of the candles cast shadow
 			if (m_vertexBuffers.candles[meshIdx].size() == 1) {
 				const unsigned int* i = reinterpret_cast<unsigned int*>(m_indexBuffers.candles.lod0[meshIdx].raw);
 				const unsigned int iCount = m_indexBuffers.candles.lod0[meshIdx].size / sizeof(unsigned int);
-				const unsigned int vertexOffset = shadowVertices.size() / 3;
+				const unsigned int vertexOffset = shadowVertices.size();
 				for(unsigned int idx = 0; idx < iCount; idx++) {
 					shadowIndices.push_back(i[idx] + vertexOffset);
 				}
@@ -3277,10 +3282,14 @@ private:
 				// interleaved vertex data already in shader attr order
 				const unsigned int offset = 0;
 				for(unsigned int idx = 0 + offset; idx < vCount; idx += stride) {
-					shadowVertices.push_back(v[idx + 0]);
-					shadowVertices.push_back(v[idx + 1]);
-					shadowVertices.push_back(v[idx + 2]);
+					for(unsigned int vt = 0; vt < 3; vt++) {
+						shadowVertices.push_back(v[idx + vt]);
+						// add lookup entry for this 1 vervex
+						shadowLookupUniform.push_back(shadowVertexIdx);
+					}
 				}
+
+				shadowVertexIdx++;
 			}
 		}
 
@@ -3290,10 +3299,16 @@ private:
 		m_vertexBuffers.shadow.size = vSize;
 		m_vertexBuffers.shadow.needTransfer = true;
 
-		unsigned int iSize = shadowIndices.size() * sizeof(float);
+		unsigned int iSize = shadowIndices.size() * sizeof(unsigned int);
 		m_indexBuffers.shadow.raw = malloc(iSize);
 		memcpy(m_indexBuffers.shadow.raw, shadowIndices.data(), iSize);
 		m_indexBuffers.shadow.size = iSize;
+		m_indexBuffers.shadow.needTransfer = true;
+
+		unsigned int uSize = shadowLookupUniform.size() * sizeof(unsigned char);
+		m_graphicUniformBuffers.shadow.perMeshLookup.raw = malloc(uSize);
+		memcpy(m_graphicUniformBuffers.shadow.perMeshLookup.raw, shadowLookupUniform.data(), uSize);
+		m_graphicUniformBuffers.shadow.perMeshLookup.size = uSize;
 		m_indexBuffers.shadow.needTransfer = true;
 	}
 
@@ -3804,9 +3819,7 @@ private:
     void createGraphicUniformBuffers() {
 		// snowflake
 		{
-			m_graphicUniformBuffers.snowflake.resize(MAX_FRAMES_IN_FLIGHT);
-
-			VkDeviceSize bufferSize = sizeof(TransformUniform);
+			VkDeviceSize bufferSize = sizeof(SnowTransform);
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
 					, m_graphicUniformBuffers.snowflake[i].buffer, m_graphicUniformBuffers.snowflake[i].allocation);
@@ -3823,30 +3836,49 @@ private:
 			// transform uniform
 			{
 				unsigned int meshCount = model.meshes.size();
-				VkDeviceSize bufferSize = sizeof(TransformUniform) * meshCount;
-
-				m_graphicUniformBuffers.candles.transform.resize(MAX_FRAMES_IN_FLIGHT);
+				VkDeviceSize bufferSize = sizeof(CandlesPerMeshTransform) * meshCount;
 
 				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 					createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-						, m_graphicUniformBuffers.candles.transform[i].buffer, m_graphicUniformBuffers.candles.transform[i].allocation);
+						, m_graphicUniformBuffers.candles.perMeshTransform[i].buffer, m_graphicUniformBuffers.candles.perMeshTransform[i].allocation);
 
-					vmaMapMemory(m_allocator, m_graphicUniformBuffers.candles.transform[i].allocation, &m_graphicUniformBuffers.candles.transform[i].raw);
+					vmaMapMemory(m_allocator, m_graphicUniformBuffers.candles.perMeshTransform[i].allocation, &m_graphicUniformBuffers.candles.perMeshTransform[i].raw);
 				}
 			}
 
 			// lighting uniform
 			{
-				VkDeviceSize bufferSize = sizeof(LightingUniform);
-
-				m_graphicUniformBuffers.candles.lighting.resize(MAX_FRAMES_IN_FLIGHT);
+				VkDeviceSize bufferSize = sizeof(CandlesLightingTransform);
 
 				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 					createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-						, m_graphicUniformBuffers.candles.lighting[i].buffer, m_graphicUniformBuffers.candles.lighting[i].allocation);
+						, m_graphicUniformBuffers.candles.lightingTransform[i].buffer, m_graphicUniformBuffers.candles.lightingTransform[i].allocation);
 
-					vmaMapMemory(m_allocator, m_graphicUniformBuffers.candles.lighting[i].allocation, &m_graphicUniformBuffers.candles.lighting[i].raw);
+					vmaMapMemory(m_allocator, m_graphicUniformBuffers.candles.lightingTransform[i].allocation, &m_graphicUniformBuffers.candles.lightingTransform[i].raw);
 				}
+			}
+		}
+
+		// shadow
+		{
+			VkDeviceSize meshBufferSize = sizeof(ShadowPerMeshTransform) * 10;
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				createBuffer(meshBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					, m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation);
+
+				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation, &m_graphicUniformBuffers.shadow.perMeshTransform[i].raw);
+				// heuristic mesh casting shadow size
+				memset(m_graphicUniformBuffers.shadow.perMeshTransform[i].raw, 0, meshBufferSize);
+				m_graphicUniformBuffers.shadow.perMeshTransform[i].size = meshBufferSize;
+			}
+
+			VkDeviceSize bufferSize = sizeof(ShadowLightingTransform);
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					, m_graphicUniformBuffers.shadow.transform[i].buffer, m_graphicUniformBuffers.shadow.transform[i].allocation);
+
+				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.transform[i].allocation, &m_graphicUniformBuffers.shadow.transform[i].raw);
+				m_graphicUniformBuffers.shadow.transform[i].size = bufferSize;
 			}
 		}
     }
@@ -3929,6 +3961,26 @@ private:
 		copyBuffer(stagingBuffer, m_storageBuffers.snowflake[1].buffer, bufferSize);
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vmaFreeMemory(m_allocator, stagingBufferAlloc);
+
+		{
+			// Shadow
+			Buffer& shadowStorage = m_graphicUniformBuffers.shadow.perMeshLookup;
+			if(shadowStorage.needTransfer) {
+				VkBuffer stagingBuffer;
+				VmaAllocation stagingBufferAlloc{};
+				createBuffer(shadowStorage.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+				void* data;
+				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+					memcpy(data, shadowStorage.raw, shadowStorage.size);
+				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+				createBuffer(shadowStorage.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadowStorage.buffer, shadowStorage.allocation);
+				copyBuffer(stagingBuffer, shadowStorage.buffer, shadowStorage.size);
+				shadowStorage.needTransfer = false;
+
+				vkDestroyBuffer(device, stagingBuffer, nullptr);
+				vmaFreeMemory(m_allocator, stagingBufferAlloc);
+			}
+		}
 	}
 
 	// Pool use for both graphic and compute descriptors
@@ -3992,7 +4044,7 @@ private:
 				VkDescriptorBufferInfo bufferInfo{};
 				bufferInfo.buffer = m_graphicUniformBuffers.snowflake[i].buffer;
 				bufferInfo.offset = 0;
-				bufferInfo.range = sizeof(TransformUniform);
+				bufferInfo.range = sizeof(SnowTransform);
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.snowflake[i];
@@ -4100,9 +4152,9 @@ private:
 				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
 				VkDescriptorBufferInfo bufferInfo{};
-				bufferInfo.buffer = m_graphicUniformBuffers.candles.transform[i].buffer;
+				bufferInfo.buffer = m_graphicUniformBuffers.candles.perMeshTransform[i].buffer;
 				bufferInfo.offset = 0;
-				bufferInfo.range = sizeof(TransformUniform);
+				bufferInfo.range = sizeof(CandlesPerMeshTransform);
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.candles.tranformUniform[i];
@@ -4113,9 +4165,9 @@ private:
 				descriptorWrites[0].pBufferInfo = &bufferInfo;
 
 				VkDescriptorBufferInfo lightBufferInfo{};
-				lightBufferInfo.buffer = m_graphicUniformBuffers.candles.lighting[i].buffer;
+				lightBufferInfo.buffer = m_graphicUniformBuffers.candles.lightingTransform[i].buffer;
 				lightBufferInfo.offset = 0;
-				lightBufferInfo.range = sizeof(LightingUniform);
+				lightBufferInfo.range = sizeof(CandlesLightingTransform);
 
 				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[1].dstSet = m_graphicDescriptorSets.candles.tranformUniform[i];
@@ -4578,10 +4630,6 @@ private:
 				idxCount = m_indexBuffers.candles.lod1[meshIdx].size / sizeof(unsigned int);
 			}
 
-			// mesh local transform
-			TransformUniform* uniformMapped = (TransformUniform*)m_graphicUniformBuffers.candles.transform[m_currentFrame].raw;
-			uniformMapped[meshIdx].model = uniformMapped[meshIdx].model * m_modelMeshTransforms[object][meshIdx];
-
 			// some meshes have animation and don't normal map
 			if(isAnimated) {
 				m_graphicPushConstant.value = 0;
@@ -4594,7 +4642,7 @@ private:
 
 			uint32_t DynamicOffset{};
 			// this dynamic offset have to be 256 byte aligned
-			DynamicOffset = sizeof(TransformUniform) * meshIdx;
+			DynamicOffset = sizeof(CandlesPerMeshTransform) * meshIdx;
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.candles, 
 						   0, 1, &m_graphicDescriptorSets.candles.tranformUniform[m_currentFrame], 1, &DynamicOffset);
 

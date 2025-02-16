@@ -164,6 +164,33 @@ struct SpecializationConstant{
 	alignas(4) int useTexture{1};
 }s_specConstant;
 
+struct SnowTransform {
+    alignas(16) glm::mat4 model;
+    alignas(16) glm::mat4 viewProj;
+};
+
+struct CandlesPerMeshTransform {
+    alignas(64) glm::mat4 model;
+	// required alignment for descriptor uniform buffer offset
+    alignas(64) glm::mat4 dummy1;
+    alignas(64) glm::vec3 dummy2;
+    alignas(64) glm::vec3 dummy3;
+};
+
+struct CandlesLightingTransform {
+    alignas(16) glm::mat4 viewProj;
+    alignas(16) glm::vec3 lightPos;
+    alignas(16) glm::vec3 camPos;
+};
+
+struct ShadowPerMeshTransform {
+    alignas(16) glm::mat4 model;
+};
+
+struct ShadowLightingTransform {
+    alignas(16) glm::mat4 viewProj;
+};
+
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
 };
@@ -224,8 +251,7 @@ float generateRandomFloat(float low, float high){
 	return low + (static_cast<float>(rand()) / (RAND_MAX / (high - low)));
 }
  
-void testAlignment()
-{
+void testAlignment() {
 	struct Struct1{
 		glm::vec3 pos;
 	};
@@ -262,8 +288,8 @@ void testAlignment()
 				<< "\noffset of weight is:" << offsetof(Struct4, weight)
 				<< "\nnsize of Struct5 is:" << sizeof(Struct5)
 				<< "\noffset of weight is:" << offsetof(Struct5, weight)
-				<< "\nsize of Struct6 is:" << sizeof(Struct6)
-				<< "\noffset of weight is:" << offsetof(Struct6, weight) << std::endl;
+				<< "\nsize of CandlesPerMeshTransform is:" << sizeof(CandlesPerMeshTransform)
+				<< "\noffset of weight is:" << offsetof(CandlesPerMeshTransform, dummy2) << std::endl;
 
 }
 

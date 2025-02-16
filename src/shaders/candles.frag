@@ -1,9 +1,10 @@
 #version 450
 
-layout(set = 0, binding = 1) uniform UniformLighting {
+layout(set = 0, binding = 1) uniform CandlesLightingTransform {
+    mat4 viewProj;
     vec3 lightPos;
     vec3 camPos;
-} u_lighting;
+} u_lightingTransform;
 
 layout(set = 1, binding = 2) uniform sampler2D u_texSampler;
 layout(set = 1, binding = 3) uniform sampler2D u_normalSampler;
@@ -32,8 +33,8 @@ void main() {
 	// have to normalize here or else
 	// white artifact happen maybe because MSAA rasterization make normalized normal not normalized anymore
 	vec3 n = normalize(v_normal);
-	vec3 l = normalize(u_lighting.lightPos - v_fragPos);
-	vec3 c = normalize(u_lighting.camPos - v_fragPos);
+	vec3 l = normalize(u_lightingTransform.lightPos - v_fragPos);
+	vec3 c = normalize(u_lightingTransform.camPos - v_fragPos);
 
 	if (p_const.isNormalMapping == 1) {
 		vec3 normal = texture(u_normalSampler, v_fragTexCoord).rgb;

@@ -2,8 +2,7 @@
 
 layout(set = 0, binding = 0) uniform UniformTransform {
 	mat4 model;
-	mat4 view;
-	mat4 proj;
+	mat4 viewProj;
 } u_transform;
 
 layout(location = 0) in vec3 a_position;
@@ -18,5 +17,5 @@ void main() {
 	instanceModel[3] = vec4(a_instancePos.x, a_instancePos.y, a_instancePos.z, 1.0f);
 
 	mat4 model = instanceModel * u_transform.model;
-	gl_Position = u_transform.proj * u_transform.view * model * vec4(a_position, 1.0);
+	gl_Position = u_transform.viewProj * model * vec4(a_position, 1.0);
 }

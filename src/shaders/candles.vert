@@ -1,15 +1,14 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform UniformTransform {
+layout(set = 0, binding = 0) uniform CandlesPerMeshTransform {
     mat4 model;
-    mat4 view;
-    mat4 proj;
-} u_transform;
+} u_perMesh;
 
-layout(set = 0, binding = 1) uniform UniformLighting {
+layout(set = 0, binding = 1) uniform CandlesLightingTransform {
+    mat4 viewProj;
     vec3 lightPos;
     vec3 camPos;
-} u_lighting;
+} u_lightingTransform;
 
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
@@ -36,7 +35,7 @@ void main() {
 	instanceModel[2] = vec4(0.0f, 0.0f, 1.0f, 0.0f);
 	instanceModel[3] = vec4(instancePos.x, instancePos.y, instancePos.z, 1.0f);
 
-	mat4 model = instanceModel * u_transform.model;
+	mat4 model = instanceModel * u_perMesh.model;
 	vec3 fragPos = vec3(model * vec4(a_position, 1.0));
 
 	mat3 worldModel = transpose(inverse(mat3(model)));
@@ -48,8 +47,8 @@ void main() {
 	mat3 TBN = transpose(mat3(T, B, N));
 
 	v_tangentFragPos = TBN * fragPos;
-	v_tangentLightPos = TBN * u_lighting.lightPos;
-	v_tangentCamPos = TBN * u_lighting.camPos;
+	v_tangentLightPos = TBN * u_lightingTransform.lightPos;
+	v_tangentCamPos = TBN * u_lightingTransform.camPos;
 
     v_texCoord = a_texCoord;
     v_fragPosition = fragPos;
@@ -59,5 +58,5 @@ void main() {
 
 	// just for tessting
 	v_tangent = vec3(a_tangent);
-    gl_Position = u_transform.proj * u_transform.view * model * vec4(a_position, 1.0);
+    gl_Position = u_lightingTransform.viewProj * model * vec4(a_position, 1.0);
 }

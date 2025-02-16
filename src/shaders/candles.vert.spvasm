@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 178
+; Bound: 175
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -14,11 +14,9 @@
                OpName %instanceModel "instanceModel"
                OpName %instancePos "instancePos"
                OpName %model "model"
-               OpName %UniformTransform "UniformTransform"
-               OpMemberName %UniformTransform 0 "model"
-               OpMemberName %UniformTransform 1 "view"
-               OpMemberName %UniformTransform 2 "proj"
-               OpName %u_transform "u_transform"
+               OpName %CandlesPerMeshTransform "CandlesPerMeshTransform"
+               OpMemberName %CandlesPerMeshTransform 0 "model"
+               OpName %u_perMesh "u_perMesh"
                OpName %fragPos "fragPos"
                OpName %a_position "a_position"
                OpName %worldModel "worldModel"
@@ -30,10 +28,11 @@
                OpName %TBN "TBN"
                OpName %v_tangentFragPos "v_tangentFragPos"
                OpName %v_tangentLightPos "v_tangentLightPos"
-               OpName %UniformLighting "UniformLighting"
-               OpMemberName %UniformLighting 0 "lightPos"
-               OpMemberName %UniformLighting 1 "camPos"
-               OpName %u_lighting "u_lighting"
+               OpName %CandlesLightingTransform "CandlesLightingTransform"
+               OpMemberName %CandlesLightingTransform 0 "viewProj"
+               OpMemberName %CandlesLightingTransform 1 "lightPos"
+               OpMemberName %CandlesLightingTransform 2 "camPos"
+               OpName %u_lightingTransform "u_lightingTransform"
                OpName %v_tangentCamPos "v_tangentCamPos"
                OpName %v_texCoord "v_texCoord"
                OpName %a_texCoord "a_texCoord"
@@ -47,28 +46,25 @@
                OpMemberName %gl_PerVertex 3 "gl_CullDistance"
                OpName %_ ""
                OpDecorate %instancePos Location 4
-               OpDecorate %UniformTransform Block
-               OpMemberDecorate %UniformTransform 0 ColMajor
-               OpMemberDecorate %UniformTransform 0 MatrixStride 16
-               OpMemberDecorate %UniformTransform 0 Offset 0
-               OpMemberDecorate %UniformTransform 1 ColMajor
-               OpMemberDecorate %UniformTransform 1 MatrixStride 16
-               OpMemberDecorate %UniformTransform 1 Offset 64
-               OpMemberDecorate %UniformTransform 2 ColMajor
-               OpMemberDecorate %UniformTransform 2 MatrixStride 16
-               OpMemberDecorate %UniformTransform 2 Offset 128
-               OpDecorate %u_transform Binding 0
-               OpDecorate %u_transform DescriptorSet 0
+               OpDecorate %CandlesPerMeshTransform Block
+               OpMemberDecorate %CandlesPerMeshTransform 0 ColMajor
+               OpMemberDecorate %CandlesPerMeshTransform 0 MatrixStride 16
+               OpMemberDecorate %CandlesPerMeshTransform 0 Offset 0
+               OpDecorate %u_perMesh Binding 0
+               OpDecorate %u_perMesh DescriptorSet 0
                OpDecorate %a_position Location 0
                OpDecorate %a_normal Location 1
                OpDecorate %a_tangent Location 2
                OpDecorate %v_tangentFragPos Location 1
                OpDecorate %v_tangentLightPos Location 2
-               OpDecorate %UniformLighting Block
-               OpMemberDecorate %UniformLighting 0 Offset 0
-               OpMemberDecorate %UniformLighting 1 Offset 16
-               OpDecorate %u_lighting Binding 1
-               OpDecorate %u_lighting DescriptorSet 0
+               OpDecorate %CandlesLightingTransform Block
+               OpMemberDecorate %CandlesLightingTransform 0 ColMajor
+               OpMemberDecorate %CandlesLightingTransform 0 MatrixStride 16
+               OpMemberDecorate %CandlesLightingTransform 0 Offset 0
+               OpMemberDecorate %CandlesLightingTransform 1 Offset 64
+               OpMemberDecorate %CandlesLightingTransform 2 Offset 80
+               OpDecorate %u_lightingTransform Binding 1
+               OpDecorate %u_lightingTransform DescriptorSet 0
                OpDecorate %v_tangentCamPos Location 3
                OpDecorate %v_texCoord Location 0
                OpDecorate %a_texCoord Location 3
@@ -105,9 +101,9 @@
 %_ptr_Input_float = OpTypePointer Input %float
      %uint_1 = OpConstant %uint 1
      %uint_2 = OpConstant %uint 2
-%UniformTransform = OpTypeStruct %mat4v4float %mat4v4float %mat4v4float
-%_ptr_Uniform_UniformTransform = OpTypePointer Uniform %UniformTransform
-%u_transform = OpVariable %_ptr_Uniform_UniformTransform Uniform
+%CandlesPerMeshTransform = OpTypeStruct %mat4v4float
+%_ptr_Uniform_CandlesPerMeshTransform = OpTypePointer Uniform %CandlesPerMeshTransform
+  %u_perMesh = OpVariable %_ptr_Uniform_CandlesPerMeshTransform Uniform
 %_ptr_Uniform_mat4v4float = OpTypePointer Uniform %mat4v4float
 %_ptr_Function_v3float = OpTypePointer Function %v3float
  %a_position = OpVariable %_ptr_Input_v3float Input
@@ -119,9 +115,9 @@
 %_ptr_Output_v3float = OpTypePointer Output %v3float
 %v_tangentFragPos = OpVariable %_ptr_Output_v3float Output
 %v_tangentLightPos = OpVariable %_ptr_Output_v3float Output
-%UniformLighting = OpTypeStruct %v3float %v3float
-%_ptr_Uniform_UniformLighting = OpTypePointer Uniform %UniformLighting
- %u_lighting = OpVariable %_ptr_Uniform_UniformLighting Uniform
+%CandlesLightingTransform = OpTypeStruct %mat4v4float %v3float %v3float
+%_ptr_Uniform_CandlesLightingTransform = OpTypePointer Uniform %CandlesLightingTransform
+%u_lightingTransform = OpVariable %_ptr_Uniform_CandlesLightingTransform Uniform
 %_ptr_Uniform_v3float = OpTypePointer Uniform %v3float
 %v_tangentCamPos = OpVariable %_ptr_Output_v3float Output
     %v2float = OpTypeVector %float 2
@@ -163,7 +159,7 @@
          %40 = OpAccessChain %_ptr_Function_v4float %instanceModel %int_3
                OpStore %40 %39
          %42 = OpLoad %mat4v4float %instanceModel
-         %47 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_0
+         %47 = OpAccessChain %_ptr_Uniform_mat4v4float %u_perMesh %int_0
          %48 = OpLoad %mat4v4float %47
          %49 = OpMatrixTimesMatrix %mat4v4float %42 %48
                OpStore %model %49
@@ -240,12 +236,12 @@
         %128 = OpMatrixTimesVector %v3float %126 %127
                OpStore %v_tangentFragPos %128
         %130 = OpLoad %mat3v3float %TBN
-        %135 = OpAccessChain %_ptr_Uniform_v3float %u_lighting %int_0
+        %135 = OpAccessChain %_ptr_Uniform_v3float %u_lightingTransform %int_1
         %136 = OpLoad %v3float %135
         %137 = OpMatrixTimesVector %v3float %130 %136
                OpStore %v_tangentLightPos %137
         %139 = OpLoad %mat3v3float %TBN
-        %140 = OpAccessChain %_ptr_Uniform_v3float %u_lighting %int_1
+        %140 = OpAccessChain %_ptr_Uniform_v3float %u_lightingTransform %int_2
         %141 = OpLoad %v3float %140
         %142 = OpMatrixTimesVector %v3float %139 %141
                OpStore %v_tangentCamPos %142
@@ -261,20 +257,17 @@
         %157 = OpCompositeExtract %float %154 2
         %158 = OpCompositeConstruct %v3float %155 %156 %157
                OpStore %v_tangent %158
-        %163 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_2
+        %163 = OpAccessChain %_ptr_Uniform_mat4v4float %u_lightingTransform %int_0
         %164 = OpLoad %mat4v4float %163
-        %165 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_1
-        %166 = OpLoad %mat4v4float %165
-        %167 = OpMatrixTimesMatrix %mat4v4float %164 %166
-        %168 = OpLoad %mat4v4float %model
-        %169 = OpMatrixTimesMatrix %mat4v4float %167 %168
-        %170 = OpLoad %v3float %a_position
-        %171 = OpCompositeExtract %float %170 0
-        %172 = OpCompositeExtract %float %170 1
-        %173 = OpCompositeExtract %float %170 2
-        %174 = OpCompositeConstruct %v4float %171 %172 %173 %float_1
-        %175 = OpMatrixTimesVector %v4float %169 %174
-        %177 = OpAccessChain %_ptr_Output_v4float %_ %int_0
-               OpStore %177 %175
+        %165 = OpLoad %mat4v4float %model
+        %166 = OpMatrixTimesMatrix %mat4v4float %164 %165
+        %167 = OpLoad %v3float %a_position
+        %168 = OpCompositeExtract %float %167 0
+        %169 = OpCompositeExtract %float %167 1
+        %170 = OpCompositeExtract %float %167 2
+        %171 = OpCompositeConstruct %v4float %168 %169 %170 %float_1
+        %172 = OpMatrixTimesVector %v4float %166 %171
+        %174 = OpAccessChain %_ptr_Output_v4float %_ %int_0
+               OpStore %174 %172
                OpReturn
                OpFunctionEnd

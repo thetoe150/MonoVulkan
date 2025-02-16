@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 70
+; Bound: 67
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -16,8 +16,7 @@
                OpName %model "model"
                OpName %UniformTransform "UniformTransform"
                OpMemberName %UniformTransform 0 "model"
-               OpMemberName %UniformTransform 1 "view"
-               OpMemberName %UniformTransform 2 "proj"
+               OpMemberName %UniformTransform 1 "viewProj"
                OpName %u_transform "u_transform"
                OpName %gl_PerVertex "gl_PerVertex"
                OpMemberName %gl_PerVertex 0 "gl_Position"
@@ -34,9 +33,6 @@
                OpMemberDecorate %UniformTransform 1 ColMajor
                OpMemberDecorate %UniformTransform 1 MatrixStride 16
                OpMemberDecorate %UniformTransform 1 Offset 64
-               OpMemberDecorate %UniformTransform 2 ColMajor
-               OpMemberDecorate %UniformTransform 2 MatrixStride 16
-               OpMemberDecorate %UniformTransform 2 Offset 128
                OpDecorate %u_transform Binding 0
                OpDecorate %u_transform DescriptorSet 0
                OpDecorate %gl_PerVertex Block
@@ -70,7 +66,7 @@
 %_ptr_Input_float = OpTypePointer Input %float
      %uint_1 = OpConstant %uint 1
      %uint_2 = OpConstant %uint 2
-%UniformTransform = OpTypeStruct %mat4v4float %mat4v4float %mat4v4float
+%UniformTransform = OpTypeStruct %mat4v4float %mat4v4float
 %_ptr_Uniform_UniformTransform = OpTypePointer Uniform %UniformTransform
 %u_transform = OpVariable %_ptr_Uniform_UniformTransform Uniform
 %_ptr_Uniform_mat4v4float = OpTypePointer Uniform %mat4v4float
@@ -104,20 +100,17 @@
          %48 = OpLoad %mat4v4float %47
          %49 = OpMatrixTimesMatrix %mat4v4float %42 %48
                OpStore %model %49
-         %54 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_2
+         %54 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_1
          %55 = OpLoad %mat4v4float %54
-         %56 = OpAccessChain %_ptr_Uniform_mat4v4float %u_transform %int_1
-         %57 = OpLoad %mat4v4float %56
-         %58 = OpMatrixTimesMatrix %mat4v4float %55 %57
-         %59 = OpLoad %mat4v4float %model
-         %60 = OpMatrixTimesMatrix %mat4v4float %58 %59
-         %62 = OpLoad %v3float %a_position
-         %63 = OpCompositeExtract %float %62 0
-         %64 = OpCompositeExtract %float %62 1
-         %65 = OpCompositeExtract %float %62 2
-         %66 = OpCompositeConstruct %v4float %63 %64 %65 %float_1
-         %67 = OpMatrixTimesVector %v4float %60 %66
-         %69 = OpAccessChain %_ptr_Output_v4float %_ %int_0
-               OpStore %69 %67
+         %56 = OpLoad %mat4v4float %model
+         %57 = OpMatrixTimesMatrix %mat4v4float %55 %56
+         %59 = OpLoad %v3float %a_position
+         %60 = OpCompositeExtract %float %59 0
+         %61 = OpCompositeExtract %float %59 1
+         %62 = OpCompositeExtract %float %59 2
+         %63 = OpCompositeConstruct %v4float %60 %61 %62 %float_1
+         %64 = OpMatrixTimesVector %v4float %57 %63
+         %66 = OpAccessChain %_ptr_Output_v4float %_ %int_0
+               OpStore %66 %64
                OpReturn
                OpFunctionEnd
