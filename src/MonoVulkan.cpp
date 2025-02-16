@@ -1,4 +1,5 @@
 #include "MonoVulkan.hpp"
+#include "vulkan/vulkan_core.h"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -185,7 +186,7 @@ private:
 			VkDescriptorSetLayout tranformUniform;
 			VkDescriptorSetLayout meshMaterial;
 		} candles;
-
+		VkDescriptorSetLayout shadow;
 		VkDescriptorSetLayout bloom;
 		VkDescriptorSetLayout combine;
 	} m_graphicDescriptorSetLayouts;
@@ -352,6 +353,7 @@ private:
 			std::vector<std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> meshMaterial; // per mesh of candles model
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> tranformUniform; // 1 for candles model, update every frame
 		} candles;
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> shadow;
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> bloom1;
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> bloom2;
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> combine;
@@ -846,6 +848,7 @@ private:
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.snowflake, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.tranformUniform, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.meshMaterial, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.shadow, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.bloom, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.combine, nullptr);
         vkDestroyDescriptorSetLayout(device, m_computeDescriptorSetLayouts.snowflake, nullptr);
@@ -1618,6 +1621,39 @@ private:
 					throw std::runtime_error("failed to create descriptor set layout!");
 				}
 			}
+		}
+
+		// shadow
+		{
+			VkDescriptorSetLayoutBinding transform;
+			transform.binding = 0;
+			transform.descriptorCount = 1;
+			transform.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			transform.pImmutableSamplers = nullptr;
+			transform.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+			VkDescriptorSetLayoutBinding perMeshTransform;
+			perMeshTransform.binding = 1;
+			perMeshTransform.descriptorCount = 1;
+			perMeshTransform.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			perMeshTransform.pImmutableSamplers = nullptr;
+			perMeshTransform.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+			VkDescriptorSetLayoutBinding perMeshLookup;
+			perMeshLookup.binding = 2;
+			perMeshLookup.descriptorCount = 1;
+			perMeshLookup.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			perMeshLookup.pImmutableSamplers = nullptr;
+			perMeshLookup.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+			VkDescriptorSetLayoutBinding pBinding[3] = {transform, perMeshTransform, perMeshLookup};
+			VkDescriptorSetLayoutCreateInfo layoutInfo{};
+			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layoutInfo.bindingCount = 3;
+			layoutInfo.pBindings = pBinding;
+
+			CHECK_VK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.shadow)
+				   , "fail to create shadow descriptor set layout");
 		}
 
 		// for bloom
@@ -3309,7 +3345,7 @@ private:
 		m_graphicUniformBuffers.shadow.perMeshLookup.raw = malloc(uSize);
 		memcpy(m_graphicUniformBuffers.shadow.perMeshLookup.raw, shadowLookupUniform.data(), uSize);
 		m_graphicUniformBuffers.shadow.perMeshLookup.size = uSize;
-		m_indexBuffers.shadow.needTransfer = true;
+		m_graphicUniformBuffers.shadow.perMeshLookup.needTransfer = true;
 	}
 
 	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
@@ -4056,8 +4092,6 @@ private:
 
 				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 			}
-
-
 		}
 
 		// candles
@@ -4176,6 +4210,66 @@ private:
 				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				descriptorWrites[1].descriptorCount = 1;
 				descriptorWrites[1].pBufferInfo = &lightBufferInfo;
+
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+			}
+		}
+
+		// shadow
+		{
+			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
+				layouts = {m_graphicDescriptorSetLayouts.shadow, m_graphicDescriptorSetLayouts.shadow};
+			VkDescriptorSetAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			allocInfo.descriptorPool = m_descriptorPool;
+			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+			allocInfo.pSetLayouts = layouts.data();
+
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.shadow.data())
+							, "fail to allocate snowflake descriptor sets !!");
+
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+				std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+
+				VkDescriptorBufferInfo transformBufferInfo{};
+				transformBufferInfo.buffer = m_graphicUniformBuffers.shadow.transform[i].buffer;
+				transformBufferInfo.offset = 0;
+				transformBufferInfo.range = sizeof(ShadowLightingTransform);
+
+				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.shadow[i];
+				descriptorWrites[0].dstBinding = 0;
+				descriptorWrites[0].dstArrayElement = 0;
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				descriptorWrites[0].descriptorCount = 1;
+				descriptorWrites[0].pBufferInfo = &transformBufferInfo;
+
+				VkDescriptorBufferInfo perMeshTransformInfo{};
+				perMeshTransformInfo.buffer = m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer;
+				perMeshTransformInfo.offset = 0;
+				perMeshTransformInfo.range = sizeof(ShadowPerMeshTransform) * 10;
+
+				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[1].dstSet = m_graphicDescriptorSets.shadow[i];
+				descriptorWrites[1].dstBinding = 1;
+				descriptorWrites[1].dstArrayElement = 0;
+				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				descriptorWrites[1].descriptorCount = 1;
+				descriptorWrites[1].pBufferInfo = &perMeshTransformInfo;
+
+				VkDescriptorBufferInfo lookupBufferInfo{};
+				lookupBufferInfo.buffer = m_graphicUniformBuffers.shadow.perMeshLookup.buffer;
+				lookupBufferInfo.offset = 0;
+				lookupBufferInfo.range = m_graphicUniformBuffers.shadow.perMeshLookup.size;
+
+				descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[2].dstSet = m_graphicDescriptorSets.shadow[i];
+				descriptorWrites[2].dstBinding = 2;
+				descriptorWrites[2].dstArrayElement = 0;
+				descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+				descriptorWrites[2].descriptorCount = 1;
+				descriptorWrites[2].pBufferInfo = &lookupBufferInfo;
 
 				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 			}
@@ -4655,6 +4749,36 @@ private:
 		}
 	}
 
+	void renderShadowMap(VkCommandBuffer commandBuffer) {
+		TracyVkZone(tracyContext, commandBuffer, "Render Shadow Map");
+
+		// vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.shadow);
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float) swapChainExtent.width;
+		viewport.height = (float) swapChainExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = {0, 0};
+		scissor.extent = swapChainExtent;
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+		VkDeviceSize vertexBufferOffsets[1] = {0};
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.shadow.buffer, vertexBufferOffsets);
+		vkCmdBindIndexBuffer(commandBuffer, m_indexBuffers.shadow.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.snowflake, 
+					   0, 1, &m_graphicDescriptorSets.snowflake[m_currentFrame], 0, 0);
+
+		// wrong instance count
+		vkCmdDrawIndexed(commandBuffer, m_indexBuffers.shadow.size / sizeof(unsigned int), 1, 0, 0, 0);
+	}
+
 	void renderBloomHorizontal(VkCommandBuffer commandBuffer) {
 		TracyVkZone(tracyContext, commandBuffer, "Render Bloom Horizontal");
 		VkDeviceSize offsets{0};
@@ -4843,6 +4967,7 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &basePassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+				// renderShadowMap(commandBuffer);
 				renderSnowflake(commandBuffer);
 				renderCandles(commandBuffer);
 

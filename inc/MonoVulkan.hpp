@@ -183,12 +183,12 @@ struct CandlesLightingTransform {
     alignas(16) glm::vec3 camPos;
 };
 
-struct ShadowPerMeshTransform {
-    alignas(16) glm::mat4 model;
-};
-
 struct ShadowLightingTransform {
     alignas(16) glm::mat4 viewProj;
+};
+
+struct ShadowPerMeshTransform {
+    alignas(16) glm::mat4 model;
 };
 
 const std::vector<const char*> validationLayers = {
