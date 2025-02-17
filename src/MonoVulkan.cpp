@@ -167,6 +167,7 @@ private:
 
 	struct {
 		std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> base;
+		std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> shadow;
 		struct {
 			std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> horizontal;
 			std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> vertical;
@@ -176,6 +177,7 @@ private:
 
 	struct {
 		VkRenderPass base;
+		VkRenderPass shadow;
 		VkRenderPass bloom;
 		VkRenderPass combine;
 	} m_renderPasses;
@@ -194,6 +196,7 @@ private:
 	struct {
 		VkPipelineLayout snowflake;
 		VkPipelineLayout candles;
+		VkPipelineLayout shadow;
 		VkPipelineLayout bloom;
 		VkPipelineLayout combine;
 	}
@@ -215,6 +218,7 @@ private:
 		VkPipeline interleaved;
 		VkPipeline separated;
 		} candles;
+		VkPipeline shadow;
 
 		struct {
 			VkPipeline vertical;
@@ -259,6 +263,7 @@ private:
 			Image bloomThresholdResRT;
 			Image depthRT;
 		} base;
+		Image shadow;
 		Image bloom1;
 		Image bloom2;
 	} RenderTarget;
@@ -816,14 +821,17 @@ private:
         vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.shadow, nullptr);
         vkDestroyPipeline(device, m_computePipeline, nullptr);
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.candles, nullptr);
+        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.shadow, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.bloom, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.combine, nullptr);
         vkDestroyPipelineLayout(device, m_computePipelineLayout, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.base, nullptr);
+        vkDestroyRenderPass(device, m_renderPasses.shadow, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.bloom, nullptr);
         vkDestroyRenderPass(device, m_renderPasses.combine, nullptr);
 
@@ -988,6 +996,10 @@ private:
 			vkDestroyImage(device, m_renderTargets[i].base.bloomThresholdResRT.image, nullptr);
 			vmaFreeMemory(m_allocator, m_renderTargets[i].base.bloomThresholdResRT.allocation);
 
+			vkDestroyImageView(device, m_renderTargets[i].shadow.view, nullptr);
+			vkDestroyImage(device, m_renderTargets[i].shadow.image, nullptr);
+			vmaFreeMemory(m_allocator, m_renderTargets[i].shadow.allocation);
+
 			vkDestroyImageView(device, m_renderTargets[i].bloom1.view, nullptr);
 			vkDestroyImage(device, m_renderTargets[i].bloom1.image, nullptr);
 			vmaFreeMemory(m_allocator, m_renderTargets[i].bloom1.allocation);
@@ -997,6 +1009,9 @@ private:
 			vmaFreeMemory(m_allocator, m_renderTargets[i].bloom2.allocation);
 		}
         for (auto framebuffer : m_frameBuffers.base) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+        for (auto framebuffer : m_frameBuffers.shadow) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
         for (auto framebuffer : m_frameBuffers.bloom.horizontal) {
@@ -1124,7 +1139,7 @@ private:
 			vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
 			std::cout << m_physicalDeviceProperties.deviceName << std::endl;
         }
-		physicalDevice = devices[1];
+		physicalDevice = devices[0];
 		m_msaaSamples = getMaxUsableSampleCount();
 
         if (physicalDevice == VK_NULL_HANDLE) {
@@ -1428,6 +1443,58 @@ private:
 			renderPassInfo.pDependencies = dependencies.data();
 
 			if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_renderPasses.base) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create render pass!");
+			}
+		}
+
+		// shadow pass
+		{
+			VkAttachmentDescription shadowAttachment{};
+			shadowAttachment.format = findDepthFormat();
+			shadowAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+			shadowAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			shadowAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			shadowAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			shadowAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			shadowAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			shadowAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+			VkAttachmentReference shadowRef{};
+			shadowRef.attachment = 0;
+			shadowRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+			VkSubpassDescription shadowSubpass{};
+			shadowSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			shadowSubpass.colorAttachmentCount = 0;
+			shadowSubpass.pDepthStencilAttachment = &shadowRef;
+
+			std::array<VkSubpassDependency, 2> shadowDeps{};
+			shadowDeps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+			shadowDeps[0].dstSubpass = 0;
+			shadowDeps[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			shadowDeps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			shadowDeps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			shadowDeps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			shadowDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+			shadowDeps[1].srcSubpass = 0;
+			shadowDeps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+			shadowDeps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			shadowDeps[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			shadowDeps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			shadowDeps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			shadowDeps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+			VkRenderPassCreateInfo bloomPassInfo{};
+			bloomPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO; 
+			bloomPassInfo.subpassCount = 1;
+			bloomPassInfo.pSubpasses = &shadowSubpass;
+			bloomPassInfo.attachmentCount = 1;
+			bloomPassInfo.pAttachments = &shadowAttachment;
+			bloomPassInfo.dependencyCount = shadowDeps.size();
+			bloomPassInfo.pDependencies = shadowDeps.data();
+
+			if (vkCreateRenderPass(device, &bloomPassInfo, nullptr, &m_renderPasses.shadow) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create render pass!");
 			}
 		}
@@ -1796,12 +1863,10 @@ private:
 	void createGraphicPipelineLayouts() {
 		// snowflake
 		{
-			VkDescriptorSetLayout layouts = m_graphicDescriptorSetLayouts.snowflake;
-
 			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 			pipelineLayoutInfo.setLayoutCount = 1;
-			pipelineLayoutInfo.pSetLayouts = &layouts;
+			pipelineLayoutInfo.pSetLayouts = &m_graphicDescriptorSetLayouts.snowflake;
 			pipelineLayoutInfo.pushConstantRangeCount = 0;
 			pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -1831,14 +1896,26 @@ private:
 			}
 		}
 
-		// bloom
+		// shadow
 		{
-			VkDescriptorSetLayout layouts[] = {m_graphicDescriptorSetLayouts.bloom};
-
 			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 			pipelineLayoutInfo.setLayoutCount = 1;
-			pipelineLayoutInfo.pSetLayouts = layouts;
+			pipelineLayoutInfo.pSetLayouts = &m_graphicDescriptorSetLayouts.shadow;
+			pipelineLayoutInfo.pushConstantRangeCount = 0;
+			pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+			if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayouts.shadow) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create graphic pipeline layout!");
+			}
+		}
+
+		// bloom
+		{
+			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			pipelineLayoutInfo.setLayoutCount = 1;
+			pipelineLayoutInfo.pSetLayouts = &m_graphicDescriptorSetLayouts.bloom;
 			pipelineLayoutInfo.pushConstantRangeCount = 0;
 			pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -1853,12 +1930,10 @@ private:
 			pushConstant.size = sizeof(GraphicPushConstant);
 			pushConstant.offset = 0;
 
-			VkDescriptorSetLayout layouts[] = {m_graphicDescriptorSetLayouts.combine};
-
 			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 			pipelineLayoutInfo.setLayoutCount = 1;
-			pipelineLayoutInfo.pSetLayouts = layouts;
+			pipelineLayoutInfo.pSetLayouts = &m_graphicDescriptorSetLayouts.combine;
 			pipelineLayoutInfo.pushConstantRangeCount = 1;
 			pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 
@@ -1961,7 +2036,7 @@ private:
 			// colorBlending.blendConstants[2] = 0.0f;
 			// colorBlending.blendConstants[3] = 0.0f;
 
-			std::vector<VkDynamicState> dynamicStates = {
+			std::array<VkDynamicState, 2> dynamicStates{
 				VK_DYNAMIC_STATE_VIEWPORT,
 				VK_DYNAMIC_STATE_SCISSOR,
 			};
@@ -2105,7 +2180,7 @@ private:
 			// colorBlending.blendConstants[2] = 0.0f;
 			// colorBlending.blendConstants[3] = 0.0f;
 
-			std::vector<VkDynamicState> dynamicStates = {
+			std::array<VkDynamicState, 3> dynamicStates{
 				VK_DYNAMIC_STATE_VIEWPORT,
 				VK_DYNAMIC_STATE_SCISSOR,
 				VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT
@@ -2207,6 +2282,123 @@ private:
 			vkDestroyShaderModule(device, vertShaderModule, nullptr);
 		}
 
+		// shadow
+		{
+			VkVertexInputBindingDescription	 vertexBinding{};
+			vertexBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			vertexBinding.binding = 0;
+			vertexBinding.stride = 3 * sizeof(float);
+
+			VkVertexInputAttributeDescription vertexAttr{};
+			vertexAttr.binding = 0;
+			vertexAttr.location = 0;
+			vertexAttr.location = 0;
+			vertexAttr.format = VK_FORMAT_R32G32B32_SFLOAT;
+
+			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			vertexInputInfo.vertexBindingDescriptionCount = 1;
+			vertexInputInfo.pVertexBindingDescriptions = &vertexBinding;
+			vertexInputInfo.vertexAttributeDescriptionCount = 1;
+			vertexInputInfo.pVertexAttributeDescriptions = &vertexAttr;
+
+			VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
+			inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+			inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
+
+			VkPipelineViewportStateCreateInfo viewportInfo{};
+			viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			viewportInfo.scissorCount = 1;
+			viewportInfo.viewportCount = 1;
+
+			VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
+			rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+			rasterizationInfo.rasterizerDiscardEnable = VK_TRUE;
+			rasterizationInfo.lineWidth = 1.0f;
+			// WARNING: no face cull?
+			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
+			rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
+			rasterizationInfo.depthBiasEnable = VK_FALSE;
+			rasterizationInfo.depthClampEnable = VK_FALSE;
+
+			VkPipelineMultisampleStateCreateInfo multisampleInfo{};
+			multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+			multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			multisampleInfo.sampleShadingEnable = VK_FALSE;
+
+			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
+			depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+			depthStencilInfo.depthTestEnable = VK_TRUE;
+			depthStencilInfo.depthWriteEnable = VK_TRUE;
+			depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
+			depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
+			depthStencilInfo.minDepthBounds = 0;
+			depthStencilInfo.maxDepthBounds = 0;
+			depthStencilInfo.stencilTestEnable = VK_FALSE;
+
+			VkPipelineColorBlendAttachmentState blendAttachmentInfo{};
+			// WTF: we have to set value for this `colorWriteMask` flag for some reason???
+			blendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+			blendAttachmentInfo.blendEnable = VK_FALSE;
+
+			VkPipelineColorBlendStateCreateInfo blendInfo{};
+			blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+			blendInfo.attachmentCount = 1;
+			blendInfo.pAttachments = &blendAttachmentInfo;
+
+			std::array<VkDynamicState, 2> dynamicStates{
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR
+			};
+
+			VkPipelineDynamicStateCreateInfo dynamicInfo{};
+			dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+			dynamicInfo.dynamicStateCount = dynamicStates.size();
+			dynamicInfo.pDynamicStates = dynamicStates.data();
+
+			auto vertShaderCode = readFile("../../src/shaders/shadow.vert.spv");
+			auto fragShaderCode = readFile("../../src/shaders/shadow.frag.spv");
+
+			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+			VkGraphicsPipelineCreateInfo pipelineInfo{};
+			pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+			pipelineInfo.pVertexInputState = &vertexInputInfo;
+			pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
+			pipelineInfo.pViewportState = &viewportInfo;
+			pipelineInfo.pColorBlendState = &blendInfo;
+			pipelineInfo.pMultisampleState = &multisampleInfo;
+			pipelineInfo.pDepthStencilState = &depthStencilInfo;
+			pipelineInfo.pRasterizationState = &rasterizationInfo;
+			pipelineInfo.stageCount = 2;
+			pipelineInfo.pStages = shaderStages;
+			pipelineInfo.pDynamicState = &dynamicInfo;
+			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+			pipelineInfo.renderPass = m_renderPasses.shadow;
+			pipelineInfo.subpass = 0;
+			pipelineInfo.layout = m_graphicPipelineLayouts.shadow;
+
+			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.shadow)
+				   , "fail to create bloom pipeline");
+		}
+
 		// bloom & combine pipeline
 		{ 
 			// shared states
@@ -2282,7 +2474,7 @@ private:
 			blendInfo.attachmentCount = 1;
 			blendInfo.pAttachments = &blendAttachmentInfo;
 
-			std::vector<VkDynamicState> dynamicStates{
+			std::array<VkDynamicState, 2> dynamicStates{
 				VK_DYNAMIC_STATE_VIEWPORT,
 				VK_DYNAMIC_STATE_SCISSOR
 			};
@@ -2461,11 +2653,24 @@ private:
 				throw std::runtime_error("failed to create framebuffer!");
 			}
 
+			// shadow
+			VkFramebufferCreateInfo shadowFOInfo{};
+			shadowFOInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			shadowFOInfo.renderPass = m_renderPasses.shadow;
+			shadowFOInfo.attachmentCount = 1;
+			shadowFOInfo.pAttachments = &m_renderTargets[i].shadow.view;
+			shadowFOInfo.width = swapChainExtent.width;
+			shadowFOInfo.height = swapChainExtent.height;
+			shadowFOInfo.layers = 1;
+			if (vkCreateFramebuffer(device, &shadowFOInfo, nullptr, &m_frameBuffers.shadow[i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create framebuffer!");
+			}
+
+			// bloom
 			std::array<VkImageView, 1> bloom1Attachments = {
 				m_renderTargets[i].bloom1.view
 			};
 
-			// bloom
 			VkFramebufferCreateInfo bloomFBInfo{};
 			bloomFBInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 			bloomFBInfo.renderPass = m_renderPasses.bloom;
@@ -2532,7 +2737,7 @@ private:
 
     void createRenderTargets() {
 		for (unsigned int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			// for base framebuffer
+			// base
 			createImage(swapChainExtent.width, swapChainExtent.height, 1, m_msaaSamples, m_renderTargetImageFormat, 
 						VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets[i].base.colorRT.image, m_renderTargets[i].base.colorRT.allocation);
@@ -2558,7 +2763,13 @@ private:
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets[i].base.bloomThresholdResRT.image, m_renderTargets[i].base.bloomThresholdResRT.allocation);
 			m_renderTargets[i].base.bloomThresholdResRT.view = createImageView(m_renderTargets[i].base.bloomThresholdResRT.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-			// for bloom framebuffer
+			// shadow
+			createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_depthFormat,
+						VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets[i].shadow.image, m_renderTargets[i].shadow.allocation);
+			m_renderTargets[i].shadow.view = createImageView(m_renderTargets[i].shadow.image, m_depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+
+			// bloom
 			createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_renderTargetImageFormat, 
 						VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets[i].bloom1.image, m_renderTargets[i].bloom1.allocation);
@@ -4752,7 +4963,7 @@ private:
 	void renderShadowMap(VkCommandBuffer commandBuffer) {
 		TracyVkZone(tracyContext, commandBuffer, "Render Shadow Map");
 
-		// vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.shadow);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.shadow);
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
@@ -4948,6 +5159,25 @@ private:
 		}
 
 		{
+			// shadow
+			VkRenderPassBeginInfo shadowPassInfo{};
+			shadowPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			shadowPassInfo.renderPass = m_renderPasses.shadow;
+			shadowPassInfo.framebuffer = m_frameBuffers.shadow[m_currentFrame];
+			shadowPassInfo.renderArea.offset = {0, 0};
+			shadowPassInfo.renderArea.extent = {0, 0};
+
+			VkClearValue shadowClear{{0.0f, 0.0f, 0.0f, 1.0f}};
+			shadowPassInfo.clearValueCount = 1;
+			shadowPassInfo.pClearValues = &shadowClear;
+
+			vkCmdBeginRenderPass(commandBuffer, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				renderShadowMap(commandBuffer);
+
+			vkCmdEndRenderPass(commandBuffer);
+
+			// base
 			VkRenderPassBeginInfo basePassInfo{};
 			basePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			basePassInfo.renderPass = m_renderPasses.base;
@@ -4967,12 +5197,12 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &basePassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				// renderShadowMap(commandBuffer);
 				renderSnowflake(commandBuffer);
 				renderCandles(commandBuffer);
 
 			vkCmdEndRenderPass(commandBuffer);
 
+			// bloom
 			VkRenderPassBeginInfo bloomPassInfo{};
 			bloomPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			bloomPassInfo.renderPass = m_renderPasses.bloom;
@@ -4999,6 +5229,7 @@ private:
 
 			vkCmdEndRenderPass(commandBuffer);
 
+			// combine
 			VkRenderPassBeginInfo combinePassInfo{};
 			combinePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			combinePassInfo.renderPass = m_renderPasses.combine;

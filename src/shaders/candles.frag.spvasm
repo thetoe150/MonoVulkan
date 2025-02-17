@@ -46,29 +46,29 @@
                OpName %u_emissiveSampler "u_emissiveSampler"
                OpName %bloomColor "bloomColor"
                OpName %v_tangent "v_tangent"
-               OpDecorate %u_texSampler Binding 2
                OpDecorate %u_texSampler DescriptorSet 1
+               OpDecorate %u_texSampler Binding 2
                OpDecorate %v_fragTexCoord Location 0
                OpDecorate %v_normal Location 5
-               OpDecorate %CandlesLightingTransform Block
                OpMemberDecorate %CandlesLightingTransform 0 ColMajor
-               OpMemberDecorate %CandlesLightingTransform 0 MatrixStride 16
                OpMemberDecorate %CandlesLightingTransform 0 Offset 0
+               OpMemberDecorate %CandlesLightingTransform 0 MatrixStride 16
                OpMemberDecorate %CandlesLightingTransform 1 Offset 64
                OpMemberDecorate %CandlesLightingTransform 2 Offset 80
-               OpDecorate %u_lightingTransform Binding 1
+               OpDecorate %CandlesLightingTransform Block
                OpDecorate %u_lightingTransform DescriptorSet 0
+               OpDecorate %u_lightingTransform Binding 1
                OpDecorate %v_fragPos Location 4
-               OpDecorate %DataPushConstant Block
                OpMemberDecorate %DataPushConstant 0 Offset 0
-               OpDecorate %u_normalSampler Binding 3
+               OpDecorate %DataPushConstant Block
                OpDecorate %u_normalSampler DescriptorSet 1
+               OpDecorate %u_normalSampler Binding 3
                OpDecorate %v_tangentLightPos Location 2
                OpDecorate %v_tangentFragPos Location 1
                OpDecorate %v_tangentCamPos Location 3
                OpDecorate %outColor Location 0
-               OpDecorate %u_emissiveSampler Binding 4
                OpDecorate %u_emissiveSampler DescriptorSet 1
+               OpDecorate %u_emissiveSampler Binding 4
                OpDecorate %bloomColor Location 1
                OpDecorate %v_tangent Location 6
        %void = OpTypeVoid
