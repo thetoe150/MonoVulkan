@@ -2359,10 +2359,8 @@ private:
 			dynamicInfo.pDynamicStates = dynamicStates.data();
 
 			auto vertShaderCode = readFile("../../src/shaders/shadow.vert.spv");
-			auto fragShaderCode = readFile("../../src/shaders/shadow.frag.spv");
 
 			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -2370,13 +2368,7 @@ private:
 			vertShaderStageInfo.module = vertShaderModule;
 			vertShaderStageInfo.pName = "main";
 
-			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
-			fragShaderStageInfo.pName = "main";
-
-			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo};
 
 			VkGraphicsPipelineCreateInfo pipelineInfo{};
 			pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -2387,7 +2379,7 @@ private:
 			pipelineInfo.pMultisampleState = &multisampleInfo;
 			pipelineInfo.pDepthStencilState = &depthStencilInfo;
 			pipelineInfo.pRasterizationState = &rasterizationInfo;
-			pipelineInfo.stageCount = 2;
+			pipelineInfo.stageCount = sizeof(shaderStages) / sizeof(shaderStages[0]);
 			pipelineInfo.pStages = shaderStages;
 			pipelineInfo.pDynamicState = &dynamicInfo;
 			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -2765,7 +2757,7 @@ private:
 
 			// shadow
 			createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_depthFormat,
-						VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+						VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets[i].shadow.image, m_renderTargets[i].shadow.allocation);
 			m_renderTargets[i].shadow.view = createImageView(m_renderTargets[i].shadow.image, m_depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
@@ -4048,7 +4040,7 @@ private:
 				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
 					memcpy(data, shadowBuffer.raw, shadowBuffer.size);
 				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-				createBuffer(shadowBuffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadowBuffer.buffer, shadowBuffer.allocation);
+				createBuffer(shadowBuffer.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadowBuffer.buffer, shadowBuffer.allocation);
 				copyBuffer(stagingBuffer, shadowBuffer.buffer, shadowBuffer.size);
 				shadowBuffer.needTransfer = false;
 
@@ -4968,8 +4960,8 @@ private:
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width = (float) swapChainExtent.width;
-		viewport.height = (float) swapChainExtent.height;
+		viewport.width = (float)swapChainExtent.width;
+		viewport.height = (float)swapChainExtent.height;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -5165,7 +5157,7 @@ private:
 			shadowPassInfo.renderPass = m_renderPasses.shadow;
 			shadowPassInfo.framebuffer = m_frameBuffers.shadow[m_currentFrame];
 			shadowPassInfo.renderArea.offset = {0, 0};
-			shadowPassInfo.renderArea.extent = {0, 0};
+			shadowPassInfo.renderArea.extent = swapChainExtent;
 
 			VkClearValue shadowClear{{0.0f, 0.0f, 0.0f, 1.0f}};
 			shadowPassInfo.clearValueCount = 1;
