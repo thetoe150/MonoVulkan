@@ -2,7 +2,10 @@
 - change LOD base on distance
 - frustum culling object on CPU
 - add Tracy on Debian
-- add shadow
+- add directional shadow
+- add point shadow
+- add point light
+- add dynamic light/shadow
 - add skymap
 - add multi-view port
 - remove phong shading with flame

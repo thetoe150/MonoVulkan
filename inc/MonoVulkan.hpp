@@ -89,7 +89,12 @@ const char* TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
 // const std::string SNOWFLAKE_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 // const std::string TOWER_MODEL_PATH = "../../res/models/wooden_watch_tower2.obj";
 
-constexpr int SNOWFLAKE_COUNT = 4096;
+constexpr unsigned int SNOWFLAKE_COUNT = 4096;
+constexpr float CANDLE_ANIMATION_SPEED = 0.5f;
+
+constexpr unsigned int CANDLES_INSTANCE_CAPACITY = 10;
+constexpr unsigned int SHADOW_CASTING_MESH_CAPACITY = 10;
+
 constexpr float CANDLE_ANIMATION_SPEED = 0.5f;
 
 constexpr int MAX_VORTEX_COUNT = 10;

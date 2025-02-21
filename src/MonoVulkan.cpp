@@ -322,9 +322,9 @@ private:
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> lightingTransform;
 		} candles;
 		struct {
-			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> perMeshTransform;
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> transform;
-			Buffer perMeshLookup;
+			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> perMeshTransform;
+			Buffer perInstanceTransform;
 		} shadow;
 	} m_graphicUniformBuffers;
 
@@ -736,6 +736,7 @@ private:
 
 		unsigned int shadowUniformSize = shadowMeshUniform.size() * sizeof(ShadowPerMeshTransform);
 		memcpy(m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].raw, shadowMeshUniform.data(), shadowUniformSize);
+		m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].size = shadowUniformSize;
     }
 	
 	void updateComputeUniformBuffer() {
@@ -900,10 +901,6 @@ private:
 		vkDestroyBuffer(device, m_indexBuffers.shadow.buffer, nullptr);
 		vmaFreeMemory(m_allocator, m_indexBuffers.shadow.allocation);
 		free(m_indexBuffers.shadow.raw);
-
-		vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.perMeshLookup.buffer, nullptr);
-		vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshLookup.allocation);
-		free(m_graphicUniformBuffers.shadow.perMeshLookup.raw);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroyBuffer(device, m_graphicUniformBuffers.snowflake[i].buffer, nullptr);
@@ -1706,14 +1703,14 @@ private:
 			perMeshTransform.pImmutableSamplers = nullptr;
 			perMeshTransform.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-			VkDescriptorSetLayoutBinding perMeshLookup;
-			perMeshLookup.binding = 2;
-			perMeshLookup.descriptorCount = 1;
-			perMeshLookup.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-			perMeshLookup.pImmutableSamplers = nullptr;
-			perMeshLookup.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+			VkDescriptorSetLayoutBinding perInstanceTransform;
+			perInstanceTransform.binding = 2;
+			perInstanceTransform.descriptorCount = 1;
+			perInstanceTransform.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			perInstanceTransform.pImmutableSamplers = nullptr;
+			perInstanceTransform.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-			VkDescriptorSetLayoutBinding pBinding[3] = {transform, perMeshTransform, perMeshLookup};
+			VkDescriptorSetLayoutBinding pBinding[3] = {transform, perMeshTransform, perInstanceTransform};
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
 			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			layoutInfo.bindingCount = 3;
@@ -3545,10 +3542,10 @@ private:
 		m_indexBuffers.shadow.needTransfer = true;
 
 		unsigned int uSize = shadowLookupUniform.size() * sizeof(unsigned char);
-		m_graphicUniformBuffers.shadow.perMeshLookup.raw = malloc(uSize);
-		memcpy(m_graphicUniformBuffers.shadow.perMeshLookup.raw, shadowLookupUniform.data(), uSize);
-		m_graphicUniformBuffers.shadow.perMeshLookup.size = uSize;
-		m_graphicUniformBuffers.shadow.perMeshLookup.needTransfer = true;
+		m_graphicUniformBuffers.shadow.perInstanceTransform.raw = malloc(uSize);
+		memcpy(m_graphicUniformBuffers.shadow.perInstanceTransform.raw, shadowLookupUniform.data(), uSize);
+		m_graphicUniformBuffers.shadow.perInstanceTransform.size = uSize;
+		m_graphicUniformBuffers.shadow.perInstanceTransform.needTransfer = true;
 	}
 
 	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
@@ -3843,6 +3840,22 @@ private:
 				m_towerInstanceRaw.push_back(vInstance);
 			}
 		}
+
+		unsigned int shadowInstanceSize = sizeof(glm::mat4) * m_towerInstanceRaw.size();
+		m_graphicUniformBuffers.shadow.perInstanceTransform.raw = malloc(shadowInstanceSize);
+		m_graphicUniformBuffers.shadow.perInstanceTransform.size = shadowInstanceSize;
+
+		glm::mat4* pShadow = (glm::mat4)m_graphicUniformBuffers.shadow.perInstanceTransform.raw;
+		for (unsigned int i = 0; i < m_towerInstanceRaw.size(); i++) {
+			glm::mat4 instanceModel;
+			// WARNING: recheck if collumn major
+			instanceModel[0] = vec4(1.0f, 0.0f, 0.0f, 0.0f);
+			instanceModel[1] = vec4(0.0f, 1.0f, 0.0f, 0.0f);
+			instanceModel[2] = vec4(0.0f, 0.0f, 1.0f, 0.0f);
+			instanceModel[3] = vec4(m_towerInstanceRaw[i].x, m_towerInstanceRaw[i].y, m_towerInstanceRaw[i].z, 1.0f);
+
+			pShadow[i] = instanceModel;
+		}
 	}
 
 	void createVertexBuffers() {
@@ -4100,17 +4113,6 @@ private:
 
 		// shadow
 		{
-			VkDeviceSize meshBufferSize = sizeof(ShadowPerMeshTransform) * 10;
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				createBuffer(meshBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-					, m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation);
-
-				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation, &m_graphicUniformBuffers.shadow.perMeshTransform[i].raw);
-				// heuristic mesh casting shadow size
-				memset(m_graphicUniformBuffers.shadow.perMeshTransform[i].raw, 0, meshBufferSize);
-				m_graphicUniformBuffers.shadow.perMeshTransform[i].size = meshBufferSize;
-			}
-
 			VkDeviceSize bufferSize = sizeof(ShadowLightingTransform);
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -4119,6 +4121,24 @@ private:
 				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.transform[i].allocation, &m_graphicUniformBuffers.shadow.transform[i].raw);
 				m_graphicUniformBuffers.shadow.transform[i].size = bufferSize;
 			}
+
+			// heuristic mesh casting shadow size
+			VkDeviceSize meshBufferSize = sizeof(ShadowPerMeshTransform) * SHADOW_CASTING_MESH_CAPACITY;
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				createBuffer(meshBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					, m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation);
+
+				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation, &m_graphicUniformBuffers.shadow.perMeshTransform[i].raw);
+				memset(m_graphicUniformBuffers.shadow.perMeshTransform[i].raw, 0, meshBufferSize);
+				m_graphicUniformBuffers.shadow.perMeshTransform[i].size = meshBufferSize;
+			}
+			
+			VkDeviceSize instanceBufferSize = sizeof(ShadowLightingTransform) * CANDLES_INSTANCE_CAPACITY;
+			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+				, m_graphicUniformBuffers.shadow.perInstanceTransform[i].buffer, m_graphicUniformBuffers.shadow.perInstanceTransform[i].allocation);
+
+			vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.perInstanceTransform.allocation, &m_graphicUniformBuffers.shadow.perInstanceTransform.raw);
+			m_graphicUniformBuffers.shadow.perInstanceTransform.size = bufferSize;
 		}
     }
 
@@ -4201,25 +4221,6 @@ private:
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vmaFreeMemory(m_allocator, stagingBufferAlloc);
 
-		{
-			// Shadow
-			Buffer& shadowStorage = m_graphicUniformBuffers.shadow.perMeshLookup;
-			if(shadowStorage.needTransfer) {
-				VkBuffer stagingBuffer;
-				VmaAllocation stagingBufferAlloc{};
-				createBuffer(shadowStorage.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
-				void* data;
-				vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
-					memcpy(data, shadowStorage.raw, shadowStorage.size);
-				vmaUnmapMemory(m_allocator, stagingBufferAlloc);
-				createBuffer(shadowStorage.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadowStorage.buffer, shadowStorage.allocation);
-				copyBuffer(stagingBuffer, shadowStorage.buffer, shadowStorage.size);
-				shadowStorage.needTransfer = false;
-
-				vkDestroyBuffer(device, stagingBuffer, nullptr);
-				vmaFreeMemory(m_allocator, stagingBufferAlloc);
-			}
-		}
 	}
 
 	// Pool use for both graphic and compute descriptors
@@ -4462,9 +4463,9 @@ private:
 				descriptorWrites[1].pBufferInfo = &perMeshTransformInfo;
 
 				VkDescriptorBufferInfo lookupBufferInfo{};
-				lookupBufferInfo.buffer = m_graphicUniformBuffers.shadow.perMeshLookup.buffer;
+				lookupBufferInfo.buffer = m_graphicUniformBuffers.shadow.perInstanceTransform.buffer;
 				lookupBufferInfo.offset = 0;
-				lookupBufferInfo.range = m_graphicUniformBuffers.shadow.perMeshLookup.size;
+				lookupBufferInfo.range = m_graphicUniformBuffers.shadow.perInstanceTransform.size;
 
 				descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[2].dstSet = m_graphicDescriptorSets.shadow[i];
