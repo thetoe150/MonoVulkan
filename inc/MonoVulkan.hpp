@@ -79,7 +79,7 @@ static float s_snowScale[3] = {0.008f, 0.008f, 0.005f};
 static float s_snowRotate[3] = {0.f, 0.f, 0.f};
 static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
 
-static float s_lightPos[3] = {20.f, 3.f, -10.f};
+static glm::vec3 s_lightDir {20.f, 3.f, -10.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 
@@ -92,10 +92,8 @@ const char* TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
 constexpr unsigned int SNOWFLAKE_COUNT = 4096;
 constexpr float CANDLE_ANIMATION_SPEED = 0.5f;
 
-constexpr unsigned int CANDLES_INSTANCE_CAPACITY = 10;
-constexpr unsigned int SHADOW_CASTING_MESH_CAPACITY = 10;
-
-constexpr float CANDLE_ANIMATION_SPEED = 0.5f;
+constexpr unsigned int CANDLES_INSTANCE_MAX = 10;
+constexpr unsigned int CANDLES_BASE_MESH_COUNT = 10;
 
 constexpr int MAX_VORTEX_COUNT = 10;
 constexpr float VORTEX_COVER_RANGE = 3.f;

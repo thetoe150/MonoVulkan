@@ -8,6 +8,7 @@
 - add dynamic light/shadow
 - add skymap
 - add multi-view port
+- separate candles base and flame
 - remove phong shading with flame
 - adjust face culling
 - refactor vertex attribute definition
@@ -26,7 +27,7 @@
 - move animation calculation to compute shader
 
 ### BUGS:
-- candles flame animation crash renderDoc
+- renderDoc always choose on board card
 - mouse scroll go crazy go stupid
 
 ### Done
@@ -50,3 +51,8 @@
     + bring the whole map<vector<>> into a loop and iterate is 15ms
     + bring the vector<> into a loop and iterate is 4ms
     + bring the only the only pointer to vector<>.data and access through [] takes 2ms
+
+### Big Problem
+- manage and free memory, too many malloc - a allocator?
+- data conflict between shader - gltf model - vk object -> reflection + model descriptor after load?
+- synchronization ?

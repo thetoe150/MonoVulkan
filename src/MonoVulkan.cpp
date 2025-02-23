@@ -1,5 +1,4 @@
 #include "MonoVulkan.hpp"
-#include "vulkan/vulkan_core.h"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -231,6 +230,10 @@ private:
     VkCommandPool m_computeCommandPool;
 	VkQueryPool timestampPool;
 
+	struct {
+		unsigned int candlesInstanceCount{0};
+	} m_gameContext;
+
 	std::map<Object, tinygltf::Model> m_model;
 	std::map<Object, std::vector< glm::mat4>> m_modelMeshTransforms;
 
@@ -282,13 +285,15 @@ private:
 	struct Buffer{
 		void* raw;
 		uint32_t size;
+		uint32_t capacity;
 		VkBuffer buffer;
 		VmaAllocation allocation;
-		// needTransfer is true only when raw and size won't match VkBuffer stored data and size
+		// set needTransfer to true only when raw and size won't match VkBuffer stored data and size
 		bool needTransfer;
 
 		Buffer()
 		: size(0),
+		  capacity(0),
 		  raw(nullptr),
 		  buffer(VK_NULL_HANDLE),
 		  allocation(VK_NULL_HANDLE),
@@ -322,9 +327,9 @@ private:
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> lightingTransform;
 		} candles;
 		struct {
-			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> transform;
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> perMeshTransform;
 			Buffer perInstanceTransform;
+			Buffer lightTransform;
 		} shadow;
 	} m_graphicUniformBuffers;
 
@@ -414,8 +419,10 @@ private:
 		initIndexData();
 		// analyzeMeshes(false);
 		optimizeMeshes();
+		// shadow don't have LOD
 		initShadowData();
 		generateIndexLOD();
+		initUniformData();
 		// analyzeMeshes(true);
 	}
 
@@ -726,17 +733,27 @@ private:
 				proj[1][1] *= -1;
 
 				candlesUBO->viewProj = proj * view;
-				candlesUBO->lightPos = glm::vec3(s_lightPos[0], s_lightPos[1], s_lightPos[2]);
+				candlesUBO->lightPos = s_lightDir;
 				candlesUBO->camPos = g_camera.getPostion();
-
-				ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.transform[m_currentFrame].raw;
-				shadow->viewProj = candlesUBO->viewProj;
 			}
 		}
 
-		unsigned int shadowUniformSize = shadowMeshUniform.size() * sizeof(ShadowPerMeshTransform);
-		memcpy(m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].raw, shadowMeshUniform.data(), shadowUniformSize);
-		m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].size = shadowUniformSize;
+		{
+			const float near_plane = 1.0f, far_plane = 7.5f;
+			glm::mat4 view = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+			//// note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
+			//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); 
+			glm::mat4 proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
+			proj[1][1] *= -1;
+			ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.lightTransform.raw;
+			shadow->viewProj = proj * view; 
+		}
+
+		{
+			unsigned int shadowUniformSize = shadowMeshUniform.size() * sizeof(ShadowPerMeshTransform);
+			memcpy(m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].raw, shadowMeshUniform.data(), shadowUniformSize);
+			m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].size = shadowUniformSize;
+		}
     }
 	
 	void updateComputeUniformBuffer() {
@@ -915,9 +932,9 @@ private:
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.lightingTransform[i].allocation);
 			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.lightingTransform[i].allocation);
 
-			vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.transform[i].buffer, nullptr);
-			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.transform[i].allocation);
-			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.transform[i].allocation);
+			vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.lightTransform.buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation);
 
 			vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer, nullptr);
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation);
@@ -1136,7 +1153,7 @@ private:
 			vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
 			std::cout << m_physicalDeviceProperties.deviceName << std::endl;
         }
-		physicalDevice = devices[0];
+		physicalDevice = devices[1];
 		m_msaaSamples = getMaxUsableSampleCount();
 
         if (physicalDevice == VK_NULL_HANDLE) {
@@ -2385,7 +2402,7 @@ private:
 			pipelineInfo.layout = m_graphicPipelineLayouts.shadow;
 
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.shadow)
-				   , "fail to create bloom pipeline");
+				   , "fail to create shadow pipeline");
 		}
 
 		// bloom & combine pipeline
@@ -3496,12 +3513,21 @@ private:
 			memcpy(m_indexBuffers.candles.lod0[meshIdx].raw, data, size);
 		}
 	}
+
+	void initUniformData() {
+		for (unsigned int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			m_graphicUniformBuffers.shadow.perMeshTransform[i].capacity = sizeof(ShadowPerMeshTransform) * CANDLES_BASE_MESH_COUNT;
+			m_graphicUniformBuffers.shadow.lightTransform.capacity = sizeof(ShadowLightingTransform);
+		}
+
+		m_graphicUniformBuffers.shadow.perInstanceTransform.capacity = sizeof(glm::mat4) * CANDLES_INSTANCE_MAX;
+	}
+
 	void initShadowData() {
 		tinygltf::Model& model = m_model[Object::CANDLE];
 		std::vector<float> shadowVertices;
 		std::vector<unsigned int> shadowIndices;
-		std::vector<unsigned char> shadowLookupUniform;
-		unsigned int shadowVertexIdx{0};
+		float shadowMeshIdx = 0;
 		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
 			// only the base of the candles cast shadow
 			if (m_vertexBuffers.candles[meshIdx].size() == 1) {
@@ -3520,12 +3546,10 @@ private:
 				for(unsigned int idx = 0 + offset; idx < vCount; idx += stride) {
 					for(unsigned int vt = 0; vt < 3; vt++) {
 						shadowVertices.push_back(v[idx + vt]);
-						// add lookup entry for this 1 vervex
-						shadowLookupUniform.push_back(shadowVertexIdx);
 					}
+					shadowVertices.push_back(shadowMeshIdx);
 				}
-
-				shadowVertexIdx++;
+				shadowMeshIdx++;
 			}
 		}
 
@@ -3540,12 +3564,6 @@ private:
 		memcpy(m_indexBuffers.shadow.raw, shadowIndices.data(), iSize);
 		m_indexBuffers.shadow.size = iSize;
 		m_indexBuffers.shadow.needTransfer = true;
-
-		unsigned int uSize = shadowLookupUniform.size() * sizeof(unsigned char);
-		m_graphicUniformBuffers.shadow.perInstanceTransform.raw = malloc(uSize);
-		memcpy(m_graphicUniformBuffers.shadow.perInstanceTransform.raw, shadowLookupUniform.data(), uSize);
-		m_graphicUniformBuffers.shadow.perInstanceTransform.size = uSize;
-		m_graphicUniformBuffers.shadow.perInstanceTransform.needTransfer = true;
 	}
 
 	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
@@ -3842,17 +3860,17 @@ private:
 		}
 
 		unsigned int shadowInstanceSize = sizeof(glm::mat4) * m_towerInstanceRaw.size();
-		m_graphicUniformBuffers.shadow.perInstanceTransform.raw = malloc(shadowInstanceSize);
+		assert(shadowInstanceSize <= m_graphicUniformBuffers.shadow.perInstanceTransform.capacity);
 		m_graphicUniformBuffers.shadow.perInstanceTransform.size = shadowInstanceSize;
 
-		glm::mat4* pShadow = (glm::mat4)m_graphicUniformBuffers.shadow.perInstanceTransform.raw;
+		glm::mat4* pShadow = (glm::mat4*)m_graphicUniformBuffers.shadow.perInstanceTransform.raw;
 		for (unsigned int i = 0; i < m_towerInstanceRaw.size(); i++) {
 			glm::mat4 instanceModel;
 			// WARNING: recheck if collumn major
-			instanceModel[0] = vec4(1.0f, 0.0f, 0.0f, 0.0f);
-			instanceModel[1] = vec4(0.0f, 1.0f, 0.0f, 0.0f);
-			instanceModel[2] = vec4(0.0f, 0.0f, 1.0f, 0.0f);
-			instanceModel[3] = vec4(m_towerInstanceRaw[i].x, m_towerInstanceRaw[i].y, m_towerInstanceRaw[i].z, 1.0f);
+			instanceModel[0] = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+			instanceModel[1] = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+			instanceModel[2] = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+			instanceModel[3] = glm::vec4(m_towerInstanceRaw[i].pos.x, m_towerInstanceRaw[i].pos.y, m_towerInstanceRaw[i].pos.z, 1.0f);
 
 			pShadow[i] = instanceModel;
 		}
@@ -4113,32 +4131,31 @@ private:
 
 		// shadow
 		{
-			VkDeviceSize bufferSize = sizeof(ShadowLightingTransform);
+			VkDeviceSize transCap = m_graphicUniformBuffers.shadow.lightTransform.capacity;
+			assert(transCap > 0);
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-					, m_graphicUniformBuffers.shadow.transform[i].buffer, m_graphicUniformBuffers.shadow.transform[i].allocation);
+				createBuffer(transCap, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					, m_graphicUniformBuffers.shadow.lightTransform.buffer, m_graphicUniformBuffers.shadow.lightTransform.allocation);
 
-				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.transform[i].allocation, &m_graphicUniformBuffers.shadow.transform[i].raw);
-				m_graphicUniformBuffers.shadow.transform[i].size = bufferSize;
+				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation, &m_graphicUniformBuffers.shadow.lightTransform.raw);
 			}
 
 			// heuristic mesh casting shadow size
-			VkDeviceSize meshBufferSize = sizeof(ShadowPerMeshTransform) * SHADOW_CASTING_MESH_CAPACITY;
+			VkDeviceSize meshBufferCap = m_graphicUniformBuffers.shadow.perMeshTransform[0].capacity;
+			assert(meshBufferCap > 0);
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				createBuffer(meshBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+				createBuffer(meshBufferCap, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
 					, m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation);
 
 				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation, &m_graphicUniformBuffers.shadow.perMeshTransform[i].raw);
-				memset(m_graphicUniformBuffers.shadow.perMeshTransform[i].raw, 0, meshBufferSize);
-				m_graphicUniformBuffers.shadow.perMeshTransform[i].size = meshBufferSize;
 			}
 			
-			VkDeviceSize instanceBufferSize = sizeof(ShadowLightingTransform) * CANDLES_INSTANCE_CAPACITY;
-			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-				, m_graphicUniformBuffers.shadow.perInstanceTransform[i].buffer, m_graphicUniformBuffers.shadow.perInstanceTransform[i].allocation);
+			VkDeviceSize perInstanceCap = m_graphicUniformBuffers.shadow.perInstanceTransform.capacity;
+			assert(perInstanceCap > 0);
+			createBuffer(perInstanceCap, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+				, m_graphicUniformBuffers.shadow.perInstanceTransform.buffer, m_graphicUniformBuffers.shadow.perInstanceTransform.allocation);
 
 			vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.perInstanceTransform.allocation, &m_graphicUniformBuffers.shadow.perInstanceTransform.raw);
-			m_graphicUniformBuffers.shadow.perInstanceTransform.size = bufferSize;
 		}
     }
 
@@ -4437,7 +4454,7 @@ private:
 				std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
 				VkDescriptorBufferInfo transformBufferInfo{};
-				transformBufferInfo.buffer = m_graphicUniformBuffers.shadow.transform[i].buffer;
+				transformBufferInfo.buffer = m_graphicUniformBuffers.shadow.lightTransform.buffer;
 				transformBufferInfo.offset = 0;
 				transformBufferInfo.range = sizeof(ShadowLightingTransform);
 
@@ -4471,7 +4488,7 @@ private:
 				descriptorWrites[2].dstSet = m_graphicDescriptorSets.shadow[i];
 				descriptorWrites[2].dstBinding = 2;
 				descriptorWrites[2].dstArrayElement = 0;
-				descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+				descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				descriptorWrites[2].descriptorCount = 1;
 				descriptorWrites[2].pBufferInfo = &lookupBufferInfo;
 
@@ -5153,22 +5170,22 @@ private:
 
 		{
 			// shadow
-			VkRenderPassBeginInfo shadowPassInfo{};
-			shadowPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			shadowPassInfo.renderPass = m_renderPasses.shadow;
-			shadowPassInfo.framebuffer = m_frameBuffers.shadow[m_currentFrame];
-			shadowPassInfo.renderArea.offset = {0, 0};
-			shadowPassInfo.renderArea.extent = swapChainExtent;
+			// VkRenderPassBeginInfo shadowPassInfo{};
+			// shadowPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			// shadowPassInfo.renderPass = m_renderPasses.shadow;
+			// shadowPassInfo.framebuffer = m_frameBuffers.shadow[m_currentFrame];
+			// shadowPassInfo.renderArea.offset = {0, 0};
+			// shadowPassInfo.renderArea.extent = swapChainExtent;
 
-			VkClearValue shadowClear{{0.0f, 0.0f, 0.0f, 1.0f}};
-			shadowPassInfo.clearValueCount = 1;
-			shadowPassInfo.pClearValues = &shadowClear;
+			// VkClearValue shadowClear{{0.0f, 0.0f, 0.0f, 1.0f}};
+			// shadowPassInfo.clearValueCount = 1;
+			// shadowPassInfo.pClearValues = &shadowClear;
 
-			vkCmdBeginRenderPass(commandBuffer, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+			// vkCmdBeginRenderPass(commandBuffer, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				renderShadowMap(commandBuffer);
+			// 	renderShadowMap(commandBuffer);
 
-			vkCmdEndRenderPass(commandBuffer);
+			// vkCmdEndRenderPass(commandBuffer);
 
 			// base
 			VkRenderPassBeginInfo basePassInfo{};
@@ -5393,7 +5410,7 @@ private:
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("Lighting");
-			ImGui::SliderFloat3("Light Direction", s_lightPos, -20.f, 20.f, "%.2f");
+			ImGui::SliderFloat3("Light Direction", (float*)&s_lightDir.x, -20.f, 20.f, "%.2f");
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("Effect");
