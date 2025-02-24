@@ -231,7 +231,8 @@ private:
 	VkQueryPool timestampPool;
 
 	struct {
-		unsigned int candlesInstanceCount{0};
+		unsigned int candlesShadowMeshCount{0};
+		unsigned int candlesShadowInstanceCount{0};
 	} m_gameContext;
 
 	std::map<Object, tinygltf::Model> m_model;
@@ -285,7 +286,6 @@ private:
 	struct Buffer{
 		void* raw;
 		uint32_t size;
-		uint32_t capacity;
 		VkBuffer buffer;
 		VmaAllocation allocation;
 		// set needTransfer to true only when raw and size won't match VkBuffer stored data and size
@@ -293,7 +293,6 @@ private:
 
 		Buffer()
 		: size(0),
-		  capacity(0),
 		  raw(nullptr),
 		  buffer(VK_NULL_HANDLE),
 		  allocation(VK_NULL_HANDLE),
@@ -351,8 +350,11 @@ private:
 	std::array<std::vector<Buffer>, MAX_FRAMES_IN_FLIGHT> m_transientBuffers;
 
 	SpecializationConstant m_graphicSpecConstant;
-	GraphicPushConstant m_graphicPushConstant;
-
+	struct {
+		Int shadow;
+		Float candles;
+		Float combine{0.8};
+	} m_graphicPushConstant;
 	ComputePushConstant m_computePushConstant;
 
     VkDescriptorPool m_descriptorPool;
@@ -399,7 +401,6 @@ private:
 	bool m_isHDR{false};
     VkFormat m_renderTargetImageFormat;
 	VkFormat m_depthFormat;
-	GraphicPushConstant m_exposure{0.8};
 
 	VkDescriptorPool imguiDescriptorPool;
 
@@ -747,12 +748,26 @@ private:
 			proj[1][1] *= -1;
 			ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.lightTransform.raw;
 			shadow->viewProj = proj * view; 
-		}
 
-		{
+			assert(m_gameContext.candlesShadowMeshCount == shadowMeshUniform.size());
 			unsigned int shadowUniformSize = shadowMeshUniform.size() * sizeof(ShadowPerMeshTransform);
 			memcpy(m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].raw, shadowMeshUniform.data(), shadowUniformSize);
 			m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].size = shadowUniformSize;
+
+
+			unsigned int shadowInstanceSize = sizeof(glm::mat4) * m_towerInstanceRaw.size();
+			m_graphicUniformBuffers.shadow.perInstanceTransform.size = shadowInstanceSize;
+			glm::mat4* pShadow = (glm::mat4*)m_graphicUniformBuffers.shadow.perInstanceTransform.raw;
+			for (unsigned int i = 0; i < m_towerInstanceRaw.size(); i++) {
+				glm::mat4 instanceModel;
+				// WARNING: recheck if collumn major
+				instanceModel[0] = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+				instanceModel[1] = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+				instanceModel[2] = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+				instanceModel[3] = glm::vec4(m_towerInstanceRaw[i].pos.x, m_towerInstanceRaw[i].pos.y, m_towerInstanceRaw[i].pos.z, 1.0f);
+
+				pShadow[i] = instanceModel;
+			}
 		}
     }
 	
@@ -885,10 +900,6 @@ private:
 		vkDestroyBuffer(device, m_vertexBuffers.quad.buffer, nullptr);
 		vmaFreeMemory(m_allocator, m_vertexBuffers.quad.allocation);
 
-		vkDestroyBuffer(device, m_vertexBuffers.shadow.buffer, nullptr);
-		vmaFreeMemory(m_allocator, m_vertexBuffers.shadow.allocation);
-		free(m_vertexBuffers.shadow.raw);
-
 		for(unsigned int i = 0; i < m_vertexBuffers.candles.size(); i++) {
 			for(unsigned int j = 0; j < m_vertexBuffers.candles[i].size(); j++) {
 				vkDestroyBuffer(device, m_vertexBuffers.candles[i][j].buffer, nullptr);
@@ -915,9 +926,22 @@ private:
 			vmaFreeMemory(m_allocator, buffer.allocation);
 		}
 
+		// shadow
+		vkDestroyBuffer(device, m_vertexBuffers.shadow.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_vertexBuffers.shadow.allocation);
+		free(m_vertexBuffers.shadow.raw);
+
 		vkDestroyBuffer(device, m_indexBuffers.shadow.buffer, nullptr);
 		vmaFreeMemory(m_allocator, m_indexBuffers.shadow.allocation);
 		free(m_indexBuffers.shadow.raw);
+
+		vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.lightTransform.buffer, nullptr);
+		vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation);
+		vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation);
+
+		vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.perInstanceTransform.buffer, nullptr);
+		vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.perInstanceTransform.allocation);
+		vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.perInstanceTransform.allocation);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroyBuffer(device, m_graphicUniformBuffers.snowflake[i].buffer, nullptr);
@@ -931,10 +955,6 @@ private:
 			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.lightingTransform[i].buffer, nullptr);
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.lightingTransform[i].allocation);
 			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.candles.lightingTransform[i].allocation);
-
-			vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.lightTransform.buffer, nullptr);
-			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation);
-			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation);
 
 			vkDestroyBuffer(device, m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer, nullptr);
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation);
@@ -1153,7 +1173,7 @@ private:
 			vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
 			std::cout << m_physicalDeviceProperties.deviceName << std::endl;
         }
-		physicalDevice = devices[1];
+		physicalDevice = devices[0];
 		m_msaaSamples = getMaxUsableSampleCount();
 
         if (physicalDevice == VK_NULL_HANDLE) {
@@ -1893,7 +1913,7 @@ private:
 		{
 			VkPushConstantRange pushConstant{};
 			pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-			pushConstant.size = sizeof(GraphicPushConstant);
+			pushConstant.size = sizeof(Float);
 			pushConstant.offset = 0;
 
 			VkDescriptorSetLayout layouts[2] = {m_graphicDescriptorSetLayouts.candles.tranformUniform, m_graphicDescriptorSetLayouts.candles.meshMaterial};
@@ -1941,7 +1961,7 @@ private:
 		{
 			VkPushConstantRange pushConstant{};
 			pushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-			pushConstant.size = sizeof(GraphicPushConstant);
+			pushConstant.size = sizeof(Float);
 			pushConstant.offset = 0;
 
 			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
@@ -2403,6 +2423,8 @@ private:
 
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.shadow)
 				   , "fail to create shadow pipeline");
+
+			vkDestroyShaderModule(device, vertShaderModule, nullptr);
 		}
 
 		// bloom & combine pipeline
@@ -3516,11 +3538,11 @@ private:
 
 	void initUniformData() {
 		for (unsigned int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			m_graphicUniformBuffers.shadow.perMeshTransform[i].capacity = sizeof(ShadowPerMeshTransform) * CANDLES_BASE_MESH_COUNT;
-			m_graphicUniformBuffers.shadow.lightTransform.capacity = sizeof(ShadowLightingTransform);
+			m_graphicUniformBuffers.shadow.perMeshTransform[i].size = sizeof(ShadowPerMeshTransform) * CANDLES_BASE_MESH_COUNT;
+			m_graphicUniformBuffers.shadow.lightTransform.size = sizeof(ShadowLightingTransform);
 		}
 
-		m_graphicUniformBuffers.shadow.perInstanceTransform.capacity = sizeof(glm::mat4) * CANDLES_INSTANCE_MAX;
+		m_graphicUniformBuffers.shadow.perInstanceTransform.size = sizeof(glm::mat4) * CANDLES_INSTANCE_MAX;
 	}
 
 	void initShadowData() {
@@ -3564,6 +3586,8 @@ private:
 		memcpy(m_indexBuffers.shadow.raw, shadowIndices.data(), iSize);
 		m_indexBuffers.shadow.size = iSize;
 		m_indexBuffers.shadow.needTransfer = true;
+
+		m_gameContext.candlesShadowMeshCount = shadowMeshIdx;
 	}
 
 	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
@@ -3857,22 +3881,7 @@ private:
 				vInstance.pos = {x, y, z};
 				m_towerInstanceRaw.push_back(vInstance);
 			}
-		}
-
-		unsigned int shadowInstanceSize = sizeof(glm::mat4) * m_towerInstanceRaw.size();
-		assert(shadowInstanceSize <= m_graphicUniformBuffers.shadow.perInstanceTransform.capacity);
-		m_graphicUniformBuffers.shadow.perInstanceTransform.size = shadowInstanceSize;
-
-		glm::mat4* pShadow = (glm::mat4*)m_graphicUniformBuffers.shadow.perInstanceTransform.raw;
-		for (unsigned int i = 0; i < m_towerInstanceRaw.size(); i++) {
-			glm::mat4 instanceModel;
-			// WARNING: recheck if collumn major
-			instanceModel[0] = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
-			instanceModel[1] = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
-			instanceModel[2] = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
-			instanceModel[3] = glm::vec4(m_towerInstanceRaw[i].pos.x, m_towerInstanceRaw[i].pos.y, m_towerInstanceRaw[i].pos.z, 1.0f);
-
-			pShadow[i] = instanceModel;
+			m_gameContext.candlesShadowInstanceCount = m_towerInstanceRaw.size();
 		}
 	}
 
@@ -4042,15 +4051,14 @@ private:
 				VmaAllocation stagingBufferAloc{};
 				// same size with LOD0 we need the biggest size possible for LOD1
 				// for the need of re-allocating with different size
-				uint32_t capacity{m_indexBuffers.candles.lod0[i].size};
-				uint32_t size{indexBuffer.size};
+				uint32_t size{m_indexBuffers.candles.lod0[i].size};
 
 				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 				void* data;
 				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
 					memcpy(data, indexBuffer.raw, size);
 				vmaUnmapMemory(m_allocator, stagingBufferAloc);
-				createBuffer(capacity, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer.buffer, indexBuffer.allocation);
+				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer.buffer, indexBuffer.allocation);
 				copyBuffer(stagingBuffer, indexBuffer.buffer, size);
 
 				indexBuffer.needTransfer = false;
@@ -4131,17 +4139,8 @@ private:
 
 		// shadow
 		{
-			VkDeviceSize transCap = m_graphicUniformBuffers.shadow.lightTransform.capacity;
-			assert(transCap > 0);
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				createBuffer(transCap, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-					, m_graphicUniformBuffers.shadow.lightTransform.buffer, m_graphicUniformBuffers.shadow.lightTransform.allocation);
-
-				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation, &m_graphicUniformBuffers.shadow.lightTransform.raw);
-			}
-
 			// heuristic mesh casting shadow size
-			VkDeviceSize meshBufferCap = m_graphicUniformBuffers.shadow.perMeshTransform[0].capacity;
+			VkDeviceSize meshBufferCap = m_graphicUniformBuffers.shadow.perMeshTransform[0].size;
 			assert(meshBufferCap > 0);
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				createBuffer(meshBufferCap, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -4150,7 +4149,14 @@ private:
 				vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.perMeshTransform[i].allocation, &m_graphicUniformBuffers.shadow.perMeshTransform[i].raw);
 			}
 			
-			VkDeviceSize perInstanceCap = m_graphicUniformBuffers.shadow.perInstanceTransform.capacity;
+			VkDeviceSize transCap = m_graphicUniformBuffers.shadow.lightTransform.size;
+			assert(transCap > 0);
+			createBuffer(transCap, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+				, m_graphicUniformBuffers.shadow.lightTransform.buffer, m_graphicUniformBuffers.shadow.lightTransform.allocation);
+
+			vmaMapMemory(m_allocator, m_graphicUniformBuffers.shadow.lightTransform.allocation, &m_graphicUniformBuffers.shadow.lightTransform.raw);
+
+			VkDeviceSize perInstanceCap = m_graphicUniformBuffers.shadow.perInstanceTransform.size;
 			assert(perInstanceCap > 0);
 			createBuffer(perInstanceCap, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
 				, m_graphicUniformBuffers.shadow.perInstanceTransform.buffer, m_graphicUniformBuffers.shadow.perInstanceTransform.allocation);
@@ -4469,7 +4475,7 @@ private:
 				VkDescriptorBufferInfo perMeshTransformInfo{};
 				perMeshTransformInfo.buffer = m_graphicUniformBuffers.shadow.perMeshTransform[i].buffer;
 				perMeshTransformInfo.offset = 0;
-				perMeshTransformInfo.range = sizeof(ShadowPerMeshTransform) * 10;
+				perMeshTransformInfo.range = VK_WHOLE_SIZE;
 
 				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[1].dstSet = m_graphicDescriptorSets.shadow[i];
@@ -4482,7 +4488,7 @@ private:
 				VkDescriptorBufferInfo lookupBufferInfo{};
 				lookupBufferInfo.buffer = m_graphicUniformBuffers.shadow.perInstanceTransform.buffer;
 				lookupBufferInfo.offset = 0;
-				lookupBufferInfo.range = m_graphicUniformBuffers.shadow.perInstanceTransform.size;
+				lookupBufferInfo.range = VK_WHOLE_SIZE;
 
 				descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[2].dstSet = m_graphicDescriptorSets.shadow[i];
@@ -4945,15 +4951,16 @@ private:
 				idxCount = m_indexBuffers.candles.lod1[meshIdx].size / sizeof(unsigned int);
 			}
 
+			// WARNING: remove this
 			// some meshes have animation and don't normal map
 			if(isAnimated) {
-				m_graphicPushConstant.value = 0;
+				m_graphicPushConstant.candles.value = 0;
 			}
 			else {
-				m_graphicPushConstant.value = 1;
+				m_graphicPushConstant.candles.value = 1;
 			}
 
-			vkCmdPushConstants(commandBuffer, m_graphicPipelineLayouts.candles, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), (void*)&m_graphicPushConstant);
+			vkCmdPushConstants(commandBuffer, m_graphicPipelineLayouts.candles, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Float), (void*)&m_graphicPushConstant.candles);
 
 			uint32_t DynamicOffset{};
 			// this dynamic offset have to be 256 byte aligned
@@ -4993,11 +5000,10 @@ private:
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.shadow.buffer, vertexBufferOffsets);
 		vkCmdBindIndexBuffer(commandBuffer, m_indexBuffers.shadow.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.snowflake, 
-					   0, 1, &m_graphicDescriptorSets.snowflake[m_currentFrame], 0, 0);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.shadow, 
+					   0, 1, &m_graphicDescriptorSets.shadow[m_currentFrame], 0, 0);
 
-		// wrong instance count
-		vkCmdDrawIndexed(commandBuffer, m_indexBuffers.shadow.size / sizeof(unsigned int), 1, 0, 0, 0);
+		vkCmdDrawIndexed(commandBuffer, m_indexBuffers.shadow.size / sizeof(unsigned int), m_gameContext.candlesShadowInstanceCount, 0, 0, 0);
 	}
 
 	void renderBloomHorizontal(VkCommandBuffer commandBuffer) {
@@ -5031,7 +5037,7 @@ private:
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.combine,
 						0, 1, &m_graphicDescriptorSets.combine[m_currentFrame], 0, 0);
 
-		vkCmdPushConstants(commandBuffer, m_graphicPipelineLayouts.candles, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GraphicPushConstant), (void*)&m_exposure);
+		vkCmdPushConstants(commandBuffer, m_graphicPipelineLayouts.candles, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Float), (void*)&m_graphicPushConstant.combine);
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
@@ -5170,22 +5176,22 @@ private:
 
 		{
 			// shadow
-			// VkRenderPassBeginInfo shadowPassInfo{};
-			// shadowPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			// shadowPassInfo.renderPass = m_renderPasses.shadow;
-			// shadowPassInfo.framebuffer = m_frameBuffers.shadow[m_currentFrame];
-			// shadowPassInfo.renderArea.offset = {0, 0};
-			// shadowPassInfo.renderArea.extent = swapChainExtent;
+			VkRenderPassBeginInfo shadowPassInfo{};
+			shadowPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			shadowPassInfo.renderPass = m_renderPasses.shadow;
+			shadowPassInfo.framebuffer = m_frameBuffers.shadow[m_currentFrame];
+			shadowPassInfo.renderArea.offset = {0, 0};
+			shadowPassInfo.renderArea.extent = swapChainExtent;
 
-			// VkClearValue shadowClear{{0.0f, 0.0f, 0.0f, 1.0f}};
-			// shadowPassInfo.clearValueCount = 1;
-			// shadowPassInfo.pClearValues = &shadowClear;
+			VkClearValue shadowClear{{0.0f, 0.0f, 0.0f, 1.0f}};
+			shadowPassInfo.clearValueCount = 1;
+			shadowPassInfo.pClearValues = &shadowClear;
 
-			// vkCmdBeginRenderPass(commandBuffer, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdBeginRenderPass(commandBuffer, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-			// 	renderShadowMap(commandBuffer);
+				renderShadowMap(commandBuffer);
 
-			// vkCmdEndRenderPass(commandBuffer);
+			vkCmdEndRenderPass(commandBuffer);
 
 			// base
 			VkRenderPassBeginInfo basePassInfo{};
@@ -5415,7 +5421,7 @@ private:
 		ImGui::Spacing();
 		ImGui::SeparatorText("Effect");
 			if(ImGui::CollapsingHeader("HDR")) {
-				ImGui::SliderFloat("Exposure", &m_exposure.value, 0.f, 1.f, "%.05f");
+				ImGui::SliderFloat("Exposure", &m_graphicPushConstant.combine.value, 0.f, 1.f, "%.05f");
 			}
 	}
 

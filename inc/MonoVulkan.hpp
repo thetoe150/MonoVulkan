@@ -159,8 +159,12 @@ struct ComputePushConstant{
 	float deltaTime;
 };
 
-struct GraphicPushConstant{
+struct Float{
 	alignas(4) float value{1};
+};
+
+struct Int{
+	alignas(4) int value{0};
 };
 
 struct SpecializationConstant{

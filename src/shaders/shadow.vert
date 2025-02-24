@@ -4,7 +4,7 @@ layout (constant_id = 0) const uint s_meshCapacity = 10;
 layout (constant_id = 1) const uint s_instanceCapacity = 10;
 
 layout (push_constant) uniform Count{
-	uint vertex;
+	uint mesh;
 	uint instance;
 } p_count;
 
