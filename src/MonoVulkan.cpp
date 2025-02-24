@@ -1172,18 +1172,12 @@ private:
 		std::cout << "Physical device count: " << deviceCount << std::endl;
 
         for (unsigned int i = 0; i < devices.size(); i++) {
-            // if (isDeviceSuitable(devices[i])) {
-            //     physicalDevice = devices[i];
-            //     m_msaaSamples = getMaxUsableSampleCount();
-            //     break;
-            // }
-
-			physicalDevice = devices[i];
-			vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
-			std::cout << m_physicalDeviceProperties.deviceName << std::endl;
+            if (isDeviceSuitable(devices[i])) {
+                physicalDevice = devices[i];
+                m_msaaSamples = getMaxUsableSampleCount();
+                break;
+            }
         }
-		// physicalDevice = devices[0];
-		// m_msaaSamples = getMaxUsableSampleCount();
 
         if (physicalDevice == VK_NULL_HANDLE) {
             throw std::runtime_error("failed to find a suitable GPU!");
@@ -1500,7 +1494,7 @@ private:
 			shadowAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			shadowAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			shadowAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			shadowAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			shadowAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 			VkAttachmentReference shadowRef{};
 			shadowRef.attachment = 0;
@@ -2529,7 +2523,7 @@ private:
 			dynamicInfo.dynamicStateCount = dynamicStates.size();
 			dynamicInfo.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/bloom.vert.spv");
+			auto vertShaderCode = readFile("../../src/shaders/quad.vert.spv");
 			auto fragShaderCode = readFile("../../src/shaders/bloom.frag.spv");
 
 			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
@@ -2595,13 +2589,12 @@ private:
 				CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.bloom.horizontal)
 					   , "fail to create bloom pipeline");
 			}
+			vkDestroyShaderModule(device, vertShaderModule, nullptr);
+			vkDestroyShaderModule(device, fragShaderModule, nullptr);
 
 			// combine pass
 			{
-				vkDestroyShaderModule(device, vertShaderModule, nullptr);
-				vkDestroyShaderModule(device, fragShaderModule, nullptr);
-
-				auto combineVertShaderCode = readFile("../../src/shaders/combine.vert.spv");
+				auto combineVertShaderCode = readFile("../../src/shaders/quad.vert.spv");
 				auto combineFragShaderCode = readFile("../../src/shaders/combine.frag.spv");
 
 				VkShaderModule combineVertShaderModule = createShaderModule(combineVertShaderCode);
@@ -2636,40 +2629,37 @@ private:
 
 			// shadow view
 			{
-				vkDestroyShaderModule(device, vertShaderModule, nullptr);
-				vkDestroyShaderModule(device, fragShaderModule, nullptr);
+				auto shadowViewVertShaderCode = readFile("../../src/shaders/quad.vert.spv");
+				auto shadowViewFragShaderCode = readFile("../../src/shaders/shadow_viewport.frag.spv");
 
-				auto combineVertShaderCode = readFile("../../src/shaders/combine.vert.spv");
-				auto combineFragShaderCode = readFile("../../src/shaders/combine.frag.spv");
+				VkShaderModule shadowViewVertShaderModule = createShaderModule(shadowViewVertShaderCode);
+				VkShaderModule shadowViewFragShaderModule = createShaderModule(shadowViewFragShaderCode);
 
-				VkShaderModule combineVertShaderModule = createShaderModule(combineVertShaderCode);
-				VkShaderModule combineFragShaderModule = createShaderModule(combineFragShaderCode);
+				VkPipelineShaderStageCreateInfo shadowViewVertShaderStageInfo{};
+				shadowViewVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				shadowViewVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+				shadowViewVertShaderStageInfo.module = shadowViewVertShaderModule;
+				shadowViewVertShaderStageInfo.pName = "main";
 
-				VkPipelineShaderStageCreateInfo combineVertShaderStageInfo{};
-				combineVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-				combineVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-				combineVertShaderStageInfo.module = combineVertShaderModule;
-				combineVertShaderStageInfo.pName = "main";
+				VkPipelineShaderStageCreateInfo shadowViewFragShaderStageInfo{};
+				shadowViewFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				shadowViewFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+				shadowViewFragShaderStageInfo.module = shadowViewFragShaderModule;
+				shadowViewFragShaderStageInfo.pName = "main";
 
-				VkPipelineShaderStageCreateInfo combineFragShaderStageInfo{};
-				combineFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-				combineFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-				combineFragShaderStageInfo.module = combineFragShaderModule;
-				combineFragShaderStageInfo.pName = "main";
-
-				VkPipelineShaderStageCreateInfo combineShaderStages[] = {combineVertShaderStageInfo, combineFragShaderStageInfo};
+				VkPipelineShaderStageCreateInfo shadowViewShaderStages[] = {shadowViewVertShaderStageInfo, shadowViewFragShaderStageInfo};
 
 				pipelineInfo.stageCount = 2;
-				pipelineInfo.pStages = combineShaderStages;
+				pipelineInfo.pStages = shadowViewShaderStages;
 				pipelineInfo.renderPass = m_renderPasses.combine;
 				pipelineInfo.subpass = 0;
-				pipelineInfo.layout = m_graphicPipelineLayouts.combine;
+				pipelineInfo.layout = m_graphicPipelineLayouts.bloom;
 
-				CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.combine)
-					   , "fail to create combine pipeline");
+				CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.shadow.viewport)
+					   , "fail to create shadowView pipeline");
 
-				vkDestroyShaderModule(device, combineVertShaderModule, nullptr);
-				vkDestroyShaderModule(device, combineFragShaderModule, nullptr);
+				vkDestroyShaderModule(device, shadowViewVertShaderModule, nullptr);
+				vkDestroyShaderModule(device, shadowViewFragShaderModule, nullptr);
 			}
 		}
     }
@@ -5121,10 +5111,10 @@ private:
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.shadow.viewport);
 
 		VkViewport viewport{};
-		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width = (float)swapChainExtent.width;
-		viewport.height = (float)swapChainExtent.height;
+		viewport.x = (float)swapChainExtent.width * 3 / 4;
+		viewport.y = (float)swapChainExtent.height * 3 / 4;
+		viewport.width = (float)swapChainExtent.width / 4;
+		viewport.height = (float)swapChainExtent.height / 4;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -5397,6 +5387,7 @@ private:
 			vkCmdBeginRenderPass(commandBuffer, &combinePassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 				renderCombine(commandBuffer);
+				renderShadowView(commandBuffer);
 
 				{
 					TracyVkZone(tracyContext, commandBuffer, "Draw ImGui");
@@ -5773,6 +5764,11 @@ private:
 
         bool extensionsSupported = checkDeviceExtensionSupport(device);
 
+		VkPhysicalDeviceProperties deviceProps{};
+		vkGetPhysicalDeviceProperties(device, &deviceProps);
+		std::cout << deviceProps.deviceName << std::endl;
+		bool isIntegrateGPU = deviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? true : false;
+
         bool swapChainAdequate = false;
         if (extensionsSupported) {
             SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
@@ -5782,7 +5778,7 @@ private:
         VkPhysicalDeviceFeatures supportedFeatures;
         vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
-        return indices.isComplete() && extensionsSupported && swapChainAdequate  && supportedFeatures.samplerAnisotropy;
+        return indices.isComplete() && isIntegrateGPU && extensionsSupported && swapChainAdequate  && supportedFeatures.samplerAnisotropy;
     }
 
 	VkBool32 isFormatFilterable(VkFormat format, VkImageTiling tiling)

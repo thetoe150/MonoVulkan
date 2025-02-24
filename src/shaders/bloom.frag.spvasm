@@ -32,8 +32,8 @@
                OpName %outColor "outColor"
                OpDecorate %isHorizontal SpecId 0
                OpDecorate %vTexCoords Location 0
-               OpDecorate %u_texSampler DescriptorSet 0
                OpDecorate %u_texSampler Binding 0
+               OpDecorate %u_texSampler DescriptorSet 0
                OpDecorate %outColor Location 0
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
