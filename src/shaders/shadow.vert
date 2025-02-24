@@ -24,6 +24,7 @@ layout (set = 0, binding = 2) uniform PerInstanceTransform{
 layout (location = 0) in vec4 a_position;
 
 void main() {
-	gl_Position = u_shadowUniform.lightViewProj * u_perInstanceTransform.value[gl_InstanceIndex] * u_perMeshTransform.value[int(a_position.w)] * vec4(a_position.xyz, 1.0);
+	mat4 model = u_perInstanceTransform.value[gl_InstanceIndex] * u_perMeshTransform.value[int(a_position.w)];
+	gl_Position = u_shadowUniform.lightViewProj * model * vec4(a_position.xyz, 1.0);
 	// gl_VertexIndex;
 }

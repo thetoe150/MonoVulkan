@@ -217,7 +217,12 @@ private:
 		VkPipeline interleaved;
 		VkPipeline separated;
 		} candles;
-		VkPipeline shadow;
+
+		struct {
+			VkPipeline directional;
+			VkPipeline viewport;
+			VkPipeline point;
+		} shadow;
 
 		struct {
 			VkPipeline vertical;
@@ -277,9 +282,9 @@ private:
     uint32_t mipLevels;
 
 	struct {
-		VkSampler snowflake;
 		VkSampler candles;
-		VkSampler quad;
+		VkSampler shadow;
+		VkSampler postFX;
 	}
 	m_samplers;
 
@@ -365,7 +370,10 @@ private:
 			std::vector<std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> meshMaterial; // per mesh of candles model
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> tranformUniform; // 1 for candles model, update every frame
 		} candles;
-		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> shadow;
+		struct {
+			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> viewport;
+			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> directional;
+		} shadow;
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> bloom1;
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> bloom2;
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> combine;
@@ -854,7 +862,8 @@ private:
         vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
-        vkDestroyPipeline(device, m_graphicPipelines.shadow, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.shadow.directional, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.shadow.viewport, nullptr);
         vkDestroyPipeline(device, m_computePipeline, nullptr);
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
@@ -976,9 +985,9 @@ private:
 			vkDestroyImageView(device, meshImage.emissiveImage.view, nullptr);
 		}
 
-		// vkDestroySampler(device, m_samplers.snowflake, nullptr);
 		vkDestroySampler(device, m_samplers.candles, nullptr);
-		vkDestroySampler(device, m_samplers.quad, nullptr);
+		vkDestroySampler(device, m_samplers.shadow, nullptr);
+		vkDestroySampler(device, m_samplers.postFX, nullptr);
 
         vkDestroyBuffer(device, m_towerInstanceBuffer, nullptr);
         vmaFreeMemory(m_allocator, instanceBufferAlloc);
@@ -1173,8 +1182,8 @@ private:
 			vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
 			std::cout << m_physicalDeviceProperties.deviceName << std::endl;
         }
-		physicalDevice = devices[0];
-		m_msaaSamples = getMaxUsableSampleCount();
+		// physicalDevice = devices[0];
+		// m_msaaSamples = getMaxUsableSampleCount();
 
         if (physicalDevice == VK_NULL_HANDLE) {
             throw std::runtime_error("failed to find a suitable GPU!");
@@ -2321,13 +2330,13 @@ private:
 			VkVertexInputBindingDescription	 vertexBinding{};
 			vertexBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 			vertexBinding.binding = 0;
-			vertexBinding.stride = 3 * sizeof(float);
+			vertexBinding.stride = 4 * sizeof(float);
 
 			VkVertexInputAttributeDescription vertexAttr{};
 			vertexAttr.binding = 0;
 			vertexAttr.location = 0;
 			vertexAttr.location = 0;
-			vertexAttr.format = VK_FORMAT_R32G32B32_SFLOAT;
+			vertexAttr.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
 			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -2348,9 +2357,8 @@ private:
 
 			VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
 			rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-			rasterizationInfo.rasterizerDiscardEnable = VK_TRUE;
+			rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
 			rasterizationInfo.lineWidth = 1.0f;
-			// WARNING: no face cull?
 			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
 			rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
@@ -2393,8 +2401,10 @@ private:
 			dynamicInfo.pDynamicStates = dynamicStates.data();
 
 			auto vertShaderCode = readFile("../../src/shaders/shadow.vert.spv");
+			auto fragShaderCode = readFile("../../src/shaders/shadow.frag.spv");
 
 			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -2402,7 +2412,13 @@ private:
 			vertShaderStageInfo.module = vertShaderModule;
 			vertShaderStageInfo.pName = "main";
 
-			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo};
+			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
 			VkGraphicsPipelineCreateInfo pipelineInfo{};
 			pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -2421,10 +2437,11 @@ private:
 			pipelineInfo.subpass = 0;
 			pipelineInfo.layout = m_graphicPipelineLayouts.shadow;
 
-			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.shadow)
+			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.shadow.directional)
 				   , "fail to create shadow pipeline");
 
 			vkDestroyShaderModule(device, vertShaderModule, nullptr);
+			vkDestroyShaderModule(device, fragShaderModule, nullptr);
 		}
 
 		// bloom & combine pipeline
@@ -2580,40 +2597,80 @@ private:
 			}
 
 			// combine pass
-			vkDestroyShaderModule(device, vertShaderModule, nullptr);
-			vkDestroyShaderModule(device, fragShaderModule, nullptr);
+			{
+				vkDestroyShaderModule(device, vertShaderModule, nullptr);
+				vkDestroyShaderModule(device, fragShaderModule, nullptr);
 
-			auto combineVertShaderCode = readFile("../../src/shaders/combine.vert.spv");
-			auto combineFragShaderCode = readFile("../../src/shaders/combine.frag.spv");
+				auto combineVertShaderCode = readFile("../../src/shaders/combine.vert.spv");
+				auto combineFragShaderCode = readFile("../../src/shaders/combine.frag.spv");
 
-			VkShaderModule combineVertShaderModule = createShaderModule(combineVertShaderCode);
-			VkShaderModule combineFragShaderModule = createShaderModule(combineFragShaderCode);
+				VkShaderModule combineVertShaderModule = createShaderModule(combineVertShaderCode);
+				VkShaderModule combineFragShaderModule = createShaderModule(combineFragShaderCode);
 
-			VkPipelineShaderStageCreateInfo combineVertShaderStageInfo{};
-			combineVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			combineVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			combineVertShaderStageInfo.module = combineVertShaderModule;
-			combineVertShaderStageInfo.pName = "main";
+				VkPipelineShaderStageCreateInfo combineVertShaderStageInfo{};
+				combineVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				combineVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+				combineVertShaderStageInfo.module = combineVertShaderModule;
+				combineVertShaderStageInfo.pName = "main";
 
-			VkPipelineShaderStageCreateInfo combineFragShaderStageInfo{};
-			combineFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			combineFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			combineFragShaderStageInfo.module = combineFragShaderModule;
-			combineFragShaderStageInfo.pName = "main";
+				VkPipelineShaderStageCreateInfo combineFragShaderStageInfo{};
+				combineFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				combineFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+				combineFragShaderStageInfo.module = combineFragShaderModule;
+				combineFragShaderStageInfo.pName = "main";
 
-			VkPipelineShaderStageCreateInfo combineShaderStages[] = {combineVertShaderStageInfo, combineFragShaderStageInfo};
+				VkPipelineShaderStageCreateInfo combineShaderStages[] = {combineVertShaderStageInfo, combineFragShaderStageInfo};
 
-			pipelineInfo.stageCount = 2;
-			pipelineInfo.pStages = combineShaderStages;
-			pipelineInfo.renderPass = m_renderPasses.combine;
-			pipelineInfo.subpass = 0;
-			pipelineInfo.layout = m_graphicPipelineLayouts.combine;
+				pipelineInfo.stageCount = 2;
+				pipelineInfo.pStages = combineShaderStages;
+				pipelineInfo.renderPass = m_renderPasses.combine;
+				pipelineInfo.subpass = 0;
+				pipelineInfo.layout = m_graphicPipelineLayouts.combine;
 
-			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.combine)
-				   , "fail to create combine pipeline");
+				CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.combine)
+					   , "fail to create combine pipeline");
 
-			vkDestroyShaderModule(device, combineVertShaderModule, nullptr);
-			vkDestroyShaderModule(device, combineFragShaderModule, nullptr);
+				vkDestroyShaderModule(device, combineVertShaderModule, nullptr);
+				vkDestroyShaderModule(device, combineFragShaderModule, nullptr);
+			}
+
+			// shadow view
+			{
+				vkDestroyShaderModule(device, vertShaderModule, nullptr);
+				vkDestroyShaderModule(device, fragShaderModule, nullptr);
+
+				auto combineVertShaderCode = readFile("../../src/shaders/combine.vert.spv");
+				auto combineFragShaderCode = readFile("../../src/shaders/combine.frag.spv");
+
+				VkShaderModule combineVertShaderModule = createShaderModule(combineVertShaderCode);
+				VkShaderModule combineFragShaderModule = createShaderModule(combineFragShaderCode);
+
+				VkPipelineShaderStageCreateInfo combineVertShaderStageInfo{};
+				combineVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				combineVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+				combineVertShaderStageInfo.module = combineVertShaderModule;
+				combineVertShaderStageInfo.pName = "main";
+
+				VkPipelineShaderStageCreateInfo combineFragShaderStageInfo{};
+				combineFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				combineFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+				combineFragShaderStageInfo.module = combineFragShaderModule;
+				combineFragShaderStageInfo.pName = "main";
+
+				VkPipelineShaderStageCreateInfo combineShaderStages[] = {combineVertShaderStageInfo, combineFragShaderStageInfo};
+
+				pipelineInfo.stageCount = 2;
+				pipelineInfo.pStages = combineShaderStages;
+				pipelineInfo.renderPass = m_renderPasses.combine;
+				pipelineInfo.subpass = 0;
+				pipelineInfo.layout = m_graphicPipelineLayouts.combine;
+
+				CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.combine)
+					   , "fail to create combine pipeline");
+
+				vkDestroyShaderModule(device, combineVertShaderModule, nullptr);
+				vkDestroyShaderModule(device, combineFragShaderModule, nullptr);
+			}
 		}
     }
 
@@ -3081,7 +3138,29 @@ private:
 			}
 		}
 
-		// quad sampler
+		// shadow sampler
+		{
+			VkFilter shadowmapFilter = isFormatFilterable(m_depthFormat, VK_IMAGE_TILING_OPTIMAL) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+			VkSamplerCreateInfo samplerInfo{};
+			samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			samplerInfo.magFilter = shadowmapFilter;
+			samplerInfo.minFilter = shadowmapFilter;
+			samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerInfo.anisotropyEnable = VK_TRUE;
+			samplerInfo.maxAnisotropy = m_physicalDeviceProperties.limits.maxSamplerAnisotropy;
+			samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+			samplerInfo.unnormalizedCoordinates = VK_FALSE;
+			samplerInfo.compareEnable = VK_FALSE;
+			samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+			if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers.shadow) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create shadow sampler!");
+			}
+		}
+
+		// postFX sampler
 		{
 			VkSamplerCreateInfo samplerInfo{};
 			samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -3099,8 +3178,8 @@ private:
 			samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 			samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-			if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers.quad) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create texture sampler!");
+			if (vkCreateSampler(device, &samplerInfo, nullptr, &m_samplers.postFX) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create postFX sampler!");
 			}
 		}
     }
@@ -3555,7 +3634,7 @@ private:
 			if (m_vertexBuffers.candles[meshIdx].size() == 1) {
 				const unsigned int* i = reinterpret_cast<unsigned int*>(m_indexBuffers.candles.lod0[meshIdx].raw);
 				const unsigned int iCount = m_indexBuffers.candles.lod0[meshIdx].size / sizeof(unsigned int);
-				const unsigned int vertexOffset = shadowVertices.size();
+				const unsigned int vertexOffset = shadowVertices.size() / 4;
 				for(unsigned int idx = 0; idx < iCount; idx++) {
 					shadowIndices.push_back(i[idx] + vertexOffset);
 				}
@@ -4452,7 +4531,7 @@ private:
 			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 			allocInfo.pSetLayouts = layouts.data();
 
-			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.shadow.data())
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.shadow.directional.data())
 							, "fail to allocate snowflake descriptor sets !!");
 
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -4465,7 +4544,7 @@ private:
 				transformBufferInfo.range = sizeof(ShadowLightingTransform);
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[0].dstSet = m_graphicDescriptorSets.shadow[i];
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.shadow.directional[i];
 				descriptorWrites[0].dstBinding = 0;
 				descriptorWrites[0].dstArrayElement = 0;
 				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -4478,7 +4557,7 @@ private:
 				perMeshTransformInfo.range = VK_WHOLE_SIZE;
 
 				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[1].dstSet = m_graphicDescriptorSets.shadow[i];
+				descriptorWrites[1].dstSet = m_graphicDescriptorSets.shadow.directional[i];
 				descriptorWrites[1].dstBinding = 1;
 				descriptorWrites[1].dstArrayElement = 0;
 				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -4491,7 +4570,7 @@ private:
 				lookupBufferInfo.range = VK_WHOLE_SIZE;
 
 				descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[2].dstSet = m_graphicDescriptorSets.shadow[i];
+				descriptorWrites[2].dstSet = m_graphicDescriptorSets.shadow.directional[i];
 				descriptorWrites[2].dstBinding = 2;
 				descriptorWrites[2].dstArrayElement = 0;
 				descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -4499,6 +4578,38 @@ private:
 				descriptorWrites[2].pBufferInfo = &lookupBufferInfo;
 
 				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+			}
+
+			// shadow view have the samve layout with bloom descriptor set
+			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
+				viewLayouts = {m_graphicDescriptorSetLayouts.bloom, m_graphicDescriptorSetLayouts.bloom};
+			VkDescriptorSetAllocateInfo shadowViewAllocInfo{};
+			shadowViewAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			shadowViewAllocInfo.descriptorPool = m_descriptorPool;
+			shadowViewAllocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+			shadowViewAllocInfo.pSetLayouts = viewLayouts.data();
+
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &shadowViewAllocInfo, m_graphicDescriptorSets.shadow.viewport.data())
+							, "fail to allocate snowflake descriptor sets !!");
+
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+				std::array<VkWriteDescriptorSet, 1> viewDescriptorWrites{};
+
+				VkDescriptorImageInfo shadowImage{};
+				shadowImage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				shadowImage.imageView = m_renderTargets[i].shadow.view;
+				shadowImage.sampler = m_samplers.shadow;
+
+				viewDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				viewDescriptorWrites[0].dstSet = m_graphicDescriptorSets.shadow.viewport[i];
+				viewDescriptorWrites[0].dstBinding = 0;
+				viewDescriptorWrites[0].dstArrayElement = 0;
+				viewDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				viewDescriptorWrites[0].descriptorCount = 1;
+				viewDescriptorWrites[0].pImageInfo = &shadowImage;
+
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(viewDescriptorWrites.size()), viewDescriptorWrites.data(), 0, nullptr);
 			}
 		}
 
@@ -4524,7 +4635,7 @@ private:
 				VkDescriptorImageInfo bloom1ImageInfo{};
 				bloom1ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				bloom1ImageInfo.imageView = m_renderTargets[i].base.bloomThresholdResRT.view;
-				bloom1ImageInfo.sampler = m_samplers.quad;
+				bloom1ImageInfo.sampler = m_samplers.postFX;
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.bloom1[i];
@@ -4540,7 +4651,7 @@ private:
 				VkDescriptorImageInfo bloom2ImageInfo{};
 				bloom2ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				bloom2ImageInfo.imageView = m_renderTargets[i].bloom1.view;
-				bloom2ImageInfo.sampler = m_samplers.quad;
+				bloom2ImageInfo.sampler = m_samplers.postFX;
 
 				descriptorWrites[0].pImageInfo = &bloom2ImageInfo;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.bloom2[i];
@@ -4567,7 +4678,7 @@ private:
 				VkDescriptorImageInfo baseImageInfo{};
 				baseImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				baseImageInfo.imageView = m_renderTargets[i].base.colorResRT.view;
-				baseImageInfo.sampler = m_samplers.quad;
+				baseImageInfo.sampler = m_samplers.postFX;
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.combine[i];
@@ -4580,7 +4691,7 @@ private:
 				VkDescriptorImageInfo bloomImageInfo{};
 				bloomImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				bloomImageInfo.imageView = m_renderTargets[i].bloom2.view;
-				bloomImageInfo.sampler = m_samplers.quad;
+				bloomImageInfo.sampler = m_samplers.postFX;
 
 				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[1].dstSet = m_graphicDescriptorSets.combine[i]; 
@@ -4980,7 +5091,7 @@ private:
 	void renderShadowMap(VkCommandBuffer commandBuffer) {
 		TracyVkZone(tracyContext, commandBuffer, "Render Shadow Map");
 
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.shadow);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.shadow.directional);
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
@@ -5001,9 +5112,33 @@ private:
 		vkCmdBindIndexBuffer(commandBuffer, m_indexBuffers.shadow.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.shadow, 
-					   0, 1, &m_graphicDescriptorSets.shadow[m_currentFrame], 0, 0);
+					   0, 1, &m_graphicDescriptorSets.shadow.directional[m_currentFrame], 0, 0);
 
 		vkCmdDrawIndexed(commandBuffer, m_indexBuffers.shadow.size / sizeof(unsigned int), m_gameContext.candlesShadowInstanceCount, 0, 0, 0);
+	}
+
+	void renderShadowView(VkCommandBuffer commandBuffer) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.shadow.viewport);
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float)swapChainExtent.width;
+		viewport.height = (float)swapChainExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = {0, 0};
+		scissor.extent = swapChainExtent;
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+		VkDeviceSize vertexBufferOffsets[1] = {0};
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_vertexBuffers.quad.buffer, vertexBufferOffsets);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.bloom, 
+					   0, 1, &m_graphicDescriptorSets.shadow.viewport[m_currentFrame], 0, 0);
+		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
 	void renderBloomHorizontal(VkCommandBuffer commandBuffer) {
@@ -5649,6 +5784,20 @@ private:
 
         return indices.isComplete() && extensionsSupported && swapChainAdequate  && supportedFeatures.samplerAnisotropy;
     }
+
+	VkBool32 isFormatFilterable(VkFormat format, VkImageTiling tiling)
+	{
+		VkFormatProperties formatProps;
+		vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProps);
+
+		if (tiling == VK_IMAGE_TILING_OPTIMAL)
+			return formatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+
+		if (tiling == VK_IMAGE_TILING_LINEAR)
+			return formatProps.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+
+		return false;
+	}
 
     bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
         uint32_t extensionCount;

@@ -79,7 +79,7 @@ static float s_snowScale[3] = {0.008f, 0.008f, 0.005f};
 static float s_snowRotate[3] = {0.f, 0.f, 0.f};
 static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
 
-static glm::vec3 s_lightDir {20.f, 3.f, -10.f};
+static glm::vec3 s_lightDir {5.f, 5.f, 5.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 
