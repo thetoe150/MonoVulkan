@@ -2328,6 +2328,126 @@ private:
 			vkDestroyShaderModule(device, vertShaderModule, nullptr);
 		}
 
+		// floor
+		{ 
+			VkVertexInputBindingDescription vertexBindings{};
+			vertexBindings.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			vertexBindings.binding = 0;
+			vertexBindings.stride = 5 * sizeof(float);
+
+			VkVertexInputAttributeDescription vertexAttributePos{};
+			vertexAttributePos.binding = 0;
+			vertexAttributePos.location = 0;
+			vertexAttributePos.offset = 0;
+			vertexAttributePos.format = VK_FORMAT_R32G32B32_SFLOAT;
+
+			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			vertexInputInfo.vertexBindingDescriptionCount = 1;
+			vertexInputInfo.pVertexBindingDescriptions = &vertexBindings;
+			vertexInputInfo.vertexAttributeDescriptionCount = 1;
+			vertexInputInfo.pVertexAttributeDescriptions = &vertexAttributePos;
+
+			VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
+			inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+			// inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
+
+			VkPipelineViewportStateCreateInfo viewportInfo{};
+			viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			viewportInfo.scissorCount = 1;
+			viewportInfo.viewportCount = 1;
+			// ignore this since viewport state is dynamic
+			// viewportInfo.pScissors
+			// viewportInfo.pViewports
+
+			VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
+			rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+			rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
+			rasterizationInfo.lineWidth = 1.0f;
+			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
+			rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
+			rasterizationInfo.depthBiasEnable = VK_FALSE;
+			rasterizationInfo.depthClampEnable = VK_FALSE;
+
+			VkPipelineMultisampleStateCreateInfo multisampleInfo{};
+			multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+			multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			multisampleInfo.sampleShadingEnable = VK_FALSE;
+
+			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
+			depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+			depthStencilInfo.depthTestEnable = VK_TRUE;
+			depthStencilInfo.depthWriteEnable = VK_FALSE;
+			depthStencilInfo.stencilTestEnable = VK_FALSE;
+			depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
+
+			VkPipelineColorBlendAttachmentState blendAttachmentInfo{};
+			// WTF: we have to set value for this `colorWriteMask` flag for some reason???
+			blendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+			blendAttachmentInfo.blendEnable = VK_FALSE;
+
+			VkPipelineColorBlendStateCreateInfo blendInfo{};
+			blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+			blendInfo.attachmentCount = 1;
+			blendInfo.pAttachments = &blendAttachmentInfo;
+
+			std::array<VkDynamicState, 2> dynamicStates{
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR
+			};
+
+			VkPipelineDynamicStateCreateInfo dynamicInfo{};
+			dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+			dynamicInfo.dynamicStateCount = dynamicStates.size();
+			dynamicInfo.pDynamicStates = dynamicStates.data();
+
+			auto vertShaderCode = readFile("../../src/shaders/floor.vert.spv");
+			auto fragShaderCode = readFile("../../src/shaders/floor.frag.spv");
+
+			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+			VkGraphicsPipelineCreateInfo pipelineInfo{};
+			pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+			pipelineInfo.pVertexInputState = &vertexInputInfo;
+			pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
+			pipelineInfo.pViewportState = &viewportInfo;
+			pipelineInfo.pColorBlendState = &blendInfo;
+			pipelineInfo.pMultisampleState = &multisampleInfo;
+			pipelineInfo.pDepthStencilState = &depthStencilInfo;
+			pipelineInfo.pRasterizationState = &rasterizationInfo;
+			pipelineInfo.stageCount = 2;
+			pipelineInfo.pStages = shaderStages;
+			pipelineInfo.pDynamicState = &dynamicInfo;
+			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+			pipelineInfo.renderPass = m_renderPasses.bloom;
+			pipelineInfo.subpass = 0;
+			pipelineInfo.layout = m_graphicPipelineLayouts.bloom;
+
+			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.floor)
+				   , "fail to create bloom pipeline");
+
+			vkDestroyShaderModule(device, vertShaderModule, nullptr);
+			vkDestroyShaderModule(device, fragShaderModule, nullptr);
+		}
+
 		// shadow
 		{
 			VkVertexInputBindingDescription	 vertexBinding{};
@@ -4525,6 +4645,40 @@ private:
 			}
 		}
 
+		// floor
+		{
+			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
+				layouts = {m_graphicDescriptorSetLayouts.floor, m_graphicDescriptorSetLayouts.floor};
+			VkDescriptorSetAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			allocInfo.descriptorPool = m_descriptorPool;
+			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+			allocInfo.pSetLayouts = layouts.data();
+
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.floor.data())
+							, "fail to allocate snowflake descriptor sets !!");
+
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+				std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+				VkDescriptorBufferInfo bufferInfo{};
+				bufferInfo.buffer = m_graphicUniformBuffers.floor[i].buffer;
+				bufferInfo.offset = 0;
+				bufferInfo.range = sizeof(SnowTransform);
+
+				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.floor[i];
+				descriptorWrites[0].dstBinding = 0;
+				descriptorWrites[0].dstArrayElement = 0;
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				descriptorWrites[0].descriptorCount = 1;
+				descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+			}
+		}
+
 		// shadow
 		{
 			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
@@ -5090,6 +5244,21 @@ private:
 			vkCmdDrawIndexed(commandBuffer, idxCount, instanceCount, 0, 0, 0);
 			meshIdx++;
 		}
+	}
+
+	void renderFloor(VkCommandBuffer commandBuffer) {
+		TracyVkZone(tracyContext, commandBuffer, "Render floor");
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.floor);
+
+		VkBuffer vertexBuffers[1] = {m_vertexBuffers.quad.buffer};
+		VkDeviceSize vertexBufferOffsets[1] = {0};
+		vkCmdBindVertexBuffers(commandBuffer, 0, sizeof(vertexBuffers) / sizeof(VkBuffer), vertexBuffers, vertexBufferOffsets);
+
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.floor, 
+					   0, 1, &m_graphicDescriptorSets.floor[m_currentFrame], 0, 0);
+
+		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
 	void renderShadowMap(VkCommandBuffer commandBuffer) {
