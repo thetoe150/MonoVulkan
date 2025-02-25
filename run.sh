@@ -18,7 +18,7 @@ function compile_spirv()
 	glslc -fshader-stage=vertex src/shaders/quad.vert -o src/shaders/quad.vert.spv
 	glslc -fshader-stage=fragment src/shaders/snowflake.frag -o src/shaders/snowflake.frag.spv
 	glslc -fshader-stage=fragment src/shaders/candles.frag -o src/shaders/candles.frag.spv
-	glslc -fshader-stage=fragment src/shaders/shadow.frag -o src/shaders/shadow.frag.spv
+	glslc -fshader-stage=fragment src/shaders/shadow.vert -o src/shaders/shadow.vert.spv
 	glslc -fshader-stage=fragment src/shaders/shadow_viewport.frag -o src/shaders/shadow_viewport.frag.spv
 	glslc -fshader-stage=fragment src/shaders/bloom.frag -o src/shaders/bloom.frag.spv
 	glslc -fshader-stage=fragment src/shaders/combine.frag -o src/shaders/combine.frag.spv
@@ -29,7 +29,7 @@ function compile_spirv()
 	spirv-dis src/shaders/quad.vert.spv > src/shaders/quad.vert.spvasm
 	spirv-dis src/shaders/candles.frag.spv > src/shaders/candles.frag.spvasm
 	spirv-dis src/shaders/snowflake.frag.spv > src/shaders/snowflake.frag.spvasm
-	spirv-dis src/shaders/shadow.frag.spv > src/shaders/shadow.frag.spvasm
+	spirv-dis src/shaders/shadow.vert.spv > src/shaders/shadow.vert.spvasm
 	spirv-dis src/shaders/shadow_viewport.frag.spv > src/shaders/shadow_viewport.frag.spvasm
 	spirv-dis src/shaders/bloom.frag.spv > src/shaders/bloom.frag.spvasm
 	spirv-dis src/shaders/combine.frag.spv > src/shaders/combine.frag.spvasm

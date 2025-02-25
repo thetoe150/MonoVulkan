@@ -25,6 +25,10 @@ layout (location = 0) in vec4 a_position;
 
 void main() {
 	mat4 model = u_perInstanceTransform.value[gl_InstanceIndex] * u_perMeshTransform.value[int(a_position.w)];
+	// the floor mesh
+	if (int(a_position.w) == 6) {
+		model = u_perMeshTransform.value[int(a_position.w)];
+	}
+
 	gl_Position = u_shadowUniform.lightViewProj * model * vec4(a_position.xyz, 1.0);
-	// gl_VertexIndex;
 }

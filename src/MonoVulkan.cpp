@@ -712,8 +712,8 @@ private:
 			*(SnowTransform*)m_graphicUniformBuffers.snowflake[m_currentFrame].raw = ubo;
 		}
 
-		// candles
 		{
+			// candles
 			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
 			{
@@ -745,6 +745,13 @@ private:
 				candlesUBO->lightPos = s_lightDir;
 				candlesUBO->camPos = g_camera.getPostion();
 			}
+
+			// floor shadow
+			ShadowPerMeshTransform floor{glm::mat4(1.0f)};
+			floor.model = glm::translate(floor.model, glm::vec3(0.f, 0.f, 0.f));
+			floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(0.f, 1.f, 0.f));
+			floor.model = glm::scale(floor.model, glm::vec3(10.f, 10.f, 10.f));
+			shadowMeshUniform.push_back(ShadowPerMeshTransform{floor.model});
 		}
 
 		{
@@ -752,7 +759,7 @@ private:
 			glm::mat4 view = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 			//// note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
 			//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); 
-			glm::mat4 proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
+			glm::mat4 proj = glm::ortho(-15.0f, 15.0f, -15.0f, 15.0f, near_plane, far_plane);
 			proj[1][1] *= -1;
 			ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.lightTransform.raw;
 			shadow->viewProj = proj * view; 
@@ -761,7 +768,6 @@ private:
 			unsigned int shadowUniformSize = shadowMeshUniform.size() * sizeof(ShadowPerMeshTransform);
 			memcpy(m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].raw, shadowMeshUniform.data(), shadowUniformSize);
 			m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].size = shadowUniformSize;
-
 
 			unsigned int shadowInstanceSize = sizeof(glm::mat4) * m_towerInstanceRaw.size();
 			m_graphicUniformBuffers.shadow.perInstanceTransform.size = shadowInstanceSize;
@@ -1174,7 +1180,7 @@ private:
         for (unsigned int i = 0; i < devices.size(); i++) {
             if (isDeviceSuitable(devices[i])) {
                 physicalDevice = devices[i];
-                m_msaaSamples = getMaxUsableSampleCount();
+                // m_msaaSamples = getMaxUsableSampleCount();
                 break;
             }
         }
@@ -2376,7 +2382,7 @@ private:
 
 			VkPipelineColorBlendAttachmentState blendAttachmentInfo{};
 			// WTF: we have to set value for this `colorWriteMask` flag for some reason???
-			blendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+			blendAttachmentInfo.colorWriteMask = 0;
 			blendAttachmentInfo.blendEnable = VK_FALSE;
 
 			VkPipelineColorBlendStateCreateInfo blendInfo{};
@@ -2394,11 +2400,9 @@ private:
 			dynamicInfo.dynamicStateCount = dynamicStates.size();
 			dynamicInfo.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/shadow.vert.spv");
-			auto fragShaderCode = readFile("../../src/shaders/shadow.frag.spv");
+			auto vertShaderCode = readFile("../../src/shaders/shadow_batch.vert.spv");
 
 			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -2406,13 +2410,7 @@ private:
 			vertShaderStageInfo.module = vertShaderModule;
 			vertShaderStageInfo.pName = "main";
 
-			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
-			fragShaderStageInfo.pName = "main";
-
-			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo};
 
 			VkGraphicsPipelineCreateInfo pipelineInfo{};
 			pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -2435,7 +2433,6 @@ private:
 				   , "fail to create shadow pipeline");
 
 			vkDestroyShaderModule(device, vertShaderModule, nullptr);
-			vkDestroyShaderModule(device, fragShaderModule, nullptr);
 		}
 
 		// bloom & combine pipeline
@@ -3619,6 +3616,7 @@ private:
 		std::vector<float> shadowVertices;
 		std::vector<unsigned int> shadowIndices;
 		float shadowMeshIdx = 0;
+		// candles meshes
 		for (unsigned int meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
 			// only the base of the candles cast shadow
 			if (m_vertexBuffers.candles[meshIdx].size() == 1) {
@@ -3644,6 +3642,19 @@ private:
 			}
 		}
 
+		// floor
+		unsigned int currentIdx = shadowVertices.size() / 4;
+		for (unsigned int i = 0; i < 6; i++) {
+			shadowIndices.push_back(currentIdx + i);
+		}
+
+		for (unsigned int v = 0; v < sizeof(quadListVertices) / sizeof(quadListVertices[0]); v += 5) {
+			shadowVertices.push_back(quadListVertices[v + 0]);
+			shadowVertices.push_back(quadListVertices[v + 1]);
+			shadowVertices.push_back(quadListVertices[v + 2]);
+			shadowVertices.push_back(shadowMeshIdx);
+		}
+
 		unsigned int vSize = shadowVertices.size() * sizeof(float);
 		m_vertexBuffers.shadow.raw = malloc(vSize);
 		memcpy(m_vertexBuffers.shadow.raw, shadowVertices.data(), vSize);
@@ -3656,7 +3667,7 @@ private:
 		m_indexBuffers.shadow.size = iSize;
 		m_indexBuffers.shadow.needTransfer = true;
 
-		m_gameContext.candlesShadowMeshCount = shadowMeshIdx;
+		m_gameContext.candlesShadowMeshCount = shadowMeshIdx + 1;
 	}
 
 	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
@@ -5308,7 +5319,9 @@ private:
 			shadowPassInfo.renderArea.offset = {0, 0};
 			shadowPassInfo.renderArea.extent = swapChainExtent;
 
-			VkClearValue shadowClear{{0.0f, 0.0f, 0.0f, 1.0f}};
+			VkClearValue shadowClear{};
+			shadowClear.depthStencil.depth = 1;
+			shadowClear.depthStencil.stencil = 0;
 			shadowPassInfo.clearValueCount = 1;
 			shadowPassInfo.pClearValues = &shadowClear;
 

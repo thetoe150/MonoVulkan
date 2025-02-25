@@ -24,8 +24,8 @@
                OpName %outFragColor "outFragColor"
                OpName %param "param"
                OpDecorate %zFar SpecId 0
-               OpDecorate %u_texSampler Binding 0
                OpDecorate %u_texSampler DescriptorSet 0
+               OpDecorate %u_texSampler Binding 0
                OpDecorate %vTexCoords Location 0
                OpDecorate %outFragColor Location 0
        %void = OpTypeVoid
@@ -34,7 +34,7 @@
 %_ptr_Function_float = OpTypePointer Function %float
           %8 = OpTypeFunction %float %_ptr_Function_float
     %float_1 = OpConstant %float 1
-       %zFar = OpSpecConstant %float 10
+       %zFar = OpSpecConstant %float 15
     %float_2 = OpConstant %float 2
          %34 = OpTypeImage %float 2D 0 0 0 1 Unknown
          %35 = OpTypeSampledImage %34

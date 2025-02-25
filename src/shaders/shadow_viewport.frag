@@ -5,7 +5,7 @@ layout(location = 0) out vec4 outFragColor;
 
 layout(set = 0, binding = 0) uniform sampler2D u_texSampler;
 
-layout (constant_id = 0) const float zFar = 10;
+layout (constant_id = 0) const float zFar = 15;
 
 float LinearizeDepth(float depth)
 {

@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 66
+; Bound: 79
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -93,6 +93,8 @@
  %a_position = OpVariable %_ptr_Input_v4float Input
      %uint_3 = OpConstant %uint 3
 %_ptr_Input_float = OpTypePointer Input %float
+      %int_6 = OpConstant %int 6
+       %bool = OpTypeBool
      %uint_1 = OpConstant %uint 1
 %_arr_float_uint_1 = OpTypeArray %float %uint_1
 %gl_PerVertex = OpTypeStruct %v4float %float %_arr_float_uint_1 %_arr_float_uint_1
@@ -120,18 +122,33 @@
          %38 = OpLoad %mat4v4float %37
          %39 = OpMatrixTimesMatrix %mat4v4float %24 %38
                OpStore %model %39
-         %48 = OpAccessChain %_ptr_Uniform_mat4v4float %u_shadowUniform %int_0
-         %49 = OpLoad %mat4v4float %48
-         %50 = OpLoad %mat4v4float %model
-         %51 = OpMatrixTimesMatrix %mat4v4float %49 %50
-         %53 = OpLoad %v4float %a_position
-         %54 = OpVectorShuffle %v3float %53 %53 0 1 2
-         %56 = OpCompositeExtract %float %54 0
-         %57 = OpCompositeExtract %float %54 1
-         %58 = OpCompositeExtract %float %54 2
-         %59 = OpCompositeConstruct %v4float %56 %57 %58 %float_1
-         %60 = OpMatrixTimesVector %v4float %51 %59
-         %62 = OpAccessChain %_ptr_Output_v4float %_ %int_0
-               OpStore %62 %60
+         %40 = OpAccessChain %_ptr_Input_float %a_position %uint_3
+         %41 = OpLoad %float %40
+         %42 = OpConvertFToS %int %41
+         %45 = OpIEqual %bool %42 %int_6
+               OpSelectionMerge %47 None
+               OpBranchConditional %45 %46 %47
+         %46 = OpLabel
+         %48 = OpAccessChain %_ptr_Input_float %a_position %uint_3
+         %49 = OpLoad %float %48
+         %50 = OpConvertFToS %int %49
+         %51 = OpAccessChain %_ptr_Uniform_mat4v4float %u_perMeshTransform %int_0 %50
+         %52 = OpLoad %mat4v4float %51
+               OpStore %model %52
+               OpBranch %47
+         %47 = OpLabel
+         %61 = OpAccessChain %_ptr_Uniform_mat4v4float %u_shadowUniform %int_0
+         %62 = OpLoad %mat4v4float %61
+         %63 = OpLoad %mat4v4float %model
+         %64 = OpMatrixTimesMatrix %mat4v4float %62 %63
+         %66 = OpLoad %v4float %a_position
+         %67 = OpVectorShuffle %v3float %66 %66 0 1 2
+         %69 = OpCompositeExtract %float %67 0
+         %70 = OpCompositeExtract %float %67 1
+         %71 = OpCompositeExtract %float %67 2
+         %72 = OpCompositeConstruct %v4float %69 %70 %71 %float_1
+         %73 = OpMatrixTimesVector %v4float %64 %72
+         %75 = OpAccessChain %_ptr_Output_v4float %_ %int_0
+               OpStore %75 %73
                OpReturn
                OpFunctionEnd
