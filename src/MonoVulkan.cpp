@@ -187,6 +187,7 @@ private:
 			VkDescriptorSetLayout tranformUniform;
 			VkDescriptorSetLayout meshMaterial;
 		} candles;
+		VkDescriptorSetLayout floor;
 		VkDescriptorSetLayout shadow;
 		VkDescriptorSetLayout bloom;
 		VkDescriptorSetLayout combine;
@@ -195,6 +196,7 @@ private:
 	struct {
 		VkPipelineLayout snowflake;
 		VkPipelineLayout candles;
+		VkPipelineLayout floor;
 		VkPipelineLayout shadow;
 		VkPipelineLayout bloom;
 		VkPipelineLayout combine;
@@ -214,10 +216,10 @@ private:
 	struct {
 		VkPipeline snowflake;
 		struct {
-		VkPipeline interleaved;
-		VkPipeline separated;
+			VkPipeline interleaved;
+			VkPipeline separated;
 		} candles;
-
+		VkPipeline floor;
 		struct {
 			VkPipeline directional;
 			VkPipeline viewport;
@@ -370,6 +372,7 @@ private:
 			std::vector<std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> meshMaterial; // per mesh of candles model
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> tranformUniform; // 1 for candles model, update every frame
 		} candles;
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> floor;
 		struct {
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> viewport;
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> directional;
@@ -2435,7 +2438,7 @@ private:
 			vkDestroyShaderModule(device, vertShaderModule, nullptr);
 		}
 
-		// bloom & combine pipeline
+		// bloom & combine & shadow view pipeline
 		{ 
 			// shared states
 			VkVertexInputBindingDescription vertexBindings{};
