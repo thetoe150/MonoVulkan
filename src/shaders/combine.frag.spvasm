@@ -28,13 +28,13 @@
                OpName %bloomColor_0 "bloomColor"
                OpName %hdrColor_0 "hdrColor"
                OpName %mapped_0 "mapped"
-               OpDecorate %baseSampler Binding 0
                OpDecorate %baseSampler DescriptorSet 0
+               OpDecorate %baseSampler Binding 0
                OpDecorate %vTexCoords Location 0
-               OpDecorate %bloomSampler Binding 1
                OpDecorate %bloomSampler DescriptorSet 0
-               OpDecorate %DataPushConstant Block
+               OpDecorate %bloomSampler Binding 1
                OpMemberDecorate %DataPushConstant 0 Offset 0
+               OpDecorate %DataPushConstant Block
                OpDecorate %outColor Location 0
        %void = OpTypeVoid
           %3 = OpTypeFunction %void

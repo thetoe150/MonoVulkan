@@ -240,6 +240,8 @@ private:
 	struct {
 		unsigned int candlesShadowMeshCount{0};
 		unsigned int candlesShadowInstanceCount{0};
+		struct {
+	} transform;
 	} m_gameContext;
 
 	std::map<Object, tinygltf::Model> m_model;
@@ -332,6 +334,7 @@ private:
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> perMeshTransform;
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> lightingTransform;
 		} candles;
+		std::array<Buffer, MAX_FRAMES_IN_FLIGHT> floor;
 		struct {
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> perMeshTransform;
 			Buffer perInstanceTransform;
@@ -697,6 +700,10 @@ private:
 
     void updateGraphicUniformBuffer() {
 		ZoneScopedN("Update Graphic Transform Uniform Buffer");
+
+		// floor base pass
+		FloorTransform* floorTrans = (FloorTransform*)m_graphicUniformBuffers.floor[m_currentFrame].raw;
+
 		std::vector<ShadowPerMeshTransform> shadowMeshUniform;
 		// snowflake
 		{
@@ -747,14 +754,18 @@ private:
 				candlesUBO->viewProj = proj * view;
 				candlesUBO->lightPos = s_lightDir;
 				candlesUBO->camPos = g_camera.getPostion();
+
+				floorTrans->viewProj = candlesUBO->viewProj; 
 			}
 
 			// floor shadow
 			ShadowPerMeshTransform floor{glm::mat4(1.0f)};
-			floor.model = glm::translate(floor.model, glm::vec3(0.f, 0.f, 0.f));
-			floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(0.f, 1.f, 0.f));
+			floor.model = glm::translate(floor.model, glm::vec3(5.f, 0.f, 5.f));
+			// floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(0.f, 1.f, 0.f));
 			floor.model = glm::scale(floor.model, glm::vec3(10.f, 10.f, 10.f));
 			shadowMeshUniform.push_back(ShadowPerMeshTransform{floor.model});
+
+			floorTrans->model = floor.model; 
 		}
 
 		{
@@ -777,7 +788,6 @@ private:
 			glm::mat4* pShadow = (glm::mat4*)m_graphicUniformBuffers.shadow.perInstanceTransform.raw;
 			for (unsigned int i = 0; i < m_towerInstanceRaw.size(); i++) {
 				glm::mat4 instanceModel;
-				// WARNING: recheck if collumn major
 				instanceModel[0] = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
 				instanceModel[1] = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
 				instanceModel[2] = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
@@ -803,7 +813,7 @@ private:
 		m_computePushConstant.deltaTime = m_currentDeltaTime;
 	}
 
-	void updateContext() {
+	void updateGameContext() {
 		ZoneScopedN("ComputeAnimationCPU");
         auto now = std::chrono::high_resolution_clock::now();
         float currentTime = std::chrono::duration<float, std::chrono::seconds::period>(now - startTime).count();
@@ -827,7 +837,7 @@ private:
         while (!glfwWindowShouldClose(window)) {
 			// std::cout << std::endl << ">>>>>>> New Frame Start <<<<<<<<" << std::endl;
 			processInput();
-			updateContext();
+			updateGameContext();
             drawFrame();
 			FrameMark;
         }
@@ -868,6 +878,7 @@ private:
         vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.candles.interleaved, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.candles.separated, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.floor, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
@@ -877,6 +888,7 @@ private:
         vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.candles, nullptr);
+        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.floor, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.shadow, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.bloom, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.combine, nullptr);
@@ -907,6 +919,7 @@ private:
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.snowflake, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.tranformUniform, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.meshMaterial, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.floor, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.shadow, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.bloom, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.combine, nullptr);
@@ -965,6 +978,10 @@ private:
 			vkDestroyBuffer(device, m_graphicUniformBuffers.snowflake[i].buffer, nullptr);
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.snowflake[i].allocation);
 			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.snowflake[i].allocation);
+
+			vkDestroyBuffer(device, m_graphicUniformBuffers.floor[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.floor[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.floor[i].allocation);
 
 			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.perMeshTransform[i].buffer, nullptr);
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.perMeshTransform[i].allocation);
@@ -1736,6 +1753,32 @@ private:
 			}
 		}
 
+		// floor
+		{
+			VkDescriptorSetLayoutBinding uboLayoutBinding{};
+			uboLayoutBinding.binding = 0;
+			uboLayoutBinding.descriptorCount = 1;
+			uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			uboLayoutBinding.pImmutableSamplers = nullptr;
+			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+			VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+			samplerLayoutBinding.binding = 1;
+			samplerLayoutBinding.descriptorCount = 1;
+			samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			samplerLayoutBinding.pImmutableSamplers = nullptr;
+			samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
+			VkDescriptorSetLayoutCreateInfo layoutInfo{};
+			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layoutInfo.bindingCount = bindings.size();
+			layoutInfo.pBindings = bindings.data();
+
+			CHECK_VK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.floor)
+							, "fail to create snowflake descriptor set layout");
+		}
+
 		// shadow
 		{
 			VkDescriptorSetLayoutBinding transform;
@@ -1938,6 +1981,22 @@ private:
 			pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 
 			if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_graphicPipelineLayouts.candles) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create graphic pipeline layout!");
+			}
+		}
+
+		// floor
+		{
+			VkDescriptorSetLayout desLayouts{m_graphicDescriptorSetLayouts.floor};
+
+			VkPipelineLayoutCreateInfo foorLayout{};
+			foorLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			foorLayout.setLayoutCount = 1;
+			foorLayout.pSetLayouts = &desLayouts;
+			foorLayout.pushConstantRangeCount = 0;
+			foorLayout.pPushConstantRanges = 0;
+
+			if (vkCreatePipelineLayout(device, &foorLayout, nullptr, &m_graphicPipelineLayouts.floor) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create graphic pipeline layout!");
 			}
 		}
@@ -2380,19 +2439,22 @@ private:
 			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
 			depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 			depthStencilInfo.depthTestEnable = VK_TRUE;
-			depthStencilInfo.depthWriteEnable = VK_FALSE;
+			depthStencilInfo.depthWriteEnable = VK_TRUE;
 			depthStencilInfo.stencilTestEnable = VK_FALSE;
 			depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
 
-			VkPipelineColorBlendAttachmentState blendAttachmentInfo{};
-			// WTF: we have to set value for this `colorWriteMask` flag for some reason???
-			blendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
-			blendAttachmentInfo.blendEnable = VK_FALSE;
+			VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+			colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+			colorBlendAttachment.blendEnable = VK_FALSE;
+
+			// 2 attachments for 2 framebuffer attachments
+			std::array<VkPipelineColorBlendAttachmentState, 2> blendAttachments{colorBlendAttachment, colorBlendAttachment};
 
 			VkPipelineColorBlendStateCreateInfo blendInfo{};
 			blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-			blendInfo.attachmentCount = 1;
-			blendInfo.pAttachments = &blendAttachmentInfo;
+			blendInfo.logicOpEnable = VK_FALSE;
+			blendInfo.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
+			blendInfo.pAttachments = blendAttachments.data();
 
 			std::array<VkDynamicState, 2> dynamicStates{
 				VK_DYNAMIC_STATE_VIEWPORT,
@@ -2437,9 +2499,9 @@ private:
 			pipelineInfo.pStages = shaderStages;
 			pipelineInfo.pDynamicState = &dynamicInfo;
 			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-			pipelineInfo.renderPass = m_renderPasses.bloom;
+			pipelineInfo.renderPass = m_renderPasses.base;
 			pipelineInfo.subpass = 0;
-			pipelineInfo.layout = m_graphicPipelineLayouts.bloom;
+			pipelineInfo.layout = m_graphicPipelineLayouts.floor;
 
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.floor)
 				   , "fail to create bloom pipeline");
@@ -4340,6 +4402,17 @@ private:
 			}
 		}
 
+		// floor
+		{
+			VkDeviceSize bufferSize = sizeof(FloorTransform);
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					, m_graphicUniformBuffers.floor[i].buffer, m_graphicUniformBuffers.floor[i].allocation);
+
+				vmaMapMemory(m_allocator, m_graphicUniformBuffers.floor[i].allocation, &m_graphicUniformBuffers.floor[i].raw);
+			}
+		}
+
 		// shadow
 		{
 			// heuristic mesh casting shadow size
@@ -4660,12 +4733,12 @@ private:
 
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 
-				std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
 				VkDescriptorBufferInfo bufferInfo{};
 				bufferInfo.buffer = m_graphicUniformBuffers.floor[i].buffer;
 				bufferInfo.offset = 0;
-				bufferInfo.range = sizeof(SnowTransform);
+				bufferInfo.range = sizeof(FloorTransform);
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_graphicDescriptorSets.floor[i];
@@ -4674,6 +4747,19 @@ private:
 				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				descriptorWrites[0].descriptorCount = 1;
 				descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+				VkDescriptorImageInfo shadowImage{};
+				shadowImage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				shadowImage.imageView = m_renderTargets[i].shadow.view;
+				shadowImage.sampler = m_samplers.shadow;
+
+				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[1].dstSet = m_graphicDescriptorSets.floor[i];
+				descriptorWrites[1].dstBinding = 1;
+				descriptorWrites[1].dstArrayElement = 0;
+				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				descriptorWrites[1].descriptorCount = 1;
+				descriptorWrites[1].pImageInfo = &shadowImage;
 
 				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 			}
@@ -5525,6 +5611,7 @@ private:
 
 				renderSnowflake(commandBuffer);
 				renderCandles(commandBuffer);
+				renderFloor(commandBuffer);
 
 			vkCmdEndRenderPass(commandBuffer);
 

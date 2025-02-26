@@ -190,6 +190,11 @@ struct CandlesLightingTransform {
     alignas(16) glm::vec3 camPos;
 };
 
+struct FloorTransform {
+    alignas(16) glm::mat4 model;
+    alignas(16) glm::mat4 viewProj;
+};
+
 struct ShadowLightingTransform {
     alignas(16) glm::mat4 viewProj;
 };

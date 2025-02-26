@@ -1,12 +1,12 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 19
+; Bound: 21
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Fragment %main "main" %outFragColor %vPos
+               OpEntryPoint Fragment %main "main" %outFragColor %vPos %outBloomThreadhold
                OpExecutionMode %main OriginUpperLeft
                OpSource GLSL 450
                OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
@@ -15,10 +15,12 @@
                OpName %outFragColor "outFragColor"
                OpName %directionalShadowMap "directionalShadowMap"
                OpName %vPos "vPos"
+               OpName %outBloomThreadhold "outBloomThreadhold"
                OpDecorate %outFragColor Location 0
+               OpDecorate %directionalShadowMap DescriptorSet 0
                OpDecorate %directionalShadowMap Binding 1
-               OpDecorate %directionalShadowMap DescriptorSet 1
                OpDecorate %vPos Location 0
+               OpDecorate %outBloomThreadhold Location 1
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
       %float = OpTypeFloat 32
@@ -26,16 +28,18 @@
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %outFragColor = OpVariable %_ptr_Output_v4float Output
     %float_1 = OpConstant %float 1
-         %11 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
-         %12 = OpTypeImage %float 2D 0 0 0 1 Unknown
-         %13 = OpTypeSampledImage %12
-%_ptr_UniformConstant_13 = OpTypePointer UniformConstant %13
-%directionalShadowMap = OpVariable %_ptr_UniformConstant_13 UniformConstant
+    %float_0 = OpConstant %float 0
+         %12 = OpConstantComposite %v4float %float_1 %float_0 %float_0 %float_1
+         %13 = OpTypeImage %float 2D 0 0 0 1 Unknown
+         %14 = OpTypeSampledImage %13
+%_ptr_UniformConstant_14 = OpTypePointer UniformConstant %14
+%directionalShadowMap = OpVariable %_ptr_UniformConstant_14 UniformConstant
     %v3float = OpTypeVector %float 3
 %_ptr_Input_v3float = OpTypePointer Input %v3float
        %vPos = OpVariable %_ptr_Input_v3float Input
+%outBloomThreadhold = OpVariable %_ptr_Output_v4float Output
        %main = OpFunction %void None %3
           %5 = OpLabel
-               OpStore %outFragColor %11
+               OpStore %outFragColor %12
                OpReturn
                OpFunctionEnd

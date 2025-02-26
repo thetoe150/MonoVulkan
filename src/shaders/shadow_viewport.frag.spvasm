@@ -24,8 +24,8 @@
                OpName %outFragColor "outFragColor"
                OpName %param "param"
                OpDecorate %zFar SpecId 0
-               OpDecorate %u_texSampler Binding 0
                OpDecorate %u_texSampler DescriptorSet 0
+               OpDecorate %u_texSampler Binding 0
                OpDecorate %vTexCoords Location 0
                OpDecorate %outFragColor Location 0
        %void = OpTypeVoid
