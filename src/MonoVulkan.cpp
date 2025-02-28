@@ -755,21 +755,23 @@ private:
 				candlesUBO->lightPos = s_lightDir;
 				candlesUBO->camPos = g_camera.getPostion();
 
-				floorTrans->viewProj = candlesUBO->viewProj; 
+				floorTrans->camViewProj = candlesUBO->viewProj; 
+				floorTrans->lightPos = candlesUBO->lightPos; 
+				floorTrans->camPos = candlesUBO->camPos; 
 			}
 
 			// floor shadow
 			ShadowPerMeshTransform floor{glm::mat4(1.0f)};
 			floor.model = glm::translate(floor.model, glm::vec3(0.f, 0.f, 0.f));
 			floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f));
-			floor.model = glm::scale(floor.model, glm::vec3(20.f, 20.f, 20.f));
+			floor.model = glm::scale(floor.model, glm::vec3(15.f, 15.f, 15.f));
 			shadowMeshUniform.push_back(ShadowPerMeshTransform{floor.model});
 
 			floorTrans->model = floor.model; 
 		}
 
 		{
-			const float near_plane = 1.0f, far_plane = 7.5f;
+			const float near_plane = 1.0f, far_plane = 15.f;
 			glm::mat4 view = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 			//// note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
 			//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); 
@@ -777,6 +779,7 @@ private:
 			proj[1][1] *= -1;
 			ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.lightTransform.raw;
 			shadow->viewProj = proj * view; 
+			floorTrans->lightViewProj = shadow->viewProj;
 
 			assert(m_gameContext.candlesShadowMeshCount == shadowMeshUniform.size());
 			unsigned int shadowUniformSize = shadowMeshUniform.size() * sizeof(ShadowPerMeshTransform);
@@ -1200,7 +1203,7 @@ private:
         for (unsigned int i = 0; i < devices.size(); i++) {
             if (isDeviceSuitable(devices[i])) {
                 physicalDevice = devices[i];
-                // m_msaaSamples = getMaxUsableSampleCount();
+                m_msaaSamples = getMaxUsableSampleCount();
                 break;
             }
         }
@@ -2425,7 +2428,7 @@ private:
 			rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 			rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
 			rasterizationInfo.lineWidth = 1.0f;
-			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
+			rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 			rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
 			rasterizationInfo.depthBiasEnable = VK_FALSE;
@@ -2433,7 +2436,7 @@ private:
 
 			VkPipelineMultisampleStateCreateInfo multisampleInfo{};
 			multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-			multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			multisampleInfo.rasterizationSamples = m_msaaSamples;
 			multisampleInfo.sampleShadingEnable = VK_FALSE;
 
 			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
@@ -2676,7 +2679,7 @@ private:
 
 			VkPipelineMultisampleStateCreateInfo multisampleInfo{};
 			multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-			multisampleInfo.rasterizationSamples = m_msaaSamples;
+			multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 			multisampleInfo.sampleShadingEnable = VK_FALSE;
 
 			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};

@@ -79,7 +79,7 @@ static float s_snowScale[3] = {0.008f, 0.008f, 0.005f};
 static float s_snowRotate[3] = {0.f, 0.f, 0.f};
 static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
 
-static glm::vec3 s_lightDir {-5.f, 3.f, -5.f};
+static glm::vec3 s_lightDir {5.f, 10.f, 5.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 
@@ -192,7 +192,10 @@ struct CandlesLightingTransform {
 
 struct FloorTransform {
     alignas(16) glm::mat4 model;
-    alignas(16) glm::mat4 viewProj;
+    alignas(16) glm::mat4 camViewProj;
+    alignas(16) glm::mat4 lightViewProj;
+    alignas(16) glm::vec3 camPos;
+    alignas(16) glm::vec3 lightPos;
 };
 
 struct ShadowLightingTransform {
