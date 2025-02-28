@@ -7,5 +7,5 @@ layout(location = 0) out vec4 outFragColor;
 layout(location = 1) out vec4 outBloomThreadhold;
 
 void main() {
-	outFragColor = vec4(1.0, 0.0, 0.0, 1.0);
+	outFragColor = vec4(0.01, 0.01, 0.01, 1.0);
 }

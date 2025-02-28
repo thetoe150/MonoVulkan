@@ -760,9 +760,9 @@ private:
 
 			// floor shadow
 			ShadowPerMeshTransform floor{glm::mat4(1.0f)};
-			floor.model = glm::translate(floor.model, glm::vec3(5.f, 0.f, 5.f));
-			// floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(0.f, 1.f, 0.f));
-			floor.model = glm::scale(floor.model, glm::vec3(10.f, 10.f, 10.f));
+			floor.model = glm::translate(floor.model, glm::vec3(0.f, 0.f, 0.f));
+			floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f));
+			floor.model = glm::scale(floor.model, glm::vec3(20.f, 20.f, 20.f));
 			shadowMeshUniform.push_back(ShadowPerMeshTransform{floor.model});
 
 			floorTrans->model = floor.model; 
@@ -2440,6 +2440,7 @@ private:
 			depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 			depthStencilInfo.depthTestEnable = VK_TRUE;
 			depthStencilInfo.depthWriteEnable = VK_TRUE;
+			depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
 			depthStencilInfo.stencilTestEnable = VK_FALSE;
 			depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
 
@@ -2675,7 +2676,7 @@ private:
 
 			VkPipelineMultisampleStateCreateInfo multisampleInfo{};
 			multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-			multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			multisampleInfo.rasterizationSamples = m_msaaSamples;
 			multisampleInfo.sampleShadingEnable = VK_FALSE;
 
 			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
