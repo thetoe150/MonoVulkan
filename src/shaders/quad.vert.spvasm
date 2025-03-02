@@ -22,11 +22,11 @@
                OpName %aPos "aPos"
                OpDecorate %vTexCoords Location 0
                OpDecorate %aTexCoords Location 1
+               OpDecorate %gl_PerVertex Block
                OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
                OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
                OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
                OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
-               OpDecorate %gl_PerVertex Block
                OpDecorate %aPos Location 0
        %void = OpTypeVoid
           %3 = OpTypeFunction %void

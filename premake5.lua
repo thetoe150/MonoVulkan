@@ -21,11 +21,12 @@ project "MonoVulkan"
 	links {"meshoptimizer"}
 	links {"GLFW"}
 
-	warnings "Extra"
+	warnings "Default"
 
 	filter "system:windows"
 		toolset "msc"
-		libdirs {"C:/VulkanSDK/1.3.268.0/Lib"}
+		libdirs {"C:/VulkanSDK/1.3.283.0/Lib"}
+		includedirs {"C:/VulkanSDK/1.3.283.0/Include"}
 		links {"vulkan-1"}
 		-- for tracy
 		defines {"_WIN32_WINNT=0x0602", "WINVER=0x0602"}

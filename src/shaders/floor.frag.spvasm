@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 69
+; Bound: 68
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -12,7 +12,6 @@
                OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
                OpSourceExtension "GL_GOOGLE_include_directive"
                OpName %main "main"
-               OpName %calculateDirectionalShadow_ "calculateDirectionalShadow("
                OpName %projCoord "projCoord"
                OpName %v_lightSpaceFragPos "v_lightSpaceFragPos"
                OpName %closestDepth "closestDepth"
@@ -22,15 +21,13 @@
                OpName %v_worldSpaceFragPos "v_worldSpaceFragPos"
                OpName %outBloomThreadhold "outBloomThreadhold"
                OpDecorate %v_lightSpaceFragPos Location 1
-               OpDecorate %directionalShadowMap DescriptorSet 0
                OpDecorate %directionalShadowMap Binding 1
+               OpDecorate %directionalShadowMap DescriptorSet 0
                OpDecorate %outFragColor Location 0
                OpDecorate %v_worldSpaceFragPos Location 0
                OpDecorate %outBloomThreadhold Location 1
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
-       %bool = OpTypeBool
-          %7 = OpTypeFunction %bool
       %float = OpTypeFloat 32
     %v3float = OpTypeVector %float 3
 %_ptr_Function_v3float = OpTypePointer Function %v3float
@@ -42,67 +39,73 @@
 %_ptr_Input_float = OpTypePointer Input %float
   %float_0_5 = OpConstant %float 0.5
 %_ptr_Function_float = OpTypePointer Function %float
-         %33 = OpTypeImage %float 2D 0 0 0 1 Unknown
-         %34 = OpTypeSampledImage %33
-%_ptr_UniformConstant_34 = OpTypePointer UniformConstant %34
-%directionalShadowMap = OpVariable %_ptr_UniformConstant_34 UniformConstant
+         %29 = OpTypeImage %float 2D 0 0 0 1 Unknown
+         %30 = OpTypeSampledImage %29
+%_ptr_UniformConstant_30 = OpTypePointer UniformConstant %30
+%directionalShadowMap = OpVariable %_ptr_UniformConstant_30 UniformConstant
     %v2float = OpTypeVector %float 2
      %uint_0 = OpConstant %uint 0
      %uint_2 = OpConstant %uint 2
-       %true = OpConstantTrue %bool
-      %false = OpConstantFalse %bool
+       %bool = OpTypeBool
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %outFragColor = OpVariable %_ptr_Output_v4float Output
 %float_0_00999999978 = OpConstant %float 0.00999999978
     %float_1 = OpConstant %float 1
-         %63 = OpConstantComposite %v4float %float_0_00999999978 %float_0_00999999978 %float_0_00999999978 %float_1
-         %65 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
+         %54 = OpConstantComposite %v4float %float_0_00999999978 %float_0_00999999978 %float_0_00999999978 %float_1
+         %61 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
+    %float_0 = OpConstant %float 0
+         %64 = OpConstantComposite %v4float %float_1 %float_0 %float_0 %float_1
 %_ptr_Input_v3float = OpTypePointer Input %v3float
 %v_worldSpaceFragPos = OpVariable %_ptr_Input_v3float Input
 %outBloomThreadhold = OpVariable %_ptr_Output_v4float Output
        %main = OpFunction %void None %3
           %5 = OpLabel
-         %56 = OpFunctionCall %bool %calculateDirectionalShadow_
-               OpSelectionMerge %58 None
-               OpBranchConditional %56 %57 %64
-         %57 = OpLabel
-               OpStore %outFragColor %63
-               OpBranch %58
-         %64 = OpLabel
-               OpStore %outFragColor %65
-               OpBranch %58
-         %58 = OpLabel
-               OpReturn
-               OpFunctionEnd
-%calculateDirectionalShadow_ = OpFunction %bool None %7
-          %9 = OpLabel
   %projCoord = OpVariable %_ptr_Function_v3float Function
 %closestDepth = OpVariable %_ptr_Function_float Function
 %currentDepth = OpVariable %_ptr_Function_float Function
-         %17 = OpLoad %v4float %v_lightSpaceFragPos
-         %18 = OpVectorShuffle %v3float %17 %17 0 1 2
-         %22 = OpAccessChain %_ptr_Input_float %v_lightSpaceFragPos %uint_3
-         %23 = OpLoad %float %22
-         %24 = OpCompositeConstruct %v3float %23 %23 %23
-         %25 = OpFDiv %v3float %18 %24
-               OpStore %projCoord %25
-         %26 = OpLoad %v3float %projCoord
-         %28 = OpVectorTimesScalar %v3float %26 %float_0_5
-         %29 = OpCompositeConstruct %v3float %float_0_5 %float_0_5 %float_0_5
-         %30 = OpFAdd %v3float %28 %29
-               OpStore %projCoord %30
-         %37 = OpLoad %34 %directionalShadowMap
-         %39 = OpLoad %v3float %projCoord
-         %40 = OpVectorShuffle %v2float %39 %39 0 1
-         %41 = OpImageSampleImplicitLod %v4float %37 %40
-         %43 = OpCompositeExtract %float %41 0
-               OpStore %closestDepth %43
-         %46 = OpAccessChain %_ptr_Function_float %projCoord %uint_2
-         %47 = OpLoad %float %46
-               OpStore %currentDepth %47
-         %48 = OpLoad %float %currentDepth
-         %49 = OpLoad %float %closestDepth
-         %50 = OpFOrdGreaterThan %bool %48 %49
-         %53 = OpSelect %bool %50 %true %false
-               OpReturnValue %53
+         %13 = OpLoad %v4float %v_lightSpaceFragPos
+         %14 = OpVectorShuffle %v3float %13 %13 0 1 2
+         %18 = OpAccessChain %_ptr_Input_float %v_lightSpaceFragPos %uint_3
+         %19 = OpLoad %float %18
+         %20 = OpCompositeConstruct %v3float %19 %19 %19
+         %21 = OpFDiv %v3float %14 %20
+               OpStore %projCoord %21
+         %22 = OpLoad %v3float %projCoord
+         %24 = OpVectorTimesScalar %v3float %22 %float_0_5
+         %25 = OpCompositeConstruct %v3float %float_0_5 %float_0_5 %float_0_5
+         %26 = OpFAdd %v3float %24 %25
+               OpStore %projCoord %26
+         %33 = OpLoad %30 %directionalShadowMap
+         %35 = OpLoad %v3float %projCoord
+         %36 = OpVectorShuffle %v2float %35 %35 0 1
+         %37 = OpImageSampleImplicitLod %v4float %33 %36
+         %39 = OpCompositeExtract %float %37 0
+               OpStore %closestDepth %39
+         %42 = OpAccessChain %_ptr_Function_float %projCoord %uint_2
+         %43 = OpLoad %float %42
+               OpStore %currentDepth %43
+         %44 = OpLoad %float %currentDepth
+         %45 = OpLoad %float %closestDepth
+         %47 = OpFOrdGreaterThan %bool %44 %45
+               OpSelectionMerge %49 None
+               OpBranchConditional %47 %48 %55
+         %48 = OpLabel
+               OpStore %outFragColor %54
+               OpBranch %49
+         %55 = OpLabel
+         %56 = OpLoad %float %currentDepth
+         %57 = OpLoad %float %closestDepth
+         %58 = OpFOrdLessThan %bool %56 %57
+               OpSelectionMerge %60 None
+               OpBranchConditional %58 %59 %62
+         %59 = OpLabel
+               OpStore %outFragColor %61
+               OpBranch %60
+         %62 = OpLabel
+               OpStore %outFragColor %64
+               OpBranch %60
+         %60 = OpLabel
+               OpBranch %49
+         %49 = OpLabel
+               OpReturn
                OpFunctionEnd

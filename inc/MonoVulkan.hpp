@@ -71,17 +71,18 @@ constexpr uint32_t WIDTH = 1000;
 constexpr uint32_t HEIGHT = 750;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
-constexpr float c_towerScale[3] = {10.0f, 10.0f, 10.0f};
-constexpr float c_towerRotate[3] = {0.f, 0.f, 0.f};
-constexpr float c_towerTranslate[3] = {0.f, 0.f, 0.f};
+constexpr float s_candlesScale[3] = {10.0f, 10.0f, 10.0f};
+constexpr float s_candlesRotate[3] = {0.f, 0.f, 0.f};
+constexpr float s_candlesTranslate[3] = {0.f, 0.f, 0.f};
 
 static float s_snowScale[3] = {0.008f, 0.008f, 0.005f};
 static float s_snowRotate[3] = {0.f, 0.f, 0.f};
 static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
 
-static glm::vec3 s_lightDir {5.f, 10.f, 5.f};
+static glm::vec3 s_lightDir {5.f, 15.f, 5.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
+static float s_shadowFarPlane = 20.f;
 
 const char* CANDLE_MODEL_PATH = "../../res/models/candles_set/scene.gltf";
 const char* SNOWFLAKE_MODEL_PATH = "../../res/models/snowflake/scene.gltf";
