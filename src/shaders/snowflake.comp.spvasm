@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 276
+; Bound: 272
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -54,31 +54,31 @@
                OpMemberName %outputSnowflakeStorageBuffer 0 "s_outputSnowflakes"
                OpName %__1 ""
                OpDecorate %gl_GlobalInvocationID BuiltIn GlobalInvocationId
+               OpDecorate %DataPushConstant Block
                OpMemberDecorate %DataPushConstant 0 Offset 0
                OpMemberDecorate %DataPushConstant 1 Offset 4
-               OpDecorate %DataPushConstant Block
                OpDecorate %vortexCount SpecId 0
                OpMemberDecorate %Vortex 0 Offset 0
                OpMemberDecorate %Vortex 1 Offset 12
                OpMemberDecorate %Vortex 2 Offset 16
                OpMemberDecorate %Vortex 3 Offset 20
                OpDecorate %_arr_Vortex_vortexCount ArrayStride 32
-               OpMemberDecorate %VortexUniformBuffer 0 Offset 0
                OpDecorate %VortexUniformBuffer Block
-               OpDecorate %_ DescriptorSet 0
+               OpMemberDecorate %VortexUniformBuffer 0 Offset 0
                OpDecorate %_ Binding 2
+               OpDecorate %_ DescriptorSet 0
                OpMemberDecorate %Snowflake 0 Offset 0
                OpMemberDecorate %Snowflake 1 Offset 12
                OpDecorate %_runtimearr_Snowflake ArrayStride 16
-               OpMemberDecorate %inputSnowflakeStorageBuffer 0 Offset 0
                OpDecorate %inputSnowflakeStorageBuffer BufferBlock
-               OpDecorate %__0 DescriptorSet 0
+               OpMemberDecorate %inputSnowflakeStorageBuffer 0 Offset 0
                OpDecorate %__0 Binding 0
+               OpDecorate %__0 DescriptorSet 0
                OpDecorate %_runtimearr_Snowflake_0 ArrayStride 16
-               OpMemberDecorate %outputSnowflakeStorageBuffer 0 Offset 0
                OpDecorate %outputSnowflakeStorageBuffer BufferBlock
-               OpDecorate %__1 DescriptorSet 0
+               OpMemberDecorate %outputSnowflakeStorageBuffer 0 Offset 0
                OpDecorate %__1 Binding 1
+               OpDecorate %__1 DescriptorSet 0
                OpDecorate %gl_WorkGroupSize BuiltIn WorkgroupSize
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
@@ -334,86 +334,82 @@
         %204 = OpFAdd %v3float %195 %203
                OpStore %total_force %204
         %206 = OpLoad %v3float %total_force
-        %207 = OpCompositeExtract %float %206 0
-        %208 = OpCompositeExtract %float %206 1
-        %209 = OpCompositeExtract %float %206 2
-        %210 = OpCompositeConstruct %v3float %207 %208 %209
-        %212 = OpAccessChain %_ptr_PushConstant_float %p_const %int_1
-        %213 = OpLoad %float %212
-        %214 = OpVectorTimesScalar %v3float %210 %213
-        %216 = OpVectorTimesScalar %v3float %214 %float_0_100000001
-               OpStore %d %216
-        %221 = OpLoad %uint %index
-        %222 = OpLoad %uint %index
-        %223 = OpAccessChain %_ptr_Uniform_v3float %__0 %int_0 %222 %int_0
-        %224 = OpLoad %v3float %223
-        %225 = OpLoad %v3float %d
-        %226 = OpFAdd %v3float %224 %225
-        %227 = OpAccessChain %_ptr_Uniform_v3float %__1 %int_0 %221 %int_0
-               OpStore %227 %226
-        %228 = OpLoad %uint %index
-        %229 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %228 %int_0 %uint_0
-        %230 = OpLoad %float %229
-        %232 = OpFOrdLessThan %bool %230 %float_n20
-               OpSelectionMerge %234 None
-               OpBranchConditional %232 %233 %238
-        %233 = OpLabel
-        %235 = OpLoad %uint %index
-        %237 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %235 %int_0 %uint_0
-               OpStore %237 %float_20
-               OpBranch %234
-        %238 = OpLabel
-        %239 = OpLoad %uint %index
-        %240 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %239 %int_0 %uint_0
-        %241 = OpLoad %float %240
-        %242 = OpFOrdGreaterThan %bool %241 %float_20
-               OpSelectionMerge %244 None
-               OpBranchConditional %242 %243 %244
-        %243 = OpLabel
-        %245 = OpLoad %uint %index
-        %246 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %245 %int_0 %uint_0
-               OpStore %246 %float_n20
-               OpBranch %244
-        %244 = OpLabel
-               OpBranch %234
+        %208 = OpAccessChain %_ptr_PushConstant_float %p_const %int_1
+        %209 = OpLoad %float %208
+        %210 = OpVectorTimesScalar %v3float %206 %209
+        %212 = OpVectorTimesScalar %v3float %210 %float_0_100000001
+               OpStore %d %212
+        %217 = OpLoad %uint %index
+        %218 = OpLoad %uint %index
+        %219 = OpAccessChain %_ptr_Uniform_v3float %__0 %int_0 %218 %int_0
+        %220 = OpLoad %v3float %219
+        %221 = OpLoad %v3float %d
+        %222 = OpFAdd %v3float %220 %221
+        %223 = OpAccessChain %_ptr_Uniform_v3float %__1 %int_0 %217 %int_0
+               OpStore %223 %222
+        %224 = OpLoad %uint %index
+        %225 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %224 %int_0 %uint_0
+        %226 = OpLoad %float %225
+        %228 = OpFOrdLessThan %bool %226 %float_n20
+               OpSelectionMerge %230 None
+               OpBranchConditional %228 %229 %234
+        %229 = OpLabel
+        %231 = OpLoad %uint %index
+        %233 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %231 %int_0 %uint_0
+               OpStore %233 %float_20
+               OpBranch %230
         %234 = OpLabel
-        %247 = OpLoad %uint %index
-        %248 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %247 %int_0 %uint_1
-        %249 = OpLoad %float %248
-        %251 = OpFOrdLessThan %bool %249 %float_n5
-               OpSelectionMerge %253 None
-               OpBranchConditional %251 %252 %253
-        %252 = OpLabel
-        %254 = OpLoad %uint %index
-        %255 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %254 %int_0 %uint_1
-               OpStore %255 %float_20
-               OpBranch %253
-        %253 = OpLabel
-        %256 = OpLoad %uint %index
-        %258 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %256 %int_0 %uint_2
-        %259 = OpLoad %float %258
-        %260 = OpFOrdLessThan %bool %259 %float_n20
-               OpSelectionMerge %262 None
-               OpBranchConditional %260 %261 %265
+        %235 = OpLoad %uint %index
+        %236 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %235 %int_0 %uint_0
+        %237 = OpLoad %float %236
+        %238 = OpFOrdGreaterThan %bool %237 %float_20
+               OpSelectionMerge %240 None
+               OpBranchConditional %238 %239 %240
+        %239 = OpLabel
+        %241 = OpLoad %uint %index
+        %242 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %241 %int_0 %uint_0
+               OpStore %242 %float_n20
+               OpBranch %240
+        %240 = OpLabel
+               OpBranch %230
+        %230 = OpLabel
+        %243 = OpLoad %uint %index
+        %244 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %243 %int_0 %uint_1
+        %245 = OpLoad %float %244
+        %247 = OpFOrdLessThan %bool %245 %float_n5
+               OpSelectionMerge %249 None
+               OpBranchConditional %247 %248 %249
+        %248 = OpLabel
+        %250 = OpLoad %uint %index
+        %251 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %250 %int_0 %uint_1
+               OpStore %251 %float_20
+               OpBranch %249
+        %249 = OpLabel
+        %252 = OpLoad %uint %index
+        %254 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %252 %int_0 %uint_2
+        %255 = OpLoad %float %254
+        %256 = OpFOrdLessThan %bool %255 %float_n20
+               OpSelectionMerge %258 None
+               OpBranchConditional %256 %257 %261
+        %257 = OpLabel
+        %259 = OpLoad %uint %index
+        %260 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %259 %int_0 %uint_2
+               OpStore %260 %float_20
+               OpBranch %258
         %261 = OpLabel
-        %263 = OpLoad %uint %index
-        %264 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %263 %int_0 %uint_2
-               OpStore %264 %float_20
-               OpBranch %262
-        %265 = OpLabel
-        %266 = OpLoad %uint %index
-        %267 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %266 %int_0 %uint_2
-        %268 = OpLoad %float %267
-        %269 = OpFOrdGreaterThan %bool %268 %float_20
-               OpSelectionMerge %271 None
-               OpBranchConditional %269 %270 %271
-        %270 = OpLabel
-        %272 = OpLoad %uint %index
-        %273 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %272 %int_0 %uint_2
-               OpStore %273 %float_n20
-               OpBranch %271
-        %271 = OpLabel
-               OpBranch %262
-        %262 = OpLabel
+        %262 = OpLoad %uint %index
+        %263 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %262 %int_0 %uint_2
+        %264 = OpLoad %float %263
+        %265 = OpFOrdGreaterThan %bool %264 %float_20
+               OpSelectionMerge %267 None
+               OpBranchConditional %265 %266 %267
+        %266 = OpLabel
+        %268 = OpLoad %uint %index
+        %269 = OpAccessChain %_ptr_Uniform_float %__1 %int_0 %268 %int_0 %uint_2
+               OpStore %269 %float_n20
+               OpBranch %267
+        %267 = OpLabel
+               OpBranch %258
+        %258 = OpLabel
                OpReturn
                OpFunctionEnd

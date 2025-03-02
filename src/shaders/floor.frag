@@ -26,6 +26,20 @@ void main() {
 	}
 }
 
+// void main() {
+// 	vec3 projCoord = v_lightSpaceFragPos.xyz / v_lightSpaceFragPos.w;
+// 	projCoord = projCoord * 0.5 + 0.5;
+// 
+// 	float closestDepth = texture(directionalShadowMap, projCoord.xy).r;
+// 	float currentDepth = projCoord.z;
+// 	if(currentDepth > closestDepth)
+// 		outFragColor = vec4(0.01, 0.01, 0.01, 1.0);
+// 	else if(currentDepth < closestDepth)
+// 		outFragColor = vec4(1.0, 1.0, 1.0, 1.0);
+// 	else
+// 		outFragColor = vec4(1.0, 0.0, 0.0, 1.0);
+// }
+
 // float ShadowCalculation(vec4 fragPosLightSpace)
 // {
 //     // perform perspective divide

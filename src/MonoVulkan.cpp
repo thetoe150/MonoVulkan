@@ -240,9 +240,20 @@ private:
 	struct {
 		unsigned int candlesShadowMeshCount{0};
 		unsigned int candlesShadowInstanceCount{0};
-		struct {
-	} transform;
-	} m_gameContext;
+
+		glm::mat4 camView;
+		glm::mat4 camProjection;
+		glm::mat4 lightView;
+		glm::mat4 lightProjection;
+
+		glm::mat4 snowflakeModel;
+		glm::mat4 candlesModel;
+		std::vector<glm::mat4> candlesMeshesModels;
+		std::vector<glm::mat4> candlesInstancePos;
+		glm::mat4 floorModel;
+		std::vector<glm::mat4> shadowBatchedModels;
+		std::vector<glm::mat4> shadowInstanceModels;
+	} m_sceneContext;
 
 	std::map<Object, tinygltf::Model> m_model;
 	std::map<Object, std::vector< glm::mat4>> m_modelMeshTransforms;
@@ -431,12 +442,16 @@ private:
         loadModels();
 		initVertexData();
 		computeAnimation(Object::CANDLE);
+
 		initIndexData();
 		// analyzeMeshes(false);
 		optimizeMeshes();
 		// shadow don't have LOD
-		initShadowData();
 		generateIndexLOD();
+
+		initShadowData();
+
+		initSceneContext();
 		initUniformData();
 		// analyzeMeshes(true);
 	}
@@ -730,8 +745,8 @@ private:
 				unsigned int meshCount = model.meshes.size();
 				CandlesPerMeshTransform candleMeshModel{};
 				candleMeshModel.model = glm::mat4(1.0f);
-				candleMeshModel.model = glm::translate(candleMeshModel.model, glm::vec3(c_towerTranslate[0], c_towerTranslate[1], c_towerTranslate[2]));
-				candleMeshModel.model = glm::scale(candleMeshModel.model, glm::vec3(c_towerScale[0], c_towerScale[1], c_towerScale[2]));
+				candleMeshModel.model = glm::translate(candleMeshModel.model, glm::vec3(s_candlesTranslate[0], s_candlesTranslate[1], s_candlesTranslate[2]));
+				candleMeshModel.model = glm::scale(candleMeshModel.model, glm::vec3(s_candlesScale[0], s_candlesScale[1], s_candlesScale[2]));
 
 				for (unsigned int meshIdx = 0; meshIdx < meshCount; meshIdx++){
 					// mesh local transform
@@ -762,26 +777,24 @@ private:
 
 			// floor shadow
 			ShadowPerMeshTransform floor{glm::mat4(1.0f)};
-			floor.model = glm::translate(floor.model, glm::vec3(0.f, 0.f, 0.f));
+			floor.model = glm::translate(floor.model, glm::vec3(0.f, -0.1f, 0.f));
 			floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f));
 			floor.model = glm::scale(floor.model, glm::vec3(15.f, 15.f, 15.f));
-			shadowMeshUniform.push_back(ShadowPerMeshTransform{floor.model});
 
 			floorTrans->model = floor.model; 
 		}
 
 		{
-			const float near_plane = 1.0f, far_plane = 15.f;
 			glm::mat4 view = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 			//// note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
 			//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); 
-			glm::mat4 proj = glm::ortho(-15.0f, 15.0f, -15.0f, 15.0f, near_plane, far_plane);
+			glm::mat4 proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, s_nearPlane, s_farPlane);
 			proj[1][1] *= -1;
 			ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.lightTransform.raw;
 			shadow->viewProj = proj * view; 
 			floorTrans->lightViewProj = shadow->viewProj;
 
-			assert(m_gameContext.candlesShadowMeshCount == shadowMeshUniform.size());
+			assert(m_sceneContext.candlesShadowMeshCount == shadowMeshUniform.size());
 			unsigned int shadowUniformSize = shadowMeshUniform.size() * sizeof(ShadowPerMeshTransform);
 			memcpy(m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].raw, shadowMeshUniform.data(), shadowUniformSize);
 			m_graphicUniformBuffers.shadow.perMeshTransform[m_currentFrame].size = shadowUniformSize;
@@ -816,7 +829,72 @@ private:
 		m_computePushConstant.deltaTime = m_currentDeltaTime;
 	}
 
-	void updateGameContext() {
+	void initSceneContext() {
+		ZoneScopedN("Update Graphic Transform Uniform Buffer");
+
+		// view
+		m_sceneContext.camView = g_camera.getViewMatrix();
+		m_sceneContext.camProjection = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
+		m_sceneContext.lightView = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		m_sceneContext.lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, s_nearPlane, s_farPlane); 
+
+		// snowflake
+		{
+			glm::mat4& model = m_sceneContext.snowflakeModel;
+			model = glm::mat4(1.0f);
+			model = glm::translate(model, glm::vec3(s_snowTranslate[0], s_snowTranslate[1], s_snowTranslate[2]));
+			if(s_snowRotate[0] != 0.f || s_snowRotate[1] != 0.f || s_snowRotate[2] != 0.f)
+				model = glm::rotate(model, m_lastTime * glm::radians(90.0f), glm::vec3(s_snowRotate[0], s_snowRotate[1], s_snowRotate[2]));
+			model = glm::scale(model, glm::vec3(s_snowScale[0], s_snowScale[1], s_snowScale[2]));
+		}
+
+		{
+			// candles
+			Object objIdx = Object::CANDLE;
+			tinygltf::Model& model = m_model[objIdx];
+			{
+				unsigned int meshCount = model.meshes.size();
+				glm::mat4& candlesModel = m_sceneContext.candlesModel;
+				candlesModel = glm::mat4(1.0f);
+				candlesModel = glm::translate(candlesModel, glm::vec3(s_candlesTranslate[0], s_candlesTranslate[1], s_candlesTranslate[2]));
+				candlesModel = glm::scale(candlesModel, glm::vec3(s_candlesScale[0], s_candlesScale[1], s_candlesScale[2]));
+
+				for (unsigned int meshIdx = 0; meshIdx < meshCount; meshIdx++){
+					// mesh local transform
+					glm::mat4 localMeshModel = candlesModel * m_modelMeshTransforms[objIdx][meshIdx];
+					m_sceneContext.candlesMeshesModels.push_back(localMeshModel);
+
+					// if mesh cast shadow
+					if (m_vertexBuffers.candles[meshIdx].size() == 1) {
+						m_sceneContext.shadowBatchedModels.push_back(localMeshModel);
+					}
+				}
+			}
+
+		}
+
+		{
+			// floor shadow
+			glm::mat4& model{m_sceneContext.floorModel};
+			model = glm::translate(model, glm::vec3(0.f, -0.1f, 0.f));
+			model = glm::rotate(model, glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f));
+			model = glm::scale(model, glm::vec3(15.f, 15.f, 15.f));
+		}
+
+		{
+			for (unsigned int i = 0; i < m_towerInstanceRaw.size(); i++) {
+				glm::mat4 instanceModel;
+				instanceModel[0] = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+				instanceModel[1] = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+				instanceModel[2] = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+				instanceModel[3] = glm::vec4(m_towerInstanceRaw[i].pos.x, m_towerInstanceRaw[i].pos.y, m_towerInstanceRaw[i].pos.z, 1.0f);
+
+				m_sceneContext.shadowInstanceModels.push_back(instanceModel);
+			}
+		}
+	}
+
+	void updateContext() {
 		ZoneScopedN("ComputeAnimationCPU");
         auto now = std::chrono::high_resolution_clock::now();
         float currentTime = std::chrono::duration<float, std::chrono::seconds::period>(now - startTime).count();
@@ -840,7 +918,7 @@ private:
         while (!glfwWindowShouldClose(window)) {
 			// std::cout << std::endl << ">>>>>>> New Frame Start <<<<<<<<" << std::endl;
 			processInput();
-			updateGameContext();
+			updateContext();
             drawFrame();
 			FrameMark;
         }
@@ -2428,7 +2506,7 @@ private:
 			rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 			rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
 			rasterizationInfo.lineWidth = 1.0f;
-			rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
 			rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
 			rasterizationInfo.depthBiasEnable = VK_FALSE;
@@ -3831,19 +3909,6 @@ private:
 			}
 		}
 
-		// floor
-		unsigned int currentIdx = shadowVertices.size() / 4;
-		for (unsigned int i = 0; i < 6; i++) {
-			shadowIndices.push_back(currentIdx + i);
-		}
-
-		for (unsigned int v = 0; v < sizeof(quadListVertices) / sizeof(quadListVertices[0]); v += 5) {
-			shadowVertices.push_back(quadListVertices[v + 0]);
-			shadowVertices.push_back(quadListVertices[v + 1]);
-			shadowVertices.push_back(quadListVertices[v + 2]);
-			shadowVertices.push_back(shadowMeshIdx);
-		}
-
 		unsigned int vSize = shadowVertices.size() * sizeof(float);
 		m_vertexBuffers.shadow.raw = malloc(vSize);
 		memcpy(m_vertexBuffers.shadow.raw, shadowVertices.data(), vSize);
@@ -3856,7 +3921,7 @@ private:
 		m_indexBuffers.shadow.size = iSize;
 		m_indexBuffers.shadow.needTransfer = true;
 
-		m_gameContext.candlesShadowMeshCount = shadowMeshIdx + 1;
+		m_sceneContext.candlesShadowMeshCount = shadowMeshIdx;
 	}
 
 	std::vector<float> interleaveAttributes(Object obj, unsigned int meshIdx) {
@@ -4150,7 +4215,7 @@ private:
 				vInstance.pos = {x, y, z};
 				m_towerInstanceRaw.push_back(vInstance);
 			}
-			m_gameContext.candlesShadowInstanceCount = m_towerInstanceRaw.size();
+			m_sceneContext.candlesShadowInstanceCount = m_towerInstanceRaw.size();
 		}
 	}
 
@@ -5377,7 +5442,7 @@ private:
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.shadow, 
 					   0, 1, &m_graphicDescriptorSets.shadow.directional[m_currentFrame], 0, 0);
 
-		vkCmdDrawIndexed(commandBuffer, m_indexBuffers.shadow.size / sizeof(unsigned int), m_gameContext.candlesShadowInstanceCount, 0, 0, 0);
+		vkCmdDrawIndexed(commandBuffer, m_indexBuffers.shadow.size / sizeof(unsigned int), m_sceneContext.candlesShadowInstanceCount, 0, 0, 0);
 	}
 
 	void renderShadowView(VkCommandBuffer commandBuffer) {
