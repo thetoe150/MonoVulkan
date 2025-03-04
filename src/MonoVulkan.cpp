@@ -162,6 +162,7 @@ private:
     std::vector<VkImage> m_swapChainImages;
     VkFormat m_swapchainImageFormat;
     VkExtent2D swapChainExtent;
+    VkExtent2D m_shadowExtent;
     std::vector<VkImageView> m_swapChainImageViews;
 
 	struct {
@@ -1463,6 +1464,7 @@ private:
 		std::cout << "Swapchain format: " << m_swapchainImageFormat << "\n";
 		std::cout << "Swapchain images count: " << imageCount << "\n";
         swapChainExtent = extent;
+        m_shadowExtent = {swapChainExtent.width * 2, swapChainExtent.height * 2};
 		m_swapchainProperties = swapChainSupport; 
     }
 
@@ -2998,8 +3000,8 @@ private:
 			shadowFOInfo.renderPass = m_renderPasses.shadow;
 			shadowFOInfo.attachmentCount = 1;
 			shadowFOInfo.pAttachments = &m_renderTargets[i].shadow.view;
-			shadowFOInfo.width = swapChainExtent.width;
-			shadowFOInfo.height = swapChainExtent.height;
+			shadowFOInfo.width = m_shadowExtent.width;
+			shadowFOInfo.height = m_shadowExtent.height;
 			shadowFOInfo.layers = 1;
 			if (vkCreateFramebuffer(device, &shadowFOInfo, nullptr, &m_frameBuffers.shadow[i]) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create framebuffer!");
@@ -3103,7 +3105,7 @@ private:
 			m_renderTargets[i].base.bloomThresholdResRT.view = createImageView(m_renderTargets[i].base.bloomThresholdResRT.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
 			// shadow
-			createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_depthFormat,
+			createImage(m_shadowExtent.width, m_shadowExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_depthFormat,
 						VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets[i].shadow.image, m_renderTargets[i].shadow.allocation);
 			m_renderTargets[i].shadow.view = createImageView(m_renderTargets[i].shadow.image, m_depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -5424,15 +5426,15 @@ private:
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width = (float)swapChainExtent.width;
-		viewport.height = (float)swapChainExtent.height;
+		viewport.width = (float)m_shadowExtent.width;
+		viewport.height = (float)m_shadowExtent.height;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
 		VkRect2D scissor{};
 		scissor.offset = {0, 0};
-		scissor.extent = swapChainExtent;
+		scissor.extent = m_shadowExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		VkDeviceSize vertexBufferOffsets[1] = {0};
@@ -5644,7 +5646,7 @@ private:
 			shadowPassInfo.renderPass = m_renderPasses.shadow;
 			shadowPassInfo.framebuffer = m_frameBuffers.shadow[m_currentFrame];
 			shadowPassInfo.renderArea.offset = {0, 0};
-			shadowPassInfo.renderArea.extent = swapChainExtent;
+			shadowPassInfo.renderArea.extent = m_shadowExtent;
 
 			VkClearValue shadowClear{};
 			shadowClear.depthStencil.depth = 1;
