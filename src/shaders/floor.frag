@@ -8,37 +8,48 @@ layout(location = 1) in vec4 v_lightSpaceFragPos;
 layout(location = 0) out vec4 outFragColor;
 layout(location = 1) out vec4 outBloomThreadhold;
 
-bool calculateDirectionalShadow() {
-	vec3 projCoord = v_lightSpaceFragPos.xyz / v_lightSpaceFragPos.w;
-	projCoord = projCoord * 0.5 + 0.5;
-
-	float closestDepth = texture(directionalShadowMap, projCoord.xy).r;
-	float currentDepth = projCoord.z;
-	return currentDepth > closestDepth ? true : false;
-}
-
-void main() {
-	if (calculateDirectionalShadow()) {
-		outFragColor = vec4(0.01, 0.01, 0.01, 1.0);
-	}
-	else {
-		outFragColor = vec4(1.0, 1.0, 1.0, 1.0);
-	}
-}
-
-// void main() {
+// bool calculateDirectionalShadow() {
 // 	vec3 projCoord = v_lightSpaceFragPos.xyz / v_lightSpaceFragPos.w;
 // 	projCoord = projCoord * 0.5 + 0.5;
 // 
 // 	float closestDepth = texture(directionalShadowMap, projCoord.xy).r;
 // 	float currentDepth = projCoord.z;
-// 	if(currentDepth > closestDepth)
-// 		outFragColor = vec4(0.01, 0.01, 0.01, 1.0);
-// 	else if(currentDepth < closestDepth)
-// 		outFragColor = vec4(1.0, 1.0, 1.0, 1.0);
-// 	else
-// 		outFragColor = vec4(1.0, 0.0, 0.0, 1.0);
+// 	return currentDepth > closestDepth ? true : false;
 // }
+// 
+// void main() {
+// 	if (calculateDirectionalShadow()) {
+// 		outFragColor = vec4(1.0, 0.01, 0.01, 1.0);
+// 	}
+// 	else {
+// 		outFragColor = vec4(1.0, 1.0, 1.0, 1.0);
+// 	}
+// }
+
+void main() {
+	vec3 projCoord = v_lightSpaceFragPos.xyz / v_lightSpaceFragPos.w;
+	projCoord = projCoord * 0.5 + 0.5;
+
+	float closestDepth = texture(directionalShadowMap, projCoord.xy).r;
+
+	if (projCoord.z > 1.0 || projCoord.z < -1.0) {
+		outFragColor = vec4(0.0, 0.0, 1.0, 1.0);
+		return;
+	}
+
+	if (projCoord.x > 1.0 || projCoord.y > 1.0 || projCoord.x < 0.0 || projCoord.y < 0.0) {
+		outFragColor = vec4(0.0, 1.0, 0.0, 1.0);
+		return;
+	}
+
+	float currentDepth = projCoord.z;
+	if(currentDepth > closestDepth)
+		outFragColor = vec4(0.1, 0.1, 0.1, 1.0);
+	else if(currentDepth < closestDepth)
+		outFragColor = vec4(1.0, 1.0, 1.0, 1.0);
+	else
+		outFragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
 
 // float ShadowCalculation(vec4 fragPosLightSpace)
 // {

@@ -81,7 +81,12 @@ static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
 
 static glm::vec3 s_lightDir {5.f, 15.f, 5.f};
 static float s_nearPlane = 0.1f;
-static float s_farPlane = 20.f;
+static float s_farPlane = 100.f;
+static float s_shadowFarPlane = 20.f;
+static float s_shadowLeftPlane = -10.f;
+static float s_shadowRightPlane = 10.f;
+static float s_shadowBotPlane = -10.f;
+static float s_shadowTopPlane = 10.f;
 
 const char* CANDLE_MODEL_PATH = "../../res/models/candles_set/scene.gltf";
 const char* SNOWFLAKE_MODEL_PATH = "../../res/models/snowflake/scene.gltf";

@@ -778,7 +778,7 @@ private:
 
 			// floor shadow
 			ShadowPerMeshTransform floor{glm::mat4(1.0f)};
-			floor.model = glm::translate(floor.model, glm::vec3(0.f, -0.1f, 0.f));
+			floor.model = glm::translate(floor.model, glm::vec3(0.f, -0.01f, 0.f));
 			floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f));
 			floor.model = glm::scale(floor.model, glm::vec3(15.f, 15.f, 15.f));
 
@@ -789,7 +789,7 @@ private:
 			glm::mat4 view = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 			//// note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
 			//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); 
-			glm::mat4 proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, s_nearPlane, s_farPlane);
+			glm::mat4 proj = glm::ortho(s_shadowLeftPlane, s_shadowRightPlane, s_shadowBotPlane, s_shadowTopPlane, s_nearPlane, s_shadowFarPlane);
 			proj[1][1] *= -1;
 			ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.lightTransform.raw;
 			shadow->viewProj = proj * view; 
@@ -837,7 +837,7 @@ private:
 		m_sceneContext.camView = g_camera.getViewMatrix();
 		m_sceneContext.camProjection = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
 		m_sceneContext.lightView = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		m_sceneContext.lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, s_nearPlane, s_farPlane); 
+		m_sceneContext.lightProjection = glm::ortho(s_shadowLeftPlane, s_shadowRightPlane, s_shadowBotPlane, s_shadowTopPlane, s_nearPlane, s_shadowFarPlane); 
 
 		// snowflake
 		{
@@ -5873,7 +5873,6 @@ private:
 			ImGui::Text("Camera front: (%f), (%f), (%f)", g_camera.getFront().x, g_camera.getFront().y, g_camera.getFront().z);
 			ImGui::Text("Camera position: (%f), (%f), (%f)", g_camera.getPostion().x, g_camera.getPostion().y, g_camera.getPostion().z);
 
-			ImGui::SliderFloat("Near Plane", &s_nearPlane, -10.f, 10.f, "%.5f");
 			ImGui::SliderFloat("Far Plane", &s_farPlane, -10.f, 100.f, "%.5f");
 
 			if(ImGui::CollapsingHeader("Objects")) {
@@ -5886,6 +5885,13 @@ private:
 		ImGui::Spacing();
 		ImGui::SeparatorText("Lighting");
 			ImGui::SliderFloat3("Light Direction", (float*)&s_lightDir.x, -20.f, 20.f, "%.2f");
+			if(ImGui::CollapsingHeader("Shadow Frustum")) {
+				ImGui::SliderFloat("Shadow Far Plane", &s_shadowFarPlane, -10.f, 100.f, "%.5f");
+				ImGui::SliderFloat("Shadow Left Plane", &s_shadowLeftPlane, -50.f, 50.f, "%.5f");
+				ImGui::SliderFloat("Shadow Right Plane", &s_shadowRightPlane, -50.f, 50.f, "%.5f");
+				ImGui::SliderFloat("Shadow Bot Plane", &s_shadowBotPlane, -50.f, 50.f, "%.5f");
+				ImGui::SliderFloat("Shadow Top Plane", &s_shadowTopPlane, -50.f, 50.f, "%.5f");
+			}
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("Effect");
