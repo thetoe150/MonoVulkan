@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 68
+; Bound: 112
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -16,8 +16,8 @@
                OpName %v_lightSpaceFragPos "v_lightSpaceFragPos"
                OpName %closestDepth "closestDepth"
                OpName %directionalShadowMap "directionalShadowMap"
-               OpName %currentDepth "currentDepth"
                OpName %outFragColor "outFragColor"
+               OpName %currentDepth "currentDepth"
                OpName %v_worldSpaceFragPos "v_worldSpaceFragPos"
                OpName %outBloomThreadhold "outBloomThreadhold"
                OpDecorate %v_lightSpaceFragPos Location 1
@@ -45,16 +45,20 @@
 %directionalShadowMap = OpVariable %_ptr_UniformConstant_30 UniformConstant
     %v2float = OpTypeVector %float 2
      %uint_0 = OpConstant %uint 0
-     %uint_2 = OpConstant %uint 2
        %bool = OpTypeBool
+     %uint_2 = OpConstant %uint 2
+    %float_1 = OpConstant %float 1
+   %float_n1 = OpConstant %float -1
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %outFragColor = OpVariable %_ptr_Output_v4float Output
-%float_0_00999999978 = OpConstant %float 0.00999999978
-    %float_1 = OpConstant %float 1
-         %54 = OpConstantComposite %v4float %float_0_00999999978 %float_0_00999999978 %float_0_00999999978 %float_1
-         %61 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
     %float_0 = OpConstant %float 0
-         %64 = OpConstantComposite %v4float %float_1 %float_0 %float_0 %float_1
+         %59 = OpConstantComposite %v4float %float_0 %float_0 %float_1 %float_1
+     %uint_1 = OpConstant %uint 1
+         %88 = OpConstantComposite %v4float %float_0 %float_1 %float_0 %float_1
+%float_0_100000001 = OpConstant %float 0.100000001
+         %99 = OpConstantComposite %v4float %float_0_100000001 %float_0_100000001 %float_0_100000001 %float_1
+        %106 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
+        %108 = OpConstantComposite %v4float %float_1 %float_0 %float_0 %float_1
 %_ptr_Input_v3float = OpTypePointer Input %v3float
 %v_worldSpaceFragPos = OpVariable %_ptr_Input_v3float Input
 %outBloomThreadhold = OpVariable %_ptr_Output_v4float Output
@@ -83,29 +87,87 @@
                OpStore %closestDepth %39
          %42 = OpAccessChain %_ptr_Function_float %projCoord %uint_2
          %43 = OpLoad %float %42
-               OpStore %currentDepth %43
-         %44 = OpLoad %float %currentDepth
-         %45 = OpLoad %float %closestDepth
-         %47 = OpFOrdGreaterThan %bool %44 %45
-               OpSelectionMerge %49 None
-               OpBranchConditional %47 %48 %55
+         %45 = OpFOrdGreaterThan %bool %43 %float_1
+         %46 = OpLogicalNot %bool %45
+               OpSelectionMerge %48 None
+               OpBranchConditional %46 %47 %48
+         %47 = OpLabel
+         %49 = OpAccessChain %_ptr_Function_float %projCoord %uint_2
+         %50 = OpLoad %float %49
+         %52 = OpFOrdLessThan %bool %50 %float_n1
+               OpBranch %48
          %48 = OpLabel
-               OpStore %outFragColor %54
-               OpBranch %49
+         %53 = OpPhi %bool %45 %5 %52 %47
+               OpSelectionMerge %55 None
+               OpBranchConditional %53 %54 %55
+         %54 = OpLabel
+               OpStore %outFragColor %59
+               OpReturn
          %55 = OpLabel
-         %56 = OpLoad %float %currentDepth
-         %57 = OpLoad %float %closestDepth
-         %58 = OpFOrdLessThan %bool %56 %57
-               OpSelectionMerge %60 None
-               OpBranchConditional %58 %59 %62
-         %59 = OpLabel
-               OpStore %outFragColor %61
-               OpBranch %60
-         %62 = OpLabel
-               OpStore %outFragColor %64
-               OpBranch %60
-         %60 = OpLabel
-               OpBranch %49
-         %49 = OpLabel
+         %61 = OpAccessChain %_ptr_Function_float %projCoord %uint_0
+         %62 = OpLoad %float %61
+         %63 = OpFOrdGreaterThan %bool %62 %float_1
+         %64 = OpLogicalNot %bool %63
+               OpSelectionMerge %66 None
+               OpBranchConditional %64 %65 %66
+         %65 = OpLabel
+         %68 = OpAccessChain %_ptr_Function_float %projCoord %uint_1
+         %69 = OpLoad %float %68
+         %70 = OpFOrdGreaterThan %bool %69 %float_1
+               OpBranch %66
+         %66 = OpLabel
+         %71 = OpPhi %bool %63 %55 %70 %65
+         %72 = OpLogicalNot %bool %71
+               OpSelectionMerge %74 None
+               OpBranchConditional %72 %73 %74
+         %73 = OpLabel
+         %75 = OpAccessChain %_ptr_Function_float %projCoord %uint_0
+         %76 = OpLoad %float %75
+         %77 = OpFOrdLessThan %bool %76 %float_0
+               OpBranch %74
+         %74 = OpLabel
+         %78 = OpPhi %bool %71 %66 %77 %73
+         %79 = OpLogicalNot %bool %78
+               OpSelectionMerge %81 None
+               OpBranchConditional %79 %80 %81
+         %80 = OpLabel
+         %82 = OpAccessChain %_ptr_Function_float %projCoord %uint_1
+         %83 = OpLoad %float %82
+         %84 = OpFOrdLessThan %bool %83 %float_0
+               OpBranch %81
+         %81 = OpLabel
+         %85 = OpPhi %bool %78 %74 %84 %80
+               OpSelectionMerge %87 None
+               OpBranchConditional %85 %86 %87
+         %86 = OpLabel
+               OpStore %outFragColor %88
+               OpReturn
+         %87 = OpLabel
+         %91 = OpAccessChain %_ptr_Function_float %projCoord %uint_2
+         %92 = OpLoad %float %91
+               OpStore %currentDepth %92
+         %93 = OpLoad %float %currentDepth
+         %94 = OpLoad %float %closestDepth
+         %95 = OpFOrdGreaterThan %bool %93 %94
+               OpSelectionMerge %97 None
+               OpBranchConditional %95 %96 %100
+         %96 = OpLabel
+               OpStore %outFragColor %99
+               OpBranch %97
+        %100 = OpLabel
+        %101 = OpLoad %float %currentDepth
+        %102 = OpLoad %float %closestDepth
+        %103 = OpFOrdLessThan %bool %101 %102
+               OpSelectionMerge %105 None
+               OpBranchConditional %103 %104 %107
+        %104 = OpLabel
+               OpStore %outFragColor %106
+               OpBranch %105
+        %107 = OpLabel
+               OpStore %outFragColor %108
+               OpBranch %105
+        %105 = OpLabel
+               OpBranch %97
+         %97 = OpLabel
                OpReturn
                OpFunctionEnd

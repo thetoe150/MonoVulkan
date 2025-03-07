@@ -162,6 +162,7 @@ private:
     std::vector<VkImage> m_swapChainImages;
     VkFormat m_swapchainImageFormat;
     VkExtent2D swapChainExtent;
+    VkExtent2D m_shadowExtent;
     std::vector<VkImageView> m_swapChainImageViews;
 
 	struct {
@@ -777,7 +778,7 @@ private:
 
 			// floor shadow
 			ShadowPerMeshTransform floor{glm::mat4(1.0f)};
-			floor.model = glm::translate(floor.model, glm::vec3(0.f, -0.1f, 0.f));
+			floor.model = glm::translate(floor.model, glm::vec3(0.f, -0.01f, 0.f));
 			floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f));
 			floor.model = glm::scale(floor.model, glm::vec3(15.f, 15.f, 15.f));
 
@@ -788,7 +789,7 @@ private:
 			glm::mat4 view = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 			//// note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
 			//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); 
-			glm::mat4 proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, s_nearPlane, s_shadowFarPlane);
+			glm::mat4 proj = glm::ortho(s_shadowLeftPlane, s_shadowRightPlane, s_shadowBotPlane, s_shadowTopPlane, s_nearPlane, s_shadowFarPlane);
 			proj[1][1] *= -1;
 			ShadowLightingTransform* shadow = (ShadowLightingTransform*)m_graphicUniformBuffers.shadow.lightTransform.raw;
 			shadow->viewProj = proj * view; 
@@ -836,7 +837,7 @@ private:
 		m_sceneContext.camView = g_camera.getViewMatrix();
 		m_sceneContext.camProjection = glm::perspective(g_camera.getZoom(), swapChainExtent.width / (float) swapChainExtent.height, s_nearPlane, s_farPlane);
 		m_sceneContext.lightView = glm::lookAt(s_lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		m_sceneContext.lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, s_nearPlane, s_shadowFarPlane); 
+		m_sceneContext.lightProjection = glm::ortho(s_shadowLeftPlane, s_shadowRightPlane, s_shadowBotPlane, s_shadowTopPlane, s_nearPlane, s_shadowFarPlane); 
 
 		// snowflake
 		{
@@ -1463,6 +1464,7 @@ private:
 		std::cout << "Swapchain format: " << m_swapchainImageFormat << "\n";
 		std::cout << "Swapchain images count: " << imageCount << "\n";
         swapChainExtent = extent;
+        m_shadowExtent = {swapChainExtent.width * 2, swapChainExtent.height * 2};
 		m_swapchainProperties = swapChainSupport; 
     }
 
@@ -2998,8 +3000,8 @@ private:
 			shadowFOInfo.renderPass = m_renderPasses.shadow;
 			shadowFOInfo.attachmentCount = 1;
 			shadowFOInfo.pAttachments = &m_renderTargets[i].shadow.view;
-			shadowFOInfo.width = swapChainExtent.width;
-			shadowFOInfo.height = swapChainExtent.height;
+			shadowFOInfo.width = m_shadowExtent.width;
+			shadowFOInfo.height = m_shadowExtent.height;
 			shadowFOInfo.layers = 1;
 			if (vkCreateFramebuffer(device, &shadowFOInfo, nullptr, &m_frameBuffers.shadow[i]) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create framebuffer!");
@@ -3103,7 +3105,7 @@ private:
 			m_renderTargets[i].base.bloomThresholdResRT.view = createImageView(m_renderTargets[i].base.bloomThresholdResRT.image, m_renderTargetImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
 			// shadow
-			createImage(swapChainExtent.width, swapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_depthFormat,
+			createImage(m_shadowExtent.width, m_shadowExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, m_depthFormat,
 						VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderTargets[i].shadow.image, m_renderTargets[i].shadow.allocation);
 			m_renderTargets[i].shadow.view = createImageView(m_renderTargets[i].shadow.image, m_depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -5424,15 +5426,15 @@ private:
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width = (float)swapChainExtent.width;
-		viewport.height = (float)swapChainExtent.height;
+		viewport.width = (float)m_shadowExtent.width;
+		viewport.height = (float)m_shadowExtent.height;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
 		VkRect2D scissor{};
 		scissor.offset = {0, 0};
-		scissor.extent = swapChainExtent;
+		scissor.extent = m_shadowExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		VkDeviceSize vertexBufferOffsets[1] = {0};
@@ -5644,7 +5646,7 @@ private:
 			shadowPassInfo.renderPass = m_renderPasses.shadow;
 			shadowPassInfo.framebuffer = m_frameBuffers.shadow[m_currentFrame];
 			shadowPassInfo.renderArea.offset = {0, 0};
-			shadowPassInfo.renderArea.extent = swapChainExtent;
+			shadowPassInfo.renderArea.extent = m_shadowExtent;
 
 			VkClearValue shadowClear{};
 			shadowClear.depthStencil.depth = 1;
@@ -5871,7 +5873,6 @@ private:
 			ImGui::Text("Camera front: (%f), (%f), (%f)", g_camera.getFront().x, g_camera.getFront().y, g_camera.getFront().z);
 			ImGui::Text("Camera position: (%f), (%f), (%f)", g_camera.getPostion().x, g_camera.getPostion().y, g_camera.getPostion().z);
 
-			ImGui::SliderFloat("Near Plane", &s_nearPlane, -10.f, 10.f, "%.5f");
 			ImGui::SliderFloat("Far Plane", &s_farPlane, -10.f, 100.f, "%.5f");
 
 			if(ImGui::CollapsingHeader("Objects")) {
@@ -5884,6 +5885,13 @@ private:
 		ImGui::Spacing();
 		ImGui::SeparatorText("Lighting");
 			ImGui::SliderFloat3("Light Direction", (float*)&s_lightDir.x, -20.f, 20.f, "%.2f");
+			if(ImGui::CollapsingHeader("Shadow Frustum")) {
+				ImGui::SliderFloat("Shadow Far Plane", &s_shadowFarPlane, -10.f, 100.f, "%.5f");
+				ImGui::SliderFloat("Shadow Left Plane", &s_shadowLeftPlane, -50.f, 50.f, "%.5f");
+				ImGui::SliderFloat("Shadow Right Plane", &s_shadowRightPlane, -50.f, 50.f, "%.5f");
+				ImGui::SliderFloat("Shadow Bot Plane", &s_shadowBotPlane, -50.f, 50.f, "%.5f");
+				ImGui::SliderFloat("Shadow Top Plane", &s_shadowTopPlane, -50.f, 50.f, "%.5f");
+			}
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("Effect");
