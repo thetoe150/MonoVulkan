@@ -778,7 +778,7 @@ private:
 
 			// floor shadow
 			ShadowPerMeshTransform floor{glm::mat4(1.0f)};
-			floor.model = glm::translate(floor.model, glm::vec3(0.f, -0.01f, 0.f));
+			floor.model = glm::translate(floor.model, glm::vec3(0.f, -0.001f, 0.f));
 			floor.model = glm::rotate(floor.model, glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f));
 			floor.model = glm::scale(floor.model, glm::vec3(15.f, 15.f, 15.f));
 
@@ -1843,7 +1843,7 @@ private:
 			uboLayoutBinding.descriptorCount = 1;
 			uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			uboLayoutBinding.pImmutableSamplers = nullptr;
-			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 			VkDescriptorSetLayoutBinding samplerLayoutBinding{};
 			samplerLayoutBinding.binding = 1;
@@ -2628,7 +2628,7 @@ private:
 			rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 			rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
 			rasterizationInfo.lineWidth = 1.0f;
-			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
+			rasterizationInfo.cullMode = VK_CULL_MODE_FRONT_BIT;
 			rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
 			rasterizationInfo.depthBiasEnable = VK_FALSE;
@@ -3401,12 +3401,12 @@ private:
 			samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 			samplerInfo.magFilter = shadowmapFilter;
 			samplerInfo.minFilter = shadowmapFilter;
-			samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-			samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-			samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 			samplerInfo.anisotropyEnable = VK_TRUE;
 			samplerInfo.maxAnisotropy = m_physicalDeviceProperties.limits.maxSamplerAnisotropy;
-			samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 			samplerInfo.unnormalizedCoordinates = VK_FALSE;
 			samplerInfo.compareEnable = VK_FALSE;
 			samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
