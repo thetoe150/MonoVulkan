@@ -28,27 +28,27 @@
                OpMemberName %gl_PerVertex 3 "gl_CullDistance"
                OpName %_ ""
                OpName %v_worldSpaceFragPos "v_worldSpaceFragPos"
-               OpDecorate %Transform Block
                OpMemberDecorate %Transform 0 ColMajor
-               OpMemberDecorate %Transform 0 MatrixStride 16
                OpMemberDecorate %Transform 0 Offset 0
+               OpMemberDecorate %Transform 0 MatrixStride 16
                OpMemberDecorate %Transform 1 ColMajor
-               OpMemberDecorate %Transform 1 MatrixStride 16
                OpMemberDecorate %Transform 1 Offset 64
+               OpMemberDecorate %Transform 1 MatrixStride 16
                OpMemberDecorate %Transform 2 ColMajor
-               OpMemberDecorate %Transform 2 MatrixStride 16
                OpMemberDecorate %Transform 2 Offset 128
+               OpMemberDecorate %Transform 2 MatrixStride 16
                OpMemberDecorate %Transform 3 Offset 192
                OpMemberDecorate %Transform 4 Offset 208
-               OpDecorate %u_transform Binding 0
+               OpDecorate %Transform Block
                OpDecorate %u_transform DescriptorSet 0
+               OpDecorate %u_transform Binding 0
                OpDecorate %a_pos Location 0
                OpDecorate %v_lightSpaceFragPos Location 1
-               OpDecorate %gl_PerVertex Block
                OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
                OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
                OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
                OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
+               OpDecorate %gl_PerVertex Block
                OpDecorate %v_worldSpaceFragPos Location 0
        %void = OpTypeVoid
           %3 = OpTypeFunction %void

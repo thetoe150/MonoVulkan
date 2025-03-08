@@ -21,8 +21,8 @@
                OpName %v_worldSpaceFragPos "v_worldSpaceFragPos"
                OpName %outBloomThreadhold "outBloomThreadhold"
                OpDecorate %v_lightSpaceFragPos Location 1
-               OpDecorate %directionalShadowMap Binding 1
                OpDecorate %directionalShadowMap DescriptorSet 0
+               OpDecorate %directionalShadowMap Binding 1
                OpDecorate %outFragColor Location 0
                OpDecorate %v_worldSpaceFragPos Location 0
                OpDecorate %outBloomThreadhold Location 1

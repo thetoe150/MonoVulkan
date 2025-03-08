@@ -1,5 +1,3 @@
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/trigonometric.hpp"
 #define GLFW_INCLUDE_VULKAN
 #include "GLFW/glfw3.h"
 
@@ -67,8 +65,8 @@
 	}																							\
 }																								\
 
-constexpr uint32_t WIDTH = 1000;
-constexpr uint32_t HEIGHT = 750;
+constexpr uint32_t WIDTH = 1500;
+constexpr uint32_t HEIGHT = 1000;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 constexpr float s_candlesScale[3] = {10.0f, 10.0f, 10.0f};
