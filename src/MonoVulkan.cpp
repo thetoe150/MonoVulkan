@@ -3343,6 +3343,10 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
+	Image createSkyboxImage() {
+
+	}
+
     VkSampleCountFlagBits getMaxUsableSampleCount() {
         VkPhysicalDeviceProperties physicalDeviceProperties;
         vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
