@@ -77,7 +77,7 @@ static float s_snowScale[3] = {0.008f, 0.008f, 0.005f};
 static float s_snowRotate[3] = {0.f, 0.f, 0.f};
 static float s_snowTranslate[3] = {0.f, 5.f, 0.f};
 
-static glm::vec3 s_lightDir {5.f, 15.f, 5.f};
+static glm::vec3 s_lightDir {3.f, 4.f, 5.f};
 static float s_nearPlane = 0.1f;
 static float s_farPlane = 100.f;
 static float s_shadowFarPlane = 20.f;
@@ -415,8 +415,8 @@ enum MovementDirection
 	DOWN
 };
 
-constexpr glm::vec3 POSITION{5.5f, 2.f, 9.f};
-constexpr glm::vec3 FRONT{1.f, 0.f, -1.f};
+constexpr glm::vec3 POSITION{4.0f, 2.5f, 8.5f};
+constexpr glm::vec3 FRONT{0.2f, -0.2f, -0.95f};
 constexpr glm::vec3 WORLD_UP{0.f, 1.f, 0.f};
 
 constexpr float YAW{-90.f};

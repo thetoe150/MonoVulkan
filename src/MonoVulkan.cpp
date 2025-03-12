@@ -41,47 +41,6 @@ struct SwapChainSupportDetails {
     std::vector<VkPresentModeKHR> presentModes;
 };
 
-struct Vertex {
-	alignas(16) glm::vec3 pos;
-    alignas(16) glm::vec3 color;
-    alignas(8)  glm::vec2 texCoord;
-
-    static VkVertexInputBindingDescription getBindingDescription() {
-        VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return bindingDescription;
-    }
-
-    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
-
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-        attributeDescriptions[2].binding = 0;
-        attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
-
-        return attributeDescriptions;
-    }
-
-    bool operator==(const Vertex& other) const {
-        return pos == other.pos && color == other.color && texCoord == other.texCoord;
-    }
-};
-
-
 struct VertexInstance {
 	alignas(16) glm::vec3 pos;
 
@@ -109,14 +68,6 @@ struct VertexInstance {
 		return pos == other.pos;
 	}
 };
-
-namespace std {
-    template<> struct hash<Vertex> {
-        size_t operator()(Vertex const& vertex) const {
-            return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
-        }
-    };
-}
 
 class MonoVulkan {
 public:
@@ -3233,8 +3184,6 @@ private:
 			memcpy(data, pixels, static_cast<size_t>(imageSize));
 		vmaUnmapMemory(m_allocator, stagingBufferAlloc);
 
-		// stbi_image_free(pixels);
-
 		createImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, imageFormat, VK_IMAGE_TILING_OPTIMAL, 
 			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
 			textureImage, textureImageAlloc);
@@ -3528,13 +3477,12 @@ private:
         if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
             barrier.srcAccessMask = 0;
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
             sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
         } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
             barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         } else {
@@ -4143,65 +4091,6 @@ private:
 		else
 		std::cout << "Loaded glTF: " << filename << std::endl;
 	}
-
-    // void loadObjectModel(Object type) {
-	// 	std::string modelPath;
-	// 	if (type == Object::TOWER){
-	// 		modelPath = TOWER_MODEL_PATH;
-	// 	}
-	// 	else {
-	// 		modelPath = SNOWFLAKE_MODEL_PATH;
-	// 	}
-
-    //     tinyobj::attrib_t attrib;
-    //     std::vector<tinyobj::shape_t> shapes;
-    //     std::vector<tinyobj::material_t> materials;
-    //     std::string warn, err;
-
-    //     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str())) {
-    //         throw std::runtime_error(warn + err);
-    //     }
-
-    //     std::unordered_map<Vertex, uint32_t> uniqueVertices{};
-
-    //     for (const auto& shape : shapes) {
-    //         for (const auto& index : shape.mesh.indices) {
-    //             Vertex vertex{};
-
-    //             vertex.pos = {
-    //                 attrib.vertices[3 * index.vertex_index + 0],
-    //                 attrib.vertices[3 * index.vertex_index + 1],
-    //                 attrib.vertices[3 * index.vertex_index + 2]
-    //             };
-
-    //             vertex.texCoord = {
-    //                 attrib.texcoords[2 * index.texcoord_index + 0],
-    //                 1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-    //             };
-
-    //             vertex.color = {0.5f, 0.5f, 1.0f};
-
-    //             if (uniqueVertices.count(vertex) == 0) {
-	// 				if (type == Object::TOWER){
-	// 					uniqueVertices[vertex] = static_cast<uint32_t>(m_vertexRaw[Object::TOWER].size());
-	// 					m_vertexRaw[Object::TOWER].push_back(vertex);
-	// 				}
-	// 				else {
-	// 					uniqueVertices[vertex] = static_cast<uint32_t>(m_vertexRaw[Object::SNOWFLAKE].size());
-	// 					m_vertexRaw[Object::SNOWFLAKE].push_back(vertex);
-	// 				}
-    //             }
-
-	// 			if (type == Object::TOWER)
-	// 				m_indexRaw[Object::TOWER].push_back(uniqueVertices[vertex]);
-	// 			else
-	// 				m_indexRaw[Object::SNOWFLAKE].push_back(uniqueVertices[vertex]);
-    //         }
-    //     }
-
-	// 	std::cout << "Size of tower index buffer: " << m_indexRaw[Object::TOWER].size() << std::endl;
-	// 	std::cout << "Size of snowflake index buffer: " << m_indexRaw[Object::SNOWFLAKE].size() << std::endl;
-	// }
 
 	void loadInstanceData() {
 		std::ifstream file("../../res/instance_position.csv");

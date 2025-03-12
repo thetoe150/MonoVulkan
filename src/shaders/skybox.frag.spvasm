@@ -16,8 +16,8 @@
                OpName %cubeMap "cubeMap"
                OpName %v_pos "v_pos"
                OpDecorate %outFragColor Location 0
-               OpDecorate %cubeMap DescriptorSet 0
                OpDecorate %cubeMap Binding 1
+               OpDecorate %cubeMap DescriptorSet 0
                OpDecorate %v_pos Location 0
        %void = OpTypeVoid
           %3 = OpTypeFunction %void

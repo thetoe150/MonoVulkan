@@ -37,36 +37,36 @@
                OpName %p_count "p_count"
                OpDecorate %s_instanceCapacity SpecId 1
                OpDecorate %_arr_mat4v4float_s_instanceCapacity ArrayStride 64
-               OpMemberDecorate %PerInstanceTransform 0 ColMajor
-               OpMemberDecorate %PerInstanceTransform 0 Offset 0
-               OpMemberDecorate %PerInstanceTransform 0 MatrixStride 16
                OpDecorate %PerInstanceTransform Block
-               OpDecorate %u_perInstanceTransform DescriptorSet 0
+               OpMemberDecorate %PerInstanceTransform 0 ColMajor
+               OpMemberDecorate %PerInstanceTransform 0 MatrixStride 16
+               OpMemberDecorate %PerInstanceTransform 0 Offset 0
                OpDecorate %u_perInstanceTransform Binding 2
+               OpDecorate %u_perInstanceTransform DescriptorSet 0
                OpDecorate %gl_InstanceIndex BuiltIn InstanceIndex
                OpDecorate %s_meshCapacity SpecId 0
                OpDecorate %_arr_mat4v4float_s_meshCapacity ArrayStride 64
-               OpMemberDecorate %PerMeshTransform 0 ColMajor
-               OpMemberDecorate %PerMeshTransform 0 Offset 0
-               OpMemberDecorate %PerMeshTransform 0 MatrixStride 16
                OpDecorate %PerMeshTransform Block
-               OpDecorate %u_perMeshTransform DescriptorSet 0
+               OpMemberDecorate %PerMeshTransform 0 ColMajor
+               OpMemberDecorate %PerMeshTransform 0 MatrixStride 16
+               OpMemberDecorate %PerMeshTransform 0 Offset 0
                OpDecorate %u_perMeshTransform Binding 1
+               OpDecorate %u_perMeshTransform DescriptorSet 0
                OpDecorate %a_position Location 0
+               OpDecorate %gl_PerVertex Block
                OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
                OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
                OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
                OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
-               OpDecorate %gl_PerVertex Block
-               OpMemberDecorate %ShadowUniform 0 ColMajor
-               OpMemberDecorate %ShadowUniform 0 Offset 0
-               OpMemberDecorate %ShadowUniform 0 MatrixStride 16
                OpDecorate %ShadowUniform Block
-               OpDecorate %u_shadowUniform DescriptorSet 0
+               OpMemberDecorate %ShadowUniform 0 ColMajor
+               OpMemberDecorate %ShadowUniform 0 MatrixStride 16
+               OpMemberDecorate %ShadowUniform 0 Offset 0
                OpDecorate %u_shadowUniform Binding 0
+               OpDecorate %u_shadowUniform DescriptorSet 0
+               OpDecorate %Count Block
                OpMemberDecorate %Count 0 Offset 0
                OpMemberDecorate %Count 1 Offset 4
-               OpDecorate %Count Block
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
       %float = OpTypeFloat 32

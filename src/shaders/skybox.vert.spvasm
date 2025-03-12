@@ -25,17 +25,17 @@
                OpName %_ ""
                OpDecorate %v_pos Location 0
                OpDecorate %a_pos Location 0
-               OpMemberDecorate %Transform 0 ColMajor
-               OpMemberDecorate %Transform 0 Offset 0
-               OpMemberDecorate %Transform 0 MatrixStride 16
                OpDecorate %Transform Block
-               OpDecorate %u_transform DescriptorSet 0
+               OpMemberDecorate %Transform 0 ColMajor
+               OpMemberDecorate %Transform 0 MatrixStride 16
+               OpMemberDecorate %Transform 0 Offset 0
                OpDecorate %u_transform Binding 0
+               OpDecorate %u_transform DescriptorSet 0
+               OpDecorate %gl_PerVertex Block
                OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
                OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
                OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
                OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
-               OpDecorate %gl_PerVertex Block
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
       %float = OpTypeFloat 32

@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 11
-; Bound: 186
+; Bound: 184
 ; Schema: 0
                OpCapability Shader
                OpCapability ImageQuery
@@ -38,23 +38,23 @@
                OpName %shadow_0 "shadow"
                OpName %param "param"
                OpName %outBloomThreadhold "outBloomThreadhold"
+               OpDecorate %Transform Block
                OpMemberDecorate %Transform 0 ColMajor
-               OpMemberDecorate %Transform 0 Offset 0
                OpMemberDecorate %Transform 0 MatrixStride 16
+               OpMemberDecorate %Transform 0 Offset 0
                OpMemberDecorate %Transform 1 ColMajor
-               OpMemberDecorate %Transform 1 Offset 64
                OpMemberDecorate %Transform 1 MatrixStride 16
+               OpMemberDecorate %Transform 1 Offset 64
                OpMemberDecorate %Transform 2 ColMajor
-               OpMemberDecorate %Transform 2 Offset 128
                OpMemberDecorate %Transform 2 MatrixStride 16
+               OpMemberDecorate %Transform 2 Offset 128
                OpMemberDecorate %Transform 3 Offset 192
                OpMemberDecorate %Transform 4 Offset 208
-               OpDecorate %Transform Block
-               OpDecorate %u_transform DescriptorSet 0
                OpDecorate %u_transform Binding 0
+               OpDecorate %u_transform DescriptorSet 0
                OpDecorate %v_worldSpaceFragPos Location 0
-               OpDecorate %directionalShadowMap DescriptorSet 0
                OpDecorate %directionalShadowMap Binding 1
+               OpDecorate %directionalShadowMap DescriptorSet 0
                OpDecorate %v_lightSpaceFragPos Location 1
                OpDecorate %outFragColor Location 0
                OpDecorate %outBloomThreadhold Location 1
@@ -190,10 +190,8 @@
         %180 = OpFSub %float %178 %float_0_100000001
                OpStore %shadow_0 %180
         %181 = OpLoad %float %shadow_0
-        %182 = OpLoad %float %shadow_0
-        %183 = OpLoad %float %shadow_0
-        %184 = OpCompositeConstruct %v4float %181 %182 %183 %float_1
-               OpStore %outFragColor %184
+        %182 = OpCompositeConstruct %v4float %181 %181 %181 %float_1
+               OpStore %outFragColor %182
                OpReturn
                OpFunctionEnd
 %calculateShadow_vf3_ = OpFunction %float None %9
