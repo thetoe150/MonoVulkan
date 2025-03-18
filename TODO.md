@@ -15,14 +15,6 @@
 - add barrier when compute and graphic queue is not the same 
 - more *physic-based* realistic vortex snowfall
 - shader reflection
-- Vulkan features:
-    - Separate images and sampler descriptors
-    - Multi-threaded command buffer generation
-    - Multiple subpasses
-    - Compute shaders
-        - Asynchronous compute
-        - Atomic operations
-        - Subgroups
 - print total vertex + fragments calculation a frame
 - move animation calculation to compute shader
 
