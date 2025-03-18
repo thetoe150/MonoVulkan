@@ -227,6 +227,15 @@ static float skyboxVertices[] = {
 	 1.0f, -1.0f,  1.0f
 };
 
+static std::array<const char*, 6> cubeBoxImageFiles{
+	"../../res/skyboxes/IceLake/posx.jpg",
+	"../../res/skyboxes/IceLake/negx.jpg",
+	"../../res/skyboxes/IceLake/posy.jpg",
+	"../../res/skyboxes/IceLake/negy.jpg",
+	"../../res/skyboxes/IceLake/posz.jpg",
+	"../../res/skyboxes/IceLake/negz.jpg"
+};
+
 struct Vortex {
 	alignas(16) glm::vec3 pos;
 	alignas(4) float force;
