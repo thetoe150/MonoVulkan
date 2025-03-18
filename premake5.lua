@@ -37,7 +37,8 @@ project "MonoVulkan"
 		-- local vulanLib = os.findlib("vulkan")
 		libdirs {"/usr/local/bin/1.3.296.0/x86_64/lib"}
 		-- includedirs {"/usr/local/bin/1.3.296.0/x86_64/include/"}
-		links {"vulkan"}
+		-- for backward stacktrace
+		links {"vulkan", "dw"}
 	filter {}
 
 	buildoptions {"-std=c++17"}
