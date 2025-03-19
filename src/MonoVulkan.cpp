@@ -141,6 +141,7 @@ private:
 			VkDescriptorSetLayout meshMaterial;
 		} candles;
 		VkDescriptorSetLayout floor;
+		VkDescriptorSetLayout skybox;
 		VkDescriptorSetLayout shadow;
 		VkDescriptorSetLayout bloom;
 		VkDescriptorSetLayout combine;
@@ -150,6 +151,7 @@ private:
 		VkPipelineLayout snowflake;
 		VkPipelineLayout candles;
 		VkPipelineLayout floor;
+		VkPipelineLayout skybox;
 		VkPipelineLayout shadow;
 		VkPipelineLayout bloom;
 		VkPipelineLayout combine;
@@ -173,6 +175,7 @@ private:
 			VkPipeline separated;
 		} candles;
 		VkPipeline floor;
+		VkPipeline skybox;
 		struct {
 			VkPipeline directional;
 			VkPipeline viewport;
@@ -284,6 +287,7 @@ private:
 	struct {
 		Buffer snowflake;
 		Buffer quad;
+		Buffer cube;
 		Buffer shadow;
 		// some meshes have one interleave buffer, some have each attribute as 1 buffer
 		std::vector<std::vector<Buffer>> candles;
@@ -307,6 +311,7 @@ private:
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> lightingTransform;
 		} candles;
 		std::array<Buffer, MAX_FRAMES_IN_FLIGHT> floor;
+		std::array<Buffer, MAX_FRAMES_IN_FLIGHT> skybox;
 		struct {
 			std::array<Buffer, MAX_FRAMES_IN_FLIGHT> perMeshTransform;
 			Buffer perInstanceTransform;
@@ -348,6 +353,7 @@ private:
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> tranformUniform; // 1 for candles model, update every frame
 		} candles;
 		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> floor;
+		std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> skybox;
 		struct {
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> viewport;
 			std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> directional;
@@ -735,6 +741,9 @@ private:
 				floorTrans->camViewProj = candlesUBO->viewProj; 
 				floorTrans->lightPos = candlesUBO->lightPos; 
 				floorTrans->camPos = candlesUBO->camPos; 
+
+				SkyboxTransform* skyboxUBO = (SkyboxTransform*)m_graphicUniformBuffers.skybox[m_currentFrame].raw;
+				skyboxUBO->camViewProj = candlesUBO->viewProj;
 			}
 
 			// floor shadow
@@ -922,6 +931,7 @@ private:
         vkDestroyPipeline(device, m_graphicPipelines.candles.interleaved, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.candles.separated, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.floor, nullptr);
+        vkDestroyPipeline(device, m_graphicPipelines.skybox, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.vertical, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.bloom.horizontal, nullptr);
         vkDestroyPipeline(device, m_graphicPipelines.combine, nullptr);
@@ -932,6 +942,7 @@ private:
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.snowflake, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.candles, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.floor, nullptr);
+        vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.skybox, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.shadow, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.bloom, nullptr);
         vkDestroyPipelineLayout(device, m_graphicPipelineLayouts.combine, nullptr);
@@ -963,6 +974,7 @@ private:
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.tranformUniform, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.candles.meshMaterial, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.floor, nullptr);
+        vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.skybox, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.shadow, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.bloom, nullptr);
         vkDestroyDescriptorSetLayout(device, m_graphicDescriptorSetLayouts.combine, nullptr);
@@ -973,6 +985,9 @@ private:
 
 		vkDestroyBuffer(device, m_vertexBuffers.quad.buffer, nullptr);
 		vmaFreeMemory(m_allocator, m_vertexBuffers.quad.allocation);
+
+		vkDestroyBuffer(device, m_vertexBuffers.cube.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_vertexBuffers.cube.allocation);
 
 		for(unsigned int i = 0; i < m_vertexBuffers.candles.size(); i++) {
 			for(unsigned int j = 0; j < m_vertexBuffers.candles[i].size(); j++) {
@@ -1025,6 +1040,10 @@ private:
 			vkDestroyBuffer(device, m_graphicUniformBuffers.floor[i].buffer, nullptr);
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.floor[i].allocation);
 			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.floor[i].allocation);
+
+			vkDestroyBuffer(device, m_graphicUniformBuffers.skybox[i].buffer, nullptr);
+			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.skybox[i].allocation);
+			vmaFreeMemory(m_allocator, m_graphicUniformBuffers.skybox[i].allocation);
 
 			vkDestroyBuffer(device, m_graphicUniformBuffers.candles.perMeshTransform[i].buffer, nullptr);
 			vmaUnmapMemory(m_allocator, m_graphicUniformBuffers.candles.perMeshTransform[i].allocation);
@@ -1828,6 +1847,32 @@ private:
 							, "fail to create snowflake descriptor set layout");
 		}
 
+		// skybox
+		{
+			VkDescriptorSetLayoutBinding uboLayoutBinding{};
+			uboLayoutBinding.binding = 0;
+			uboLayoutBinding.descriptorCount = 1;
+			uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			uboLayoutBinding.pImmutableSamplers = nullptr;
+			uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+			VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+			samplerLayoutBinding.binding = 1;
+			samplerLayoutBinding.descriptorCount = 1;
+			samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			samplerLayoutBinding.pImmutableSamplers = nullptr;
+			samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
+			VkDescriptorSetLayoutCreateInfo layoutInfo{};
+			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layoutInfo.bindingCount = bindings.size();
+			layoutInfo.pBindings = bindings.data();
+
+			CHECK_VK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_graphicDescriptorSetLayouts.skybox)
+							, "fail to create snowflake descriptor set layout");
+		}
+
 		// shadow
 		{
 			VkDescriptorSetLayoutBinding transform;
@@ -2046,6 +2091,22 @@ private:
 			foorLayout.pPushConstantRanges = 0;
 
 			if (vkCreatePipelineLayout(device, &foorLayout, nullptr, &m_graphicPipelineLayouts.floor) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create graphic pipeline layout!");
+			}
+		}
+
+		// skybox
+		{
+			VkDescriptorSetLayout desLayouts{m_graphicDescriptorSetLayouts.skybox};
+
+			VkPipelineLayoutCreateInfo foorLayout{};
+			foorLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			foorLayout.setLayoutCount = 1;
+			foorLayout.pSetLayouts = &desLayouts;
+			foorLayout.pushConstantRangeCount = 0;
+			foorLayout.pPushConstantRanges = 0;
+
+			if (vkCreatePipelineLayout(device, &foorLayout, nullptr, &m_graphicPipelineLayouts.skybox) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create graphic pipeline layout!");
 			}
 		}
@@ -2554,7 +2615,131 @@ private:
 			pipelineInfo.layout = m_graphicPipelineLayouts.floor;
 
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.floor)
-				   , "fail to create bloom pipeline");
+				   , "fail to create floor pipeline");
+
+			vkDestroyShaderModule(device, vertShaderModule, nullptr);
+			vkDestroyShaderModule(device, fragShaderModule, nullptr);
+		}
+
+		// skybox
+		{ 
+			VkVertexInputBindingDescription vertexBindings{};
+			vertexBindings.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			vertexBindings.binding = 0;
+			vertexBindings.stride = 3 * sizeof(float);
+
+			VkVertexInputAttributeDescription vertexAttributePos{};
+			vertexAttributePos.binding = 0;
+			vertexAttributePos.location = 0;
+			vertexAttributePos.offset = 0;
+			vertexAttributePos.format = VK_FORMAT_R32G32B32_SFLOAT;
+
+			std::array<VkVertexInputAttributeDescription, 1> attrs{vertexAttributePos};
+
+			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			vertexInputInfo.vertexBindingDescriptionCount = 1;
+			vertexInputInfo.pVertexBindingDescriptions = &vertexBindings;
+			vertexInputInfo.vertexAttributeDescriptionCount = attrs.size();
+			vertexInputInfo.pVertexAttributeDescriptions = attrs.data();
+
+			VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
+			inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+			inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
+
+			VkPipelineViewportStateCreateInfo viewportInfo{};
+			viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			viewportInfo.scissorCount = 1;
+			viewportInfo.viewportCount = 1;
+			// ignore this since viewport state is dynamic
+			// viewportInfo.pScissors
+			// viewportInfo.pViewports
+
+			VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
+			rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+			rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
+			rasterizationInfo.lineWidth = 1.0f;
+			rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
+			rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+			rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
+			rasterizationInfo.depthBiasEnable = VK_FALSE;
+			rasterizationInfo.depthClampEnable = VK_FALSE;
+
+			VkPipelineMultisampleStateCreateInfo multisampleInfo{};
+			multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+			multisampleInfo.rasterizationSamples = m_msaaSamples;
+			multisampleInfo.sampleShadingEnable = VK_FALSE;
+
+			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
+			depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+			depthStencilInfo.depthTestEnable = VK_FALSE;
+			depthStencilInfo.depthWriteEnable = VK_FALSE;
+			depthStencilInfo.stencilTestEnable = VK_FALSE;
+			depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
+
+			VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+			colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+			colorBlendAttachment.blendEnable = VK_FALSE;
+
+			// 2 attachments for 2 framebuffer attachments
+			std::array<VkPipelineColorBlendAttachmentState, 2> blendAttachments{colorBlendAttachment, colorBlendAttachment};
+
+			VkPipelineColorBlendStateCreateInfo blendInfo{};
+			blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+			blendInfo.logicOpEnable = VK_FALSE;
+			blendInfo.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
+			blendInfo.pAttachments = blendAttachments.data();
+
+			std::array<VkDynamicState, 2> dynamicStates{
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR
+			};
+
+			VkPipelineDynamicStateCreateInfo dynamicInfo{};
+			dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+			dynamicInfo.dynamicStateCount = dynamicStates.size();
+			dynamicInfo.pDynamicStates = dynamicStates.data();
+
+			auto vertShaderCode = readFile("../../src/shaders/skybox.vert.spv");
+			auto fragShaderCode = readFile("../../src/shaders/skybox.frag.spv");
+
+			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.pName = "main";
+
+			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+			VkGraphicsPipelineCreateInfo pipelineInfo{};
+			pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+			pipelineInfo.pVertexInputState = &vertexInputInfo;
+			pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
+			pipelineInfo.pViewportState = &viewportInfo;
+			pipelineInfo.pColorBlendState = &blendInfo;
+			pipelineInfo.pMultisampleState = &multisampleInfo;
+			pipelineInfo.pDepthStencilState = &depthStencilInfo;
+			pipelineInfo.pRasterizationState = &rasterizationInfo;
+			pipelineInfo.stageCount = 2;
+			pipelineInfo.pStages = shaderStages;
+			pipelineInfo.pDynamicState = &dynamicInfo;
+			pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+			pipelineInfo.renderPass = m_renderPasses.base;
+			pipelineInfo.subpass = 0;
+			pipelineInfo.layout = m_graphicPipelineLayouts.skybox;
+
+			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.skybox)
+				   , "fail to create skybox pipeline");
 
 			vkDestroyShaderModule(device, vertShaderModule, nullptr);
 			vkDestroyShaderModule(device, fragShaderModule, nullptr);
@@ -4314,8 +4499,8 @@ private:
 	}
 
 	void createVertexBuffers() {
+		// Snowflake
 		{
-			// Snowflake
 			Buffer& snowBuffer = m_vertexBuffers.snowflake;
 
 			if(snowBuffer.needTransfer) {
@@ -4335,8 +4520,8 @@ private:
 			}
 		}
 		
+		// Candles
 		{
-			// Candles
 			Object objIdx = Object::CANDLE;
 			tinygltf::Model& model = m_model[objIdx];
 
@@ -4374,8 +4559,8 @@ private:
 			}
 		}
 
+		// Shadow
 		{
-			// Shadow
 			Buffer& shadowBuffer = m_vertexBuffers.shadow;
 			if(shadowBuffer.needTransfer) {
 				VkBuffer stagingBuffer;
@@ -4394,8 +4579,8 @@ private:
 			}
 		}
 
+		// Quad
 		{
-			// Quad
 			VkBuffer stagingBuffer;
 			VmaAllocation stagingBufferAlloc{};
 
@@ -4413,6 +4598,30 @@ private:
 
 			m_vertexBuffers.quad.buffer = vertexBuffer;
 			m_vertexBuffers.quad.allocation = vertexBufferAlloc;
+
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vmaFreeMemory(m_allocator, stagingBufferAlloc);
+		}
+
+		// Cube
+		{
+			VkBuffer stagingBuffer;
+			VmaAllocation stagingBufferAlloc{};
+
+			VkBuffer vertexBuffer;
+			VmaAllocation vertexBufferAlloc{};
+
+			int size = sizeof(skyboxVertices);
+			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAlloc);
+			void* data;
+			vmaMapMemory(m_allocator, stagingBufferAlloc, &data);
+				memcpy(data, skyboxVertices, size);
+			vmaUnmapMemory(m_allocator, stagingBufferAlloc);
+			createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferAlloc);
+			copyBuffer(stagingBuffer, vertexBuffer, size);
+
+			m_vertexBuffers.cube.buffer = vertexBuffer;
+			m_vertexBuffers.cube.allocation = vertexBufferAlloc;
 
 			vkDestroyBuffer(device, stagingBuffer, nullptr);
 			vmaFreeMemory(m_allocator, stagingBufferAlloc);
@@ -4573,6 +4782,17 @@ private:
 					, m_graphicUniformBuffers.floor[i].buffer, m_graphicUniformBuffers.floor[i].allocation);
 
 				vmaMapMemory(m_allocator, m_graphicUniformBuffers.floor[i].allocation, &m_graphicUniformBuffers.floor[i].raw);
+			}
+		}
+
+		// skybox
+		{
+			VkDeviceSize bufferSize = sizeof(SkyboxTransform);
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					, m_graphicUniformBuffers.skybox[i].buffer, m_graphicUniformBuffers.skybox[i].allocation);
+
+				vmaMapMemory(m_allocator, m_graphicUniformBuffers.skybox[i].allocation, &m_graphicUniformBuffers.skybox[i].raw);
 			}
 		}
 
@@ -4923,6 +5143,53 @@ private:
 				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 				descriptorWrites[1].descriptorCount = 1;
 				descriptorWrites[1].pImageInfo = &shadowImage;
+
+				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+			}
+		}
+
+		// skybox
+		{
+			std::array<VkDescriptorSetLayout, MAX_FRAMES_IN_FLIGHT> 
+				layouts = {m_graphicDescriptorSetLayouts.skybox, m_graphicDescriptorSetLayouts.skybox};
+			VkDescriptorSetAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			allocInfo.descriptorPool = m_descriptorPool;
+			allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+			allocInfo.pSetLayouts = layouts.data();
+
+			CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, m_graphicDescriptorSets.skybox.data())
+							, "fail to allocate skybox descriptor sets !!");
+
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+				VkDescriptorBufferInfo bufferInfo{};
+				bufferInfo.buffer = m_graphicUniformBuffers.skybox[i].buffer;
+				bufferInfo.offset = 0;
+				bufferInfo.range = sizeof(SkyboxTransform);
+
+				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[0].dstSet = m_graphicDescriptorSets.skybox[i];
+				descriptorWrites[0].dstBinding = 0;
+				descriptorWrites[0].dstArrayElement = 0;
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				descriptorWrites[0].descriptorCount = 1;
+				descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+				VkDescriptorImageInfo skyboxImage{};
+				skyboxImage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				skyboxImage.imageView = m_skyboxImage.view;
+				skyboxImage.sampler = m_samplers.skybox;
+
+				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[1].dstSet = m_graphicDescriptorSets.skybox[i];
+				descriptorWrites[1].dstBinding = 1;
+				descriptorWrites[1].dstArrayElement = 0;
+				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				descriptorWrites[1].descriptorCount = 1;
+				descriptorWrites[1].pImageInfo = &skyboxImage;
 
 				vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 			}
@@ -5510,6 +5777,21 @@ private:
 		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 	}
 
+	void renderSkybox(VkCommandBuffer commandBuffer) {
+		TracyVkZone(tracyContext, commandBuffer, "Render skybox");
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelines.skybox);
+
+		VkBuffer vertexBuffers[1] = {m_vertexBuffers.cube.buffer};
+		VkDeviceSize vertexBufferOffsets[1] = {0};
+		vkCmdBindVertexBuffers(commandBuffer, 0, sizeof(vertexBuffers) / sizeof(VkBuffer), vertexBuffers, vertexBufferOffsets);
+
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.skybox, 
+					   0, 1, &m_graphicDescriptorSets.skybox[m_currentFrame], 0, 0);
+
+		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+	}
+
 	void renderShadowMap(VkCommandBuffer commandBuffer) {
 		TracyVkZone(tracyContext, commandBuffer, "Render Shadow Map");
 
@@ -5772,6 +6054,7 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &basePassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+				renderSkybox(commandBuffer);
 				renderSnowflake(commandBuffer);
 				renderCandles(commandBuffer);
 				renderFloor(commandBuffer);

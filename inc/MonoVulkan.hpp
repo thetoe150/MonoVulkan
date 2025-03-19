@@ -300,6 +300,10 @@ struct FloorTransform {
     alignas(16) glm::vec3 lightPos;
 };
 
+struct SkyboxTransform {
+    alignas(16) glm::mat4 camViewProj;
+};
+
 struct ShadowLightingTransform {
     alignas(16) glm::mat4 viewProj;
 };
