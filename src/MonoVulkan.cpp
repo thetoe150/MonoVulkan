@@ -743,7 +743,9 @@ private:
 				floorTrans->camPos = candlesUBO->camPos; 
 
 				SkyboxTransform* skyboxUBO = (SkyboxTransform*)m_graphicUniformBuffers.skybox[m_currentFrame].raw;
-				skyboxUBO->camViewProj = candlesUBO->viewProj;
+				// remove translation part
+				skyboxUBO->camView = glm::mat4(glm::mat3(view));
+				skyboxUBO->camProj = proj;
 			}
 
 			// floor shadow
@@ -2673,7 +2675,8 @@ private:
 
 			VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
 			depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-			depthStencilInfo.depthTestEnable = VK_FALSE;
+			depthStencilInfo.depthTestEnable = VK_TRUE;
+			depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 			depthStencilInfo.depthWriteEnable = VK_FALSE;
 			depthStencilInfo.stencilTestEnable = VK_FALSE;
 			depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
@@ -3670,6 +3673,7 @@ private:
 				assert(x * y * 4 == imageSize);
 				memcpy(cubeData + currentSize, image, imageSize);
 				currentSize += imageSize;
+				stbi_image_free(image);
 			}
 
 			VkBufferCreateInfo cubeImageBuffer{};
@@ -3695,6 +3699,13 @@ private:
 							"Fail to allocate memory for cube stagging buffer");
 
 			vkBindBufferMemory(device, staggingBuffer, staggingBufferMem, 0);
+
+			void* data;
+			vkMapMemory(device, staggingBufferMem, 0, imageSize * 6, 0, &data);
+				memcpy(data, cubeData, imageSize * 6);
+			vkUnmapMemory(device, staggingBufferMem);
+
+			free(cubeData);
 		}
 
 		VkDeviceMemory cubeImageMem;
@@ -3708,7 +3719,7 @@ private:
 			cubeImageInfo.extent.width = x;
 			cubeImageInfo.extent.height = y;
 			cubeImageInfo.extent.depth = 1;
-			cubeImageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+			cubeImageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
 			cubeImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 			cubeImageInfo.mipLevels = 1;
 			cubeImageInfo.arrayLayers = 6;
@@ -3758,21 +3769,16 @@ private:
 				0, nullptr,
 				1, &beginBarrier);
 
-			std::vector<VkBufferImageCopy> bufferCopyRegions;
-			for (unsigned int face = 0; face < 6; face++) {
-				VkBufferImageCopy copy{};
-				copy.imageExtent.width = x;
-				copy.imageExtent.height = y;
-				copy.imageExtent.depth = 1;
-				copy.imageSubresource.mipLevel = 0;
-				copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-				copy.imageSubresource.baseArrayLayer = face;
-				copy.imageSubresource.layerCount = 1;
+			VkBufferImageCopy copy{};
+			copy.imageExtent.width = x;
+			copy.imageExtent.height = y;
+			copy.imageExtent.depth = 1;
+			copy.imageSubresource.mipLevel = 0;
+			copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			copy.imageSubresource.baseArrayLayer = 0;
+			copy.imageSubresource.layerCount = 6;
 
-				bufferCopyRegions.push_back(copy);
-			}
-
-			vkCmdCopyBufferToImage(commandBuffer, staggingBuffer, cubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, bufferCopyRegions.size(), bufferCopyRegions.data());
+			vkCmdCopyBufferToImage(commandBuffer, staggingBuffer, cubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
 			VkImageMemoryBarrier endBarrier{};
 			endBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -3806,8 +3812,8 @@ private:
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = m_skyboxImage.image;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-        viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = 1;
@@ -5789,7 +5795,7 @@ private:
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipelineLayouts.skybox, 
 					   0, 1, &m_graphicDescriptorSets.skybox[m_currentFrame], 0, 0);
 
-		vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+		vkCmdDraw(commandBuffer, 36, 1, 0, 0);
 	}
 
 	void renderShadowMap(VkCommandBuffer commandBuffer) {
@@ -6054,10 +6060,10 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &basePassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				renderSkybox(commandBuffer);
 				renderSnowflake(commandBuffer);
 				renderCandles(commandBuffer);
 				renderFloor(commandBuffer);
+				renderSkybox(commandBuffer);
 
 			vkCmdEndRenderPass(commandBuffer);
 

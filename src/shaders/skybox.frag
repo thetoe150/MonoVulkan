@@ -2,6 +2,7 @@
 
 layout (location = 0) in vec3 v_pos;
 layout (location = 0) out vec4 outFragColor;
+layout (location = 1) out vec4 outBloomThreadhold;
 
 layout (set = 0, binding = 1) uniform samplerCube cubeMap;
 

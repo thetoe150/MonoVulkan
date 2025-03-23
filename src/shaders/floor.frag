@@ -37,20 +37,21 @@ void main() {
 	vec3 projCoord = v_lightSpaceFragPos.xyz / v_lightSpaceFragPos.w;
 	projCoord = projCoord * 0.5 + 0.5;
 
+	const vec3 ambient = vec3(0.01, 0.01, 0.01);
 	// without this code, mapped depth return 1 but current z > 0
 	// will result in pixel in shadow
 	if (projCoord.z > 1.0 || projCoord.z < -1.0) {
-		outFragColor = vec4(1.0, 1.0, 1.0, 1.0);
+		outFragColor = vec4(ambient, 1.0);
 		return;
 	}
 
 	if (projCoord.x > 1.0 || projCoord.y > 1.0 || 
 		projCoord.x < 0.0 || projCoord.y < 0.0) {
 
-		outFragColor = vec4(1.0, 1.0, 1.0, 1.0);
+		outFragColor = vec4(ambient, 1.0);
 		return;
 	}
 
-	float shadow = 1.0 - calculateShadow(projCoord) - 0.1;
+	float shadow = 0.02 - calculateShadow(projCoord);
 	outFragColor = vec4(shadow, shadow, shadow, 1.0);
 }
