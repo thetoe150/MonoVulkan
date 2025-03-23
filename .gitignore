@@ -5,3 +5,4 @@
 /src/shaders/*.spv
 /src/shaders/*.spvasm
 /.cache/
+/compile_commands.json
