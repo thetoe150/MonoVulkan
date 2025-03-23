@@ -1,8 +1,0 @@
-[
-	{
-		"directory": "/home/eanigmal/Code/Projects/MonoVulkan",
-		"arguments": ["g++", "-std=c++17", "-Iinc", "-Iinc/imgui", "-Itracy/public/tracy", "-Isrc/meshoptimizer", "-Isrc/GLFW", "src/GLFW/x11"
-			, "-DTRACY_ENABLE", "-DTRACY_VK_USE_SYMBOL_TABLE", "-DVMA_IMPLEMENTATION", "-DTINYGLTF_IMPLEMENTATION", "-DENABLE_OPTIMIZE_MESH", "-D_GLFW_X11"],
-		"file": "src/MonoVulkan.cpp"
-	}
-]
