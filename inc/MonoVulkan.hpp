@@ -86,9 +86,9 @@ static float s_shadowRightPlane = 10.f;
 static float s_shadowBotPlane = -10.f;
 static float s_shadowTopPlane = 10.f;
 
-const char* CANDLE_MODEL_PATH = "../../res/models/candles_set/scene.gltf";
-const char* SNOWFLAKE_MODEL_PATH = "../../res/models/snowflake/scene.gltf";
-const char* TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
+static const char* CANDLE_MODEL_PATH = "../../res/models/candles_set/scene.gltf";
+static const char* SNOWFLAKE_MODEL_PATH = "../../res/models/snowflake/scene.gltf";
+static const char* TOWER_TEXTURE_PATH = "../../res/textures/Wood_Tower_Col.jpg";
 // const std::string SNOWFLAKE_TEXTURE_PATH = "res/textures/Wood_Tower_Col.jpg";
 // const std::string TOWER_MODEL_PATH = "../../res/models/wooden_watch_tower2.obj";
 
@@ -235,6 +235,8 @@ static std::array<const char*, 6> cubeBoxImageFiles{
 	"../../res/skyboxes/IceLake/posz.jpg",
 	"../../res/skyboxes/IceLake/negz.jpg"
 };
+
+static std::map<std::string, std::string> AttrNameMap;
 
 struct Vortex {
 	alignas(16) glm::vec3 pos;
