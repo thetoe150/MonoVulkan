@@ -1,10 +1,5 @@
 ### TODO:
-- change LOD base on distance
-- frustum culling object on CPU
 - add Tracy on Debian
-- add point shadow
-- add point light
-- add dynamic light/shadow
 - separate candles base and flame
 - remove phong shading with flame
 - adjust face culling
@@ -14,6 +9,13 @@
 - shader reflection - in progress
 - print total vertex + fragments calculation a frame
 - move animation calculation to compute shader
+
+### TODO after clone:
+- add point shadow
+- add point light
+- add dynamic light/shadow
+- change LOD base on distance
+- frustum culling object on CPU
 
 ### BUGS:
 - renderDoc always choose on board card

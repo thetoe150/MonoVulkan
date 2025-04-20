@@ -1,4 +1,5 @@
 #include "MonoVulkan.hpp"
+#include "spirv_reflect.h"
 #include "vulkan/vulkan_core.h"
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
@@ -73,8 +74,8 @@ struct VertexInstance {
 class MonoVulkan {
 public:
 	void init(){
-		initContext();
         initGLFW();
+		initContext();
         initVulkan();
 		initTracy();
 		initImGui();
@@ -179,15 +180,41 @@ private:
 		struct {
 			VkPipeline directional;
 			VkPipeline viewport;
-			VkPipeline point;
 		} shadow;
-
 		struct {
 			VkPipeline vertical;
 			VkPipeline horizontal;
 		} bloom;
 		VkPipeline combine;
-	}m_graphicPipelines;
+	} m_graphicPipelines;
+
+	typedef struct {
+		VkShaderModule module;
+		SpvReflectShaderModule reflection;
+		std::vector<uint8_t> source;
+	} Shader;
+
+	struct {
+		Shader snowflakeVS;
+		Shader snowflakeFS;
+		Shader snowflakeCS;
+
+		Shader candlesVS;
+		Shader candlesFS;
+
+		Shader skyboxVS;
+		Shader skyboxFS;
+
+		Shader floorVS;
+		Shader floorFS;
+
+		Shader quadVS;
+		Shader bloomFS;
+		Shader combineFS;
+		Shader shadowViewportFS;
+
+		Shader shadowBatchVS;
+	} m_shaders;
 
     VkCommandPool m_graphicCommandPool;
     VkCommandPool m_computeCommandPool;
@@ -215,11 +242,6 @@ private:
 	std::map<Object, std::vector< glm::mat4>> m_modelMeshTransforms;
 
 	std::map<Object, std::vector<std::vector< float>>> m_modelMeshFrameWeights;
-
-	// TODO: setup code to get this AttrDef from reflection
-	std::array<std::string, 4> m_shaderAttrDef{"POSITION", "NORMAL", "TANGENT", "TEXCOORD_0"};
-	// TODO: setup code to get this AttrDef from gltf
-	std::array<std::string, 3> m_modelAttrDef{"NORMAL", "POSITION", "TEXCOORD_0"};
 
 	typedef struct {
 		VkImage image;
@@ -406,7 +428,22 @@ private:
 
         m_lastTime = currentTime;
 
+        createInstance();
+        setupDebugMessenger();
+        createSurface();
+        pickPhysicalDevice();
+        createLogicalDevice();
+		createAllocator();
+        createSwapChain();
+		// printPhysicalDeviceProperties();
+		// printPhysicalDeviceFeatures();
+		// printPhysicalDeviceFormats();
+		// printSwapchainProperties();
+		// printQueueFamilyProperties();
+		// printMemoryStatistics();
+
         loadModels();
+		loadShaders();
 		initVertexData();
 		computeAnimation(Object::CANDLE);
 
@@ -431,8 +468,9 @@ private:
 			tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
 			tinygltf::BufferView& view = model.bufferViews[indexAccessor.bufferView];
 			tinygltf::Buffer& buffer = model.buffers[view.buffer];
+			auto& attributes = primitive.attributes;
 			
-			tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes["POSITION"]];
+			tinygltf::Accessor& posAccessor = model.accessors[attributes["POSITION"]];
 
 			const unsigned int* indices = reinterpret_cast<unsigned int*>(buffer.data.data() + view.byteOffset + indexAccessor.byteOffset);
 
@@ -442,8 +480,10 @@ private:
 				stride = 12;
 
 				unsigned int posIdx{};
-				for(unsigned int i = 0; i < m_modelAttrDef.size(); i++) {
-					if (m_modelAttrDef[i] == "POSTION"){
+				for(unsigned int i = 0; i < attributes.size(); i++) {
+					auto attrIt = attributes.begin();
+					std::advance(attrIt, i);
+					if (attrIt->first == "POSTION"){
 						posIdx = i;
 						break;
 					}
@@ -596,21 +636,6 @@ private:
 	}
 
     void initVulkan() {
-        createInstance();
-        setupDebugMessenger();
-        createSurface();
-        pickPhysicalDevice();
-        createLogicalDevice();
-		createAllocator();
-        createSwapChain();
-
-		// printPhysicalDeviceProperties();
-		// printPhysicalDeviceFeatures();
-		// printPhysicalDeviceFormats();
-		// printSwapchainProperties();
-		// printQueueFamilyProperties();
-		// printMemoryStatistics();
-
         createSwapchainImageViews();
         createRenderPasses();
         createDescriptorSetLayouts();
@@ -925,8 +950,46 @@ private:
 		TracyVkDestroy(tracyContext);
 	}
 
+	void cleanupShaders() {
+		vkDestroyShaderModule(device, m_shaders.snowflakeVS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.snowflakeVS.reflection);
+		vkDestroyShaderModule(device, m_shaders.snowflakeFS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.snowflakeFS.reflection);
+		vkDestroyShaderModule(device, m_shaders.snowflakeCS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.snowflakeCS.reflection);
+
+		vkDestroyShaderModule(device, m_shaders.candlesVS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.candlesVS.reflection);
+		vkDestroyShaderModule(device, m_shaders.candlesFS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.candlesFS.reflection);
+
+		vkDestroyShaderModule(device, m_shaders.skyboxVS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.skyboxVS.reflection);
+		vkDestroyShaderModule(device, m_shaders.skyboxFS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.skyboxFS.reflection);
+
+		vkDestroyShaderModule(device, m_shaders.floorVS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.floorVS.reflection);
+		vkDestroyShaderModule(device, m_shaders.floorFS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.floorFS.reflection);
+
+		vkDestroyShaderModule(device, m_shaders.quadVS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.quadVS.reflection);
+		vkDestroyShaderModule(device, m_shaders.bloomFS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.bloomFS.reflection);
+		vkDestroyShaderModule(device, m_shaders.combineFS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.combineFS.reflection);
+		vkDestroyShaderModule(device, m_shaders.shadowViewportFS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.shadowViewportFS.reflection);
+
+		vkDestroyShaderModule(device, m_shaders.shadowBatchVS.module, nullptr);
+		spvReflectDestroyShaderModule(&m_shaders.shadowBatchVS.reflection);
+	}
+
     void cleanUpVulkan() {
         cleanupSwapChain();
+
+		cleanupShaders();
 
 		savePipelineCache();
         vkDestroyPipeline(device, m_graphicPipelines.snowflake, nullptr);
@@ -2262,22 +2325,16 @@ private:
 			dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 			dynamicState.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/snowflake.vert.spv");
-			auto fragShaderCode = readFile("../../src/shaders/snowflake.frag.spv");
-
-			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.module = m_shaders.snowflakeVS.module;
 			vertShaderStageInfo.pName = "main";
 
 			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.module = m_shaders.snowflakeFS.module;
 			fragShaderStageInfo.pName = "main";
 
 			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
@@ -2302,9 +2359,6 @@ private:
 			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.snowflake) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create graphics pipeline!");
 			}
-
-			vkDestroyShaderModule(device, fragShaderModule, nullptr);
-			vkDestroyShaderModule(device, vertShaderModule, nullptr);
 		}
 
 			// candles pipeline
@@ -2407,18 +2461,6 @@ private:
 			dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 			dynamicState.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/candles.vert.spv");
-			auto fragShaderCode = readFile("../../src/shaders/candles.frag.spv");
-
-			{
-				spv_reflect::ShaderModule reflect(vertShaderCode);
-				SpvReflectToYaml reflectLogger(reflect.GetShaderModule());
-				
-			}
-
-			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
 			struct SpecializationConstant{
 				alignas(4) bool useTexture{true};
 			}specConstant;
@@ -2437,13 +2479,13 @@ private:
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.module = m_shaders.candlesVS.module;
 			vertShaderStageInfo.pName = "main";
 
 			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.module = m_shaders.candlesFS.module;
 			fragShaderStageInfo.pName = "main";
 			fragShaderStageInfo.pSpecializationInfo = &specInfo;
 
@@ -2494,9 +2536,6 @@ private:
 			if (vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.candles.interleaved) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create graphics pipeline!");
 			}
-
-			vkDestroyShaderModule(device, fragShaderModule, nullptr);
-			vkDestroyShaderModule(device, vertShaderModule, nullptr);
 		}
 
 		// floor
@@ -2579,22 +2618,16 @@ private:
 			dynamicInfo.dynamicStateCount = dynamicStates.size();
 			dynamicInfo.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/floor.vert.spv");
-			auto fragShaderCode = readFile("../../src/shaders/floor.frag.spv");
-
-			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.module = m_shaders.floorVS.module;
 			vertShaderStageInfo.pName = "main";
 
 			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.module = m_shaders.floorFS.module;
 			fragShaderStageInfo.pName = "main";
 
 			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
@@ -2619,8 +2652,6 @@ private:
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.floor)
 				   , "fail to create floor pipeline");
 
-			vkDestroyShaderModule(device, vertShaderModule, nullptr);
-			vkDestroyShaderModule(device, fragShaderModule, nullptr);
 		}
 
 		// skybox
@@ -2704,22 +2735,16 @@ private:
 			dynamicInfo.dynamicStateCount = dynamicStates.size();
 			dynamicInfo.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/skybox.vert.spv");
-			auto fragShaderCode = readFile("../../src/shaders/skybox.frag.spv");
-
-			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.module = m_shaders.skyboxVS.module;
 			vertShaderStageInfo.pName = "main";
 
 			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.module = m_shaders.skyboxFS.module;
 			fragShaderStageInfo.pName = "main";
 
 			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
@@ -2743,9 +2768,6 @@ private:
 
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.skybox)
 				   , "fail to create skybox pipeline");
-
-			vkDestroyShaderModule(device, vertShaderModule, nullptr);
-			vkDestroyShaderModule(device, fragShaderModule, nullptr);
 		}
 
 		// shadow
@@ -2823,14 +2845,10 @@ private:
 			dynamicInfo.dynamicStateCount = dynamicStates.size();
 			dynamicInfo.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/shadow_batch.vert.spv");
-
-			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.module = m_shaders.shadowBatchVS.module;
 			vertShaderStageInfo.pName = "main";
 
 			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo};
@@ -2854,8 +2872,6 @@ private:
 
 			CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.shadow.directional)
 				   , "fail to create shadow pipeline");
-
-			vkDestroyShaderModule(device, vertShaderModule, nullptr);
 		}
 
 		// bloom & combine & shadow view pipeline
@@ -2943,16 +2959,10 @@ private:
 			dynamicInfo.dynamicStateCount = dynamicStates.size();
 			dynamicInfo.pDynamicStates = dynamicStates.data();
 
-			auto vertShaderCode = readFile("../../src/shaders/quad.vert.spv");
-			auto fragShaderCode = readFile("../../src/shaders/bloom.frag.spv");
-
-			VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-			VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
 			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			vertShaderStageInfo.module = vertShaderModule;
+			vertShaderStageInfo.module = m_shaders.quadVS.module;
 			vertShaderStageInfo.pName = "main";
 
 			struct SpecializationConstant{
@@ -2973,7 +2983,7 @@ private:
 			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
+			fragShaderStageInfo.module = m_shaders.bloomFS.module;
 			fragShaderStageInfo.pName = "main";
 			fragShaderStageInfo.pSpecializationInfo = &specInfo;
 
@@ -3009,27 +3019,19 @@ private:
 				CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.bloom.horizontal)
 					   , "fail to create bloom pipeline");
 			}
-			vkDestroyShaderModule(device, vertShaderModule, nullptr);
-			vkDestroyShaderModule(device, fragShaderModule, nullptr);
 
 			// combine pass
 			{
-				auto combineVertShaderCode = readFile("../../src/shaders/quad.vert.spv");
-				auto combineFragShaderCode = readFile("../../src/shaders/combine.frag.spv");
-
-				VkShaderModule combineVertShaderModule = createShaderModule(combineVertShaderCode);
-				VkShaderModule combineFragShaderModule = createShaderModule(combineFragShaderCode);
-
 				VkPipelineShaderStageCreateInfo combineVertShaderStageInfo{};
 				combineVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 				combineVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-				combineVertShaderStageInfo.module = combineVertShaderModule;
+				combineVertShaderStageInfo.module = m_shaders.quadVS.module;
 				combineVertShaderStageInfo.pName = "main";
 
 				VkPipelineShaderStageCreateInfo combineFragShaderStageInfo{};
 				combineFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 				combineFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-				combineFragShaderStageInfo.module = combineFragShaderModule;
+				combineFragShaderStageInfo.module = m_shaders.combineFS.module;
 				combineFragShaderStageInfo.pName = "main";
 
 				VkPipelineShaderStageCreateInfo combineShaderStages[] = {combineVertShaderStageInfo, combineFragShaderStageInfo};
@@ -3043,28 +3045,20 @@ private:
 				CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.combine)
 					   , "fail to create combine pipeline");
 
-				vkDestroyShaderModule(device, combineVertShaderModule, nullptr);
-				vkDestroyShaderModule(device, combineFragShaderModule, nullptr);
 			}
 
 			// shadow view
 			{
-				auto shadowViewVertShaderCode = readFile("../../src/shaders/quad.vert.spv");
-				auto shadowViewFragShaderCode = readFile("../../src/shaders/shadow_viewport.frag.spv");
-
-				VkShaderModule shadowViewVertShaderModule = createShaderModule(shadowViewVertShaderCode);
-				VkShaderModule shadowViewFragShaderModule = createShaderModule(shadowViewFragShaderCode);
-
 				VkPipelineShaderStageCreateInfo shadowViewVertShaderStageInfo{};
 				shadowViewVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 				shadowViewVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-				shadowViewVertShaderStageInfo.module = shadowViewVertShaderModule;
+				shadowViewVertShaderStageInfo.module = m_shaders.quadVS.module;
 				shadowViewVertShaderStageInfo.pName = "main";
 
 				VkPipelineShaderStageCreateInfo shadowViewFragShaderStageInfo{};
 				shadowViewFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 				shadowViewFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-				shadowViewFragShaderStageInfo.module = shadowViewFragShaderModule;
+				shadowViewFragShaderStageInfo.module = m_shaders.shadowViewportFS.module;
 				shadowViewFragShaderStageInfo.pName = "main";
 
 				VkPipelineShaderStageCreateInfo shadowViewShaderStages[] = {shadowViewVertShaderStageInfo, shadowViewFragShaderStageInfo};
@@ -3077,9 +3071,6 @@ private:
 
 				CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_graphicPipelines.shadow.viewport)
 					   , "fail to create shadowView pipeline");
-
-				vkDestroyShaderModule(device, shadowViewVertShaderModule, nullptr);
-				vkDestroyShaderModule(device, shadowViewFragShaderModule, nullptr);
 			}
 		}
     }
@@ -3102,13 +3093,10 @@ private:
 	}
 
 	void createComputePipelines() {
-        auto snowflakeCompShaderCode = readFile("../../src/shaders/snowflake.comp.spv");
-		VkShaderModule computeShaderModule = createShaderModule(snowflakeCompShaderCode);
-
 		VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
         computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         computeShaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        computeShaderStageInfo.module = computeShaderModule;
+        computeShaderStageInfo.module = m_shaders.snowflakeCS.module;
         computeShaderStageInfo.pName = "main";
 
 		VkComputePipelineCreateInfo pipelineInfo{};
@@ -3119,8 +3107,6 @@ private:
 
 		if (vkCreateComputePipelines(device, m_pipelineCache, 1, &pipelineInfo, nullptr, &m_computePipeline) != VK_SUCCESS)
             throw std::runtime_error("failed to create compute pipeline!");
-
-        vkDestroyShaderModule(device, computeShaderModule, nullptr);
 	}
 
     void createFramebuffers() {
@@ -4273,15 +4259,16 @@ private:
 		auto& model = m_model[obj];
 		auto& mesh = model.meshes[meshIdx];
 		assert(mesh.primitives.size() == 1);	
-		auto& primitive = mesh.primitives[0];
-		unsigned int count = model.accessors[primitive.attributes["POSITION"]].count;
+		auto& attributes = mesh.primitives[0].attributes;
+		unsigned int count = model.accessors[attributes["POSITION"]].count;
 		res.reserve(count * 12); // 3 for pos, 3 for normal, 4 for tangent, 2 for texCoord
 		
-		// TODO: improve this along with reflection or something
 		for(unsigned int vertex_offset = 0; vertex_offset < count; vertex_offset++) {
-			for(auto& attrDef : m_shaderAttrDef){
-				auto& attribute = primitive.attributes[attrDef];
-				auto& accessor = model.accessors[attribute];
+			const SpvReflectShaderModule& reflection = m_shaders.candlesVS.reflection;
+			for(unsigned int i = 0; i < reflection.input_variable_count - 1/*exclude instance buffer*/; i++){
+				std::string reflectAttr = getNameAttrAtIndex(reflection, i);
+				auto& modelAttr = attributes[AttrNameMap[reflectAttr]];
+				auto& accessor = model.accessors[modelAttr];
 				auto& bufferView = model.bufferViews[accessor.bufferView];
 				auto& buffer = model.buffers[bufferView.buffer];
 
@@ -4372,15 +4359,18 @@ private:
 		tinygltf::Model& model = m_model[obj];
 		auto& mesh = model.meshes[meshIdx];
 		// re-set to original position
-		const tinygltf::Accessor& posAccessor = model.accessors[mesh.primitives[0].attributes["POSITION"]];
+		auto& attributes = mesh.primitives[0].attributes;
+		const tinygltf::Accessor& posAccessor = model.accessors[attributes["POSITION"]];
 		const tinygltf::BufferView& posView = model.bufferViews[posAccessor.bufferView];
 		const tinygltf::Buffer& posBuffer = model.buffers[posView.buffer];
 		
 		const unsigned char* pData = posBuffer.data.data() + posView.byteOffset + posAccessor.byteOffset;
-		// NOTE: Position is at the first attribute - no, fuck you
+		// NOTE: Position is NOT at the first attribute
 		unsigned int posBufferIdx{0};
-		for (unsigned int i = 0; i < m_modelAttrDef.size(); i++) {
-			if(m_modelAttrDef[i] == "POSITION"){
+		for (unsigned int i = 0; i < attributes.size(); i++) {
+			auto attrIt = attributes.begin();
+			std::advance(attrIt, i);
+			if(attrIt->first == "POSITION"){
 				posBufferIdx = i;
 				break;
 			}
@@ -4456,12 +4446,65 @@ private:
 				path = SNOWFLAKE_MODEL_PATH;
 
 			loadGltfModel(model, path.c_str());
+			// for (unsigned int i = 0; i < model.meshes.size(); i++) {
+			// 	auto& primitives = model.meshes[i].primitives;
+			// 	std::cout << "primitve count: " << primitives.size() << "\n";
+			// 	for(auto& attr : primitives[0].attributes) {
+			// 		std::cout << "attribute " << attr.first << " - ";
+			// 	}
+			// 	std::cout << "attribute count: " << primitives[0].attributes.size() << "\n";
+			// }
 
 			m_modelMeshTransforms[objIdx].resize(model.meshes.size());
 			traverseModelNodesForTransform(objIdx, model.nodes[0], glm::mat4(1.0f));
 		}
 
 		std::cout << "finish loading models \n";
+	}
+
+	void loadShader(Shader& shader, std::string path) {
+		shader.source = readFile(path); 
+		shader.module = createShaderModule(shader.source);
+		SpvReflectResult result = spvReflectCreateShaderModule(shader.source.size(), (void*)shader.source.data(), &shader.reflection);
+		assert(result == SPV_REFLECT_RESULT_SUCCESS);
+	}
+
+	void loadShaders() {
+		loadShader(m_shaders.snowflakeVS, "../../src/shaders/snowflake.vert.spv");
+		loadShader(m_shaders.snowflakeFS, "../../src/shaders/snowflake.frag.spv");
+		loadShader(m_shaders.snowflakeCS, "../../src/shaders/snowflake.comp.spv");
+
+		loadShader(m_shaders.candlesVS, "../../src/shaders/candles.vert.spv");
+		loadShader(m_shaders.candlesFS, "../../src/shaders/candles.frag.spv");
+
+		loadShader(m_shaders.skyboxVS, "../../src/shaders/skybox.vert.spv");
+		loadShader(m_shaders.skyboxFS, "../../src/shaders/skybox.frag.spv");
+
+		loadShader(m_shaders.floorVS, "../../src/shaders/floor.vert.spv");
+		loadShader(m_shaders.floorFS, "../../src/shaders/floor.frag.spv");
+
+		loadShader(m_shaders.quadVS, "../../src/shaders/quad.vert.spv");
+		loadShader(m_shaders.bloomFS, "../../src/shaders/bloom.frag.spv");
+		loadShader(m_shaders.combineFS, "../../src/shaders/combine.frag.spv");
+		loadShader(m_shaders.shadowViewportFS, "../../src/shaders/shadow_viewport.frag.spv");
+
+		loadShader(m_shaders.shadowBatchVS, "../../src/shaders/shadow_batch.vert.spv");
+
+		for (unsigned int i = 0; i < m_shaders.candlesVS.reflection.input_variable_count; i++) {
+			std::cout << m_shaders.candlesVS.reflection.input_variables[i]->name << " : " << m_shaders.candlesVS.reflection.input_variables[i]->location << " - ";
+		}
+		std::cout << m_shaders.candlesVS.reflection.input_variable_count << " total attributes \n";
+
+		// for (unsigned int i = 0; i < m_shaders.candlesVS.reflection.output_variable_count; i++) {
+		// 	std::cout << m_shaders.snowflakeVS.reflection.output_variables[i]->name << " - ";
+		// }
+		// std::cout << m_shaders.snowflakeVS.reflection.output_variable_count << " total output attribute \n";
+
+		AttrNameMap["a_position"] = "POSITION";
+		AttrNameMap["a_normal"] = "NORMAL";
+		AttrNameMap["a_tangent"] = "TANGENT";
+		AttrNameMap["a_texCoord"] = "TEXCOORD_0";
+		// AttrNameMap["instancePos"] = "POSITION";
 	}
 
 	void loadGltfModel(tinygltf::Model &model, const char *filename) {
@@ -4471,15 +4514,15 @@ private:
 
 		bool res = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
 		if (!warn.empty()) {
-		std::cout << "WARN: " << warn << std::endl;
+			std::cout << "WARN: " << warn << std::endl;
 		}
 		if (!err.empty()) {
-		std::cout << "ERR: " << err << std::endl;
+			std::cout << "ERR: " << err << std::endl;
 		}
 		if (!res)
-		std::cout << "Failed to load glTF: " << filename << std::endl;
+			std::cout << "Failed to load glTF: " << filename << std::endl;
 		else
-		std::cout << "Loaded glTF: " << filename << std::endl;
+			std::cout << "Loaded glTF: " << filename << std::endl;
 	}
 
 	void loadInstanceData() {
@@ -5697,14 +5740,19 @@ private:
 				// assume there is 1 primitive per mesh
 				std::vector<VkBuffer> buffers;
 				std::vector<VkDeviceSize> bufferOffsets;
+				auto& atrributes = mesh.primitives[0].attributes;
 
 				// some mesh of the model don't have tangent attribute
 				// WARNING: tangent attribute will get a random buffer as dummy
-				for(auto& attr : m_shaderAttrDef) {
+				const SpvReflectShaderModule& reflection = m_shaders.candlesVS.reflection;
+				for(unsigned int i = 0; i < reflection.input_variable_count - 1 /*exclude instance buffer*/; i++) {
 				unsigned int bufferIdx{0};
-					for(unsigned int i = 0; i < m_modelAttrDef.size(); i++) {
-						if (m_modelAttrDef[i] == attr)	
-							bufferIdx = i;
+				std::string reflectionAttr = getNameAttrAtIndex(reflection, i);
+					for(unsigned int j = 0; j < atrributes.size(); j++) {
+						auto modelAttrIt = atrributes.begin();
+						std::advance(modelAttrIt, j);
+						if (modelAttrIt->first == AttrNameMap[reflectionAttr])	
+							bufferIdx = j;
 					}
 					VkBuffer buffer = m_vertexBuffers.candles[meshIdx][bufferIdx].buffer;
 					size_t bufferOffset = 0;
@@ -6925,6 +6973,14 @@ private:
 
         return VK_FALSE;
     }
+
+	std::string getNameAttrAtIndex(SpvReflectShaderModule module, uint8_t idx) {
+		for (unsigned int i = 0; i < module.input_variable_count; i++) {
+			if(module.input_variables[i]->location == idx)
+				return module.input_variables[i]->name;
+		}
+		return "";
+	}
 };
 
 void SpirvReflectExample(const void* spirv_code, size_t spirv_nbytes)
