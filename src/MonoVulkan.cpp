@@ -4265,10 +4265,10 @@ private:
 		
 		for(unsigned int vertex_offset = 0; vertex_offset < count; vertex_offset++) {
 			const SpvReflectShaderModule& reflection = m_shaders.candlesVS.reflection;
-			for(unsigned int i = 0; i < reflection.input_variable_count; i++){
-				std::string attrReflect = getNameAttrAtIndex(reflection, i);
-				auto& attribute = attributes[AttrNameMap[attrReflect]];
-				auto& accessor = model.accessors[attribute];
+			for(unsigned int i = 0; i < reflection.input_variable_count - 1/*exclude instance buffer*/; i++){
+				std::string reflectAttr = getNameAttrAtIndex(reflection, i);
+				auto& modelAttr = attributes[AttrNameMap[reflectAttr]];
+				auto& accessor = model.accessors[modelAttr];
 				auto& bufferView = model.bufferViews[accessor.bufferView];
 				auto& buffer = model.buffers[bufferView.buffer];
 
@@ -4503,8 +4503,8 @@ private:
 		AttrNameMap["a_position"] = "POSITION";
 		AttrNameMap["a_normal"] = "NORMAL";
 		AttrNameMap["a_tangent"] = "TANGENT";
-		AttrNameMap["a_texCoord"] = "TEXCOORD";
-		AttrNameMap["instancePos"] = "POSITION";
+		AttrNameMap["a_texCoord"] = "TEXCOORD_0";
+		// AttrNameMap["instancePos"] = "POSITION";
 	}
 
 	void loadGltfModel(tinygltf::Model &model, const char *filename) {
@@ -5745,13 +5745,13 @@ private:
 				// some mesh of the model don't have tangent attribute
 				// WARNING: tangent attribute will get a random buffer as dummy
 				const SpvReflectShaderModule& reflection = m_shaders.candlesVS.reflection;
-				for(unsigned int i = 0; i < reflection.input_variable_count; i++) {
+				for(unsigned int i = 0; i < reflection.input_variable_count - 1 /*exclude instance buffer*/; i++) {
 				unsigned int bufferIdx{0};
-				std::string reflectionAttrName = getNameAttrAtIndex(reflection, i);
+				std::string reflectionAttr = getNameAttrAtIndex(reflection, i);
 					for(unsigned int j = 0; j < atrributes.size(); j++) {
 						auto modelAttrIt = atrributes.begin();
 						std::advance(modelAttrIt, j);
-						if (modelAttrIt->first == AttrNameMap[reflectionAttrName])	
+						if (modelAttrIt->first == AttrNameMap[reflectionAttr])	
 							bufferIdx = j;
 					}
 					VkBuffer buffer = m_vertexBuffers.candles[meshIdx][bufferIdx].buffer;
