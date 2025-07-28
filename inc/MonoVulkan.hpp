@@ -332,6 +332,7 @@ static bool useLOD{false};
 static const float c_overdrawThreshold{1.05f};
 static bool s_isLodUpdated{false};
 static float s_targetError{0.5f};
+static float s_targetIndexCount{0.5};
 // 3 NORMAL - 4 TANGENT - 2 TEXCOORD_0
 static float s_attrWeights[9] = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
 

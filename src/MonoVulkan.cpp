@@ -4083,18 +4083,23 @@ private:
 
 			unsigned int* des = (unsigned int*) malloc(indexSize);
 			float* resultErr{};
+			unsigned int indexCount = indexSize / sizeof(unsigned int); 
 			
-			size_t newIdxSize = meshopt_simplifyWithAttributes(des, indices, indexSize / sizeof(unsigned int)
-					  , vertex, vertexCount, 48 , vertex + 3, 48 , s_attrWeights, 9, nullptr, 0, s_targetError, 0, resultErr);
+			unsigned int newIdxCount = meshopt_simplifyWithAttributes(des, indices, indexCount
+					  , vertex, vertexCount, 48 , vertex + 3, 48 , s_attrWeights, 9, nullptr, s_targetIndexCount * indexCount, s_targetError, 0, resultErr);
 
-			assert(newIdxSize <= indexSize);
+			printf("MeshIdx %d: New Idx count: %d\n", meshIdx, newIdxCount);
+
+			assert(newIdxCount <= indexSize);
 			if (m_indexBuffers.candles.lod1[meshIdx].raw != nullptr) {
 				free(m_indexBuffers.candles.lod1[meshIdx].raw);
 			}
-			m_indexBuffers.candles.lod1[meshIdx].raw = (unsigned int*)realloc(des, newIdxSize * sizeof(unsigned int));
-			m_indexBuffers.candles.lod1[meshIdx].size = newIdxSize * sizeof(unsigned int);
+			m_indexBuffers.candles.lod1[meshIdx].raw = (unsigned int*)realloc(des, newIdxCount * sizeof(unsigned int));
+			m_indexBuffers.candles.lod1[meshIdx].size = newIdxCount * sizeof(unsigned int);
 			m_indexBuffers.candles.lod1[meshIdx].needTransfer = true;
 		}
+
+		printf("\n");
 	}
 
 	void initVertexData() {
@@ -6293,6 +6298,7 @@ private:
 		ImGui::Spacing();
         ImGui::SeparatorText("Geometry");
 		ImGui::SliderFloat("LOD1 generating target error", &s_targetError, 0.f, 1.f, "%.05f");
+		ImGui::SliderFloat("LOD1 generating target percent index", &s_targetIndexCount, 0.f, 1.f, "%.05f");
 		ImGui::SliderFloat2("Texture attribute weights", &s_attrWeights[0], 0.f, 1.f, "%.05f");
 		ImGui::SliderFloat3("Normal attribute weights", &s_attrWeights[2], 0.f, 1.f, "%.05f");
 		ImGui::SliderFloat4("Tangent attribute weights", &s_attrWeights[5], 0.f, 1.f, "%.05f");
