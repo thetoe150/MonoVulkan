@@ -19,14 +19,14 @@ layout(location = 1) out vec4 outBloomThreadhold;
 float calculateShadow(vec3 projCoord) {
 	vec3 lightDir = normalize(u_transform.lightPos - v_worldSpaceFragPos);
 	const vec3 normal = vec3(0.0, 1.0, 0.0);
-	float bias = max(0.05 * 1.0 - dot(normal, lightDir), 0.005);
+	float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.001);
 	float currentDepth = projCoord.z;
 	vec2 texelSize = 1.0 / textureSize(directionalShadowMap, 0);
 	float shadow = 0.0;
 	for (int x = -1; x < 1; x++) {
 		for (int y = -1; y < 1; y++) {
 			float pcfDepth = texture(directionalShadowMap, projCoord.xy + texelSize * vec2(x, y)).r;
-			shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
+			shadow += currentDepth > pcfDepth ? 1.0 : 0.0;
 		}
 	}
 
