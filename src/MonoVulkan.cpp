@@ -4743,11 +4743,12 @@ private:
 				// same size with LOD0 we need the biggest size possible for LOD1
 				// for the need of re-allocating with different size
 				uint32_t size{m_indexBuffers.candles.lod0[i].size};
+				assert(size >= indexBuffer.size && "LOD1 index buffer must be smaller");
 
 				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferAloc);
 				void* data;
 				vmaMapMemory(m_allocator, stagingBufferAloc, &data);
-					memcpy(data, indexBuffer.raw, size);
+					memcpy(data, indexBuffer.raw, indexBuffer.size);
 				vmaUnmapMemory(m_allocator, stagingBufferAloc);
 				createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer.buffer, indexBuffer.allocation);
 				copyBuffer(stagingBuffer, indexBuffer.buffer, size);
