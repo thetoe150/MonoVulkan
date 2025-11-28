@@ -4969,13 +4969,16 @@ private:
 			materialCount += model.meshes.size();
 		}
 
-		std::array<VkDescriptorPoolSize, 3> poolSizes{};
+		std::array<VkDescriptorPoolSize, 4> poolSizes{};
+
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) * 10 + 1; // for mesh transform + light uniform +1 for compute uniform
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * materialCount) * 10 + /*for bloom */(1 + 2) * 5; // for base, normal and emissive texture + bloom texture
 		poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		poolSizes[2].descriptorCount = static_cast<uint32_t>(1);
+		poolSizes[3].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+		poolSizes[3].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * Object::COUNT) * 10 + 1; // for mesh transform + light uniform +1 for compute uniform
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -4987,7 +4990,7 @@ private:
 		// 1 for compute descriptor set
 		// 1 for imgui descriptor set
 		// 4 for other passes with each frame in flight
-		poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 10) + 3 + 4; // for graphics and compute
+		poolInfo.maxSets = static_cast<uint32_t>((materialCount + Object::COUNT) * MAX_FRAMES_IN_FLIGHT * 10) + 3 + 20; // for graphics and compute
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
