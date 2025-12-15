@@ -18,6 +18,12 @@ DEP := driver.o asm_io.o
 %.o: %.asm
 	$(AS) $(ASFLAGS) $< 
 
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< 
+
+%: %.o $(DEP)
+	$(CC) $(LDFLAGS) $^ -o $@ 
+
 all: $(TARGETS) 
 
 prime: $(DEP)
