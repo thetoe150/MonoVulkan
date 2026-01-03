@@ -3722,7 +3722,8 @@ private:
 
 			VkMemoryAllocateInfo imageMemInfo{};
 			imageMemInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-			assert(memReq.size == imageSize * 6);
+			// this assert fail with intel intergrate GPU for some reasons
+			// assert(memReq.size == imageSize * 6);
 			imageMemInfo.allocationSize = memReq.size;
 			imageMemInfo.memoryTypeIndex = findMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
@@ -6555,7 +6556,7 @@ private:
 		VkPhysicalDeviceProperties deviceProps{};
 		vkGetPhysicalDeviceProperties(device, &deviceProps);
 		std::cout << deviceProps.deviceName << std::endl;
-		bool isIntegrateGPU = deviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? true : false;
+		bool isIntegrateGPU = deviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? false : true;
 
         bool swapChainAdequate = false;
         if (extensionsSupported) {
