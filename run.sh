@@ -50,11 +50,20 @@ export VK_LOADER_LAYERS_ENABLE=
 for arg in $@ 
 do
 	case "$arg" in
+		"-b") 
+			cd build
+			make clean
+			make
+			bear -- make
+			cd ..;;
 		"-d") 
-			export VK_LOADER_LAYERS_ENABLE=*api_dump,*synchronization2,renderdoc_capture;;
+			export VK_LOADER_LAYERS_ENABLE=*api_dump,*synchronization2;;
+		"-t") 
+			cmd="./tracy/profiler/build/tracy-profiler";;
 		"-r") 
 			export VK_LOADER_LAYERS_ENABLE=renderdoc_capture
-			cmd="~/renderdoc_1.36/bin/qrenderdoc";;
+			# cmd="~/renderdoc_1.36/bin/qrenderdoc";;
+			cmd="/usr/local/bin/renderdoc_1.42/bin/qrenderdoc";;
 		"-c") 
 			cd build
 			make

@@ -6495,14 +6495,19 @@ private:
 
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
 		std::cout << "Available present mode: " << "\n";
+		VkPresentModeKHR choosenPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+		bool available = false;
         for (const auto& availablePresentMode : availablePresentModes) {
 			std::cout << vk::to_string((vk::PresentModeKHR)availablePresentMode) << "\n";
-            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-                return availablePresentMode;
+            if (availablePresentMode == choosenPresentMode) {
+				available = true;
             }
         }
 
-        return VK_PRESENT_MODE_IMMEDIATE_KHR;
+		if (available)
+			return choosenPresentMode;
+		else
+			return VK_PRESENT_MODE_FIFO_KHR;
     }
 
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
