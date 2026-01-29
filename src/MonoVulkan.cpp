@@ -678,7 +678,7 @@ private:
 			g_camera.processKeyboard(MovementDirection::RIGHT, m_currentDeltaTime);
 		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
 			g_camera.processKeyboard(MovementDirection::UP, m_currentDeltaTime);
-		if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+		if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
 			g_camera.processKeyboard(MovementDirection::DOWN, m_currentDeltaTime);
 
 		if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
@@ -1327,19 +1327,25 @@ private:
 
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-		std::cout << "Physical device count: " << deviceCount << std::endl;
+		std::cout << "Iterating " << deviceCount << " physical devices: " << std::endl;
 
+		int deviceIdx {-1};
         for (unsigned int i = 0; i < devices.size(); i++) {
+		std::cout << "At index " << i;
             if (isDeviceSuitable(devices[i])) {
-                physicalDevice = devices[i];
-                m_msaaSamples = getMaxUsableSampleCount();
-                break;
+                deviceIdx = i;
             }
         }
-
-        if (physicalDevice == VK_NULL_HANDLE) {
+		if (deviceIdx != -1)
+		{
+			physicalDevice = devices[deviceIdx];
+			m_msaaSamples = getMaxUsableSampleCount();
+			std::cout << "Chosen Device Index: " << deviceIdx << std::endl;
+		}
+		else
+		{
             throw std::runtime_error("failed to find a suitable GPU!");
-        }
+		}
 
         vkGetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
 		m_renderTargetImageFormat = findHDRColorFormat();
@@ -4085,9 +4091,11 @@ private:
 			unsigned int* des = (unsigned int*) malloc(indexSize);
 			float* resultErr{};
 			unsigned int indexCount = indexSize / sizeof(unsigned int); 
+			unsigned int option = meshopt_SimplifyLockBorder;
+			option |= meshopt_SimplifyErrorAbsolute;
 			
 			unsigned int newIdxCount = meshopt_simplifyWithAttributes(des, indices, indexCount
-					  , vertex, vertexCount, 48 , vertex + 3, 48 , s_attrWeights, 9, nullptr, s_targetIndexCount * indexCount, s_targetError, 0, resultErr);
+					  , vertex, vertexCount, 48 , vertex + 3, 48 , s_attrWeights, 9, nullptr, s_targetIndexCount * indexCount, s_targetError, option, resultErr);
 
 			printf("MeshIdx %d: New Idx count: %d\n", meshIdx, newIdxCount);
 
@@ -6302,8 +6310,8 @@ private:
 
 		ImGui::Spacing();
         ImGui::SeparatorText("Geometry");
-		ImGui::SliderFloat("LOD1 generating target error", &s_targetError, 0.f, 1.f, "%.05f");
-		ImGui::SliderFloat("LOD1 generating target percent index", &s_targetIndexCount, 0.f, 1.f, "%.05f");
+		ImGui::SliderFloat("LOD1 target error", &s_targetError, 0.f, 1.f, "%.05f");
+		ImGui::SliderFloat("LOD1 target index percentage", &s_targetIndexCount, 0.f, 1.f, "%.05f");
 		ImGui::SliderFloat2("Texture attribute weights", &s_attrWeights[0], 0.f, 1.f, "%.05f");
 		ImGui::SliderFloat3("Normal attribute weights", &s_attrWeights[2], 0.f, 1.f, "%.05f");
 		ImGui::SliderFloat4("Tangent attribute weights", &s_attrWeights[5], 0.f, 1.f, "%.05f");
@@ -6560,8 +6568,8 @@ private:
 
 		VkPhysicalDeviceProperties deviceProps{};
 		vkGetPhysicalDeviceProperties(device, &deviceProps);
-		std::cout << deviceProps.deviceName << std::endl;
 		bool isIntegrateGPU = deviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? false : true;
+		std::cout << " device: " << deviceProps.deviceName << " (is integrate: " << isIntegrateGPU << ")" << std::endl;
 
         bool swapChainAdequate = false;
         if (extensionsSupported) {
@@ -6571,8 +6579,13 @@ private:
 
         VkPhysicalDeviceFeatures supportedFeatures;
         vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
+		bool isFeatureExtenstionSupported = indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 
-        return indices.isComplete() && isIntegrateGPU && extensionsSupported && swapChainAdequate  && supportedFeatures.samplerAnisotropy;
+		if ((k_chooseDeviceType == AUTO) || (k_chooseDeviceType == INTEGRATE && isIntegrateGPU == true) || (k_chooseDeviceType == DEDICATED && isIntegrateGPU == false))
+			return isFeatureExtenstionSupported;
+		else
+			return false;
+
     }
 
 	VkBool32 isFormatFilterable(VkFormat format, VkImageTiling tiling)
