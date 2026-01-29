@@ -331,6 +331,7 @@ static uint32_t s_currentTopologyIdx{0};
 static bool useLOD{false};
 static const float c_overdrawThreshold{1.05f};
 static bool s_isLodUpdated{false};
+static int s_isLodAbsoluteError{0};
 static float s_targetError{0.5f};
 static float s_targetIndexCount{0.5};
 

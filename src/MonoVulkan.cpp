@@ -4092,11 +4092,14 @@ private:
 			float* resultErr{};
 			unsigned int indexCount = indexSize / sizeof(unsigned int); 
 			unsigned int option = meshopt_SimplifyLockBorder;
-			option |= meshopt_SimplifyErrorAbsolute;
+			if (s_isLodAbsoluteError)
+			{
+				option |= meshopt_SimplifyErrorAbsolute;
+			}
+			// float meshExtent = meshopt_simplifyScale(vertex, vertexCount, 48);
+			// std::cout << "This mesh extent: " << meshExtent << std::endl;
 			
-			unsigned int newIdxCount = meshopt_simplifyWithAttributes(des, indices, indexCount
-					  , vertex, vertexCount, 48 , vertex + 3, 48 , s_attrWeights, 9, nullptr, s_targetIndexCount * indexCount, s_targetError, option, resultErr);
-
+			unsigned int newIdxCount = meshopt_simplifyWithAttributes(des, indices, indexCount , vertex, vertexCount, 48 , vertex + 3, 48 , s_attrWeights, 9, nullptr, s_targetIndexCount * indexCount, s_targetError, option, resultErr);
 			printf("MeshIdx %d: New Idx count: %d\n", meshIdx, newIdxCount);
 
 			assert(newIdxCount <= indexSize);
@@ -6310,11 +6313,13 @@ private:
 
 		ImGui::Spacing();
         ImGui::SeparatorText("Geometry");
-		ImGui::SliderFloat("LOD1 target error", &s_targetError, 0.f, 1.f, "%.05f");
-		ImGui::SliderFloat("LOD1 target index percentage", &s_targetIndexCount, 0.f, 1.f, "%.05f");
-		ImGui::SliderFloat2("Texture attribute weights", &s_attrWeights[0], 0.f, 1.f, "%.05f");
-		ImGui::SliderFloat3("Normal attribute weights", &s_attrWeights[2], 0.f, 1.f, "%.05f");
-		ImGui::SliderFloat4("Tangent attribute weights", &s_attrWeights[5], 0.f, 1.f, "%.05f");
+		ImGui::SliderFloat("LOD1 target error", &s_targetError, 0.f, 1.f, "%.5f");
+		ImGui::RadioButton("Relative error", &s_isLodAbsoluteError, 0);
+		ImGui::RadioButton("Absolute error", &s_isLodAbsoluteError, 1);
+		ImGui::SliderFloat("LOD1 target index percentage", &s_targetIndexCount, 0.f, 1.f, "%.5f");
+		ImGui::SliderFloat2("Texture attribute weights", &s_attrWeights[0], 0.f, 1.f, "%.5f");
+		ImGui::SliderFloat3("Normal attribute weights", &s_attrWeights[2], 0.f, 1.f, "%.5f");
+		ImGui::SliderFloat4("Tangent attribute weights", &s_attrWeights[5], 0.f, 1.f, "%.5f");
 
 		ImGui::Spacing();
         ImGui::SeparatorText("Transform");
