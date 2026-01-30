@@ -1330,10 +1330,14 @@ private:
 		std::cout << "Iterating " << deviceCount << " physical devices: " << std::endl;
 
 		int deviceIdx {-1};
+		bool foundDevice{false};
         for (unsigned int i = 0; i < devices.size(); i++) {
-		std::cout << "At index " << i;
             if (isDeviceSuitable(devices[i])) {
-                deviceIdx = i;
+				if (!foundDevice)
+				{
+					deviceIdx = i;
+					foundDevice = true;
+				}
             }
         }
 		if (deviceIdx != -1)
@@ -6586,7 +6590,7 @@ private:
         vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 		bool isFeatureExtenstionSupported = indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 
-		if ((k_chooseDeviceType == AUTO) || (k_chooseDeviceType == INTEGRATE && isIntegrateGPU == true) || (k_chooseDeviceType == DEDICATED && isIntegrateGPU == false))
+		if ((k_deviceType == AUTO) || (k_deviceType == INTEGRATE && isIntegrateGPU == true) || (k_deviceType == DEDICATED && isIntegrateGPU == false))
 			return isFeatureExtenstionSupported;
 		else
 			return false;

@@ -341,7 +341,7 @@ enum DeviceType
 	INTEGRATE,
 	AUTO,
 };
-static DeviceType k_chooseDeviceType{DEDICATED};
+static DeviceType k_deviceType{INTEGRATE};
 // 3 NORMAL - 4 TANGENT - 2 TEXCOORD_0
 static float s_attrWeights[9] = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
 
